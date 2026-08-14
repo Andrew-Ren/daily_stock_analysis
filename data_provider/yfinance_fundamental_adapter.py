@@ -281,8 +281,11 @@ class YfinanceFundamentalAdapter:
             if hasattr(div_series, "columns"):
                 div_series = div_series.iloc[:, 0]
             try:
-                # Index is timezone-aware (ex-dividend date)
-                cutoff = pd.Timestamp.now(tz=div_series.index.tz) - pd.Timedelta(days=365)
+                # Anchor the trailing window to the latest available dividend
+                # event, not wall-clock "now". Otherwise historical snapshots
+                # silently lose the oldest in-window event as time passes.
+                latest_event_ts = pd.Timestamp(div_series.index.max())
+                cutoff = latest_event_ts - pd.Timedelta(days=365)
                 for ts, value in div_series.items():
                     per_share = _safe_float(value)
                     if per_share is None or per_share <= 0:

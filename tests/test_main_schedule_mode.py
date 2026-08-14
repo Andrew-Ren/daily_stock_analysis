@@ -426,6 +426,20 @@ class MainScheduleModeTestCase(unittest.TestCase):
         _, _, stock_codes = run_full_analysis.call_args.args
         self.assertEqual(stock_codes, ["005930.KS"])
 
+    def test_standalone_run_returns_nonzero_when_startup_analysis_reports_failure(self) -> None:
+        args = self._make_args()
+        config = self._make_config(run_immediately=True)
+
+        with patch("main.parse_arguments", return_value=args), \
+             patch("main.get_config", return_value=config), \
+             patch("main.setup_logging"), \
+             patch.object(main, "_LAST_ANALYSIS_FAILURE_REASON", "no_report"), \
+             patch("main._run_analysis_with_runtime_scheduler_lock", return_value=False) as run_with_lock:
+            exit_code = main.main()
+
+        self.assertEqual(exit_code, 1)
+        run_with_lock.assert_called_once_with(config, args, None)
+
     def test_standalone_futu_portfolio_failure_returns_nonzero(self) -> None:
         args = self._make_args(portfolio="futu")
         config = self._make_config(run_immediately=True)

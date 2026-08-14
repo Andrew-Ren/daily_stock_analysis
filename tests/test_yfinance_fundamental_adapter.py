@@ -162,6 +162,29 @@ class TestYfinanceFundamentalAdapter(unittest.TestCase):
         # summed TTM (0.26*3 + 0.27 = 1.05), NOT the trailingAnnualDividendRate 99.0 fallback
         self.assertAlmostEqual(div["ttm_cash_dividend_per_share"], 1.05, places=2)
 
+    def test_ttm_dividend_window_is_anchored_to_latest_event_not_wall_clock(self) -> None:
+        idx = pd.DatetimeIndex(
+            ["2025-08-11", "2025-11-10", "2026-02-09", "2026-05-11"],
+            tz="America/New_York",
+        )
+        dividends = pd.Series([0.26, 0.26, 0.26, 0.27], index=idx, name="Dividends")
+        info = {
+            "currency": "USD",
+            "financialCurrency": "USD",
+            "currentPrice": 210,
+        }
+        ticker = _build_mock_ticker(info, dividends=dividends)
+
+        with patch("yfinance.Ticker", return_value=ticker):
+            bundle = YfinanceFundamentalAdapter().get_fundamental_bundle("AAPL")
+
+        div = bundle["earnings"]["dividend"]
+        self.assertEqual(div["ttm_event_count"], 4)
+        self.assertEqual(
+            [event["ex_dividend_date"] for event in div["events"]],
+            ["2026-05-11", "2026-02-09", "2025-11-10", "2025-08-11"],
+        )
+
     def test_falls_back_to_info_when_statements_only_have_4_quarters(self) -> None:
         """yfinance default is 4 quarters → statement-derived YoY refuses to use QoQ.
 

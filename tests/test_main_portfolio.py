@@ -87,6 +87,129 @@ class MainPortfolioTest(unittest.TestCase):
 
         self.assertFalse(result)
 
+    def test_run_full_analysis_returns_false_when_stock_analysis_generates_no_reports(self):
+        args = SimpleNamespace(
+            portfolio=None,
+            single_notify=False,
+            no_context_snapshot=True,
+            no_market_review=True,
+            workers=1,
+            dry_run=False,
+            no_notify=True,
+            schedule=False,
+        )
+        config = SimpleNamespace(
+            refresh_stock_list=MagicMock(),
+            single_stock_notify=False,
+            merge_email_notification=False,
+            market_review_enabled=False,
+            market_review_region="cn",
+            daily_market_context_enabled=False,
+            analysis_delay=0,
+            backtest_enabled=False,
+        )
+        pipeline = MagicMock()
+        pipeline.run.return_value = []
+
+        with patch.object(main, "_refresh_stock_index_cache_for_analysis"), patch.object(
+            main,
+            "_compute_trading_day_filter",
+            return_value=(["600519"], "cn", False),
+        ), patch(
+            "src.core.pipeline.StockAnalysisPipeline",
+            return_value=pipeline,
+        ), patch(
+            "src.core.market_review.run_market_review",
+        ), patch(
+            "src.feishu_doc.FeishuDocManager",
+        ) as feishu_manager:
+            feishu_manager.return_value.is_configured.return_value = False
+            result = main.run_full_analysis(config, args, ["600519"])
+
+        self.assertFalse(result)
+        pipeline.run.assert_called_once()
+
+    def test_run_full_analysis_returns_false_when_stock_list_is_empty_without_market_review(self):
+        args = SimpleNamespace(
+            portfolio=None,
+            single_notify=False,
+            no_context_snapshot=True,
+            no_market_review=True,
+            workers=1,
+            dry_run=False,
+            no_notify=True,
+            schedule=False,
+        )
+        config = SimpleNamespace(
+            refresh_stock_list=MagicMock(),
+            stock_list=[],
+            single_stock_notify=False,
+            merge_email_notification=False,
+            market_review_enabled=False,
+            market_review_region="cn",
+            daily_market_context_enabled=False,
+            analysis_delay=0,
+            backtest_enabled=False,
+        )
+
+        with patch.object(main, "_refresh_stock_index_cache_for_analysis"), patch.object(
+            main,
+            "_compute_trading_day_filter",
+            return_value=([], "cn", False),
+        ), patch(
+            "src.core.market_review.run_market_review",
+        ), patch(
+            "src.core.pipeline.StockAnalysisPipeline",
+        ) as pipeline_cls:
+            result = main.run_full_analysis(config, args)
+
+        self.assertFalse(result)
+        pipeline_cls.assert_not_called()
+
+    def test_run_full_analysis_returns_false_when_local_report_save_fails(self):
+        args = SimpleNamespace(
+            portfolio=None,
+            single_notify=False,
+            no_context_snapshot=True,
+            no_market_review=True,
+            workers=1,
+            dry_run=False,
+            no_notify=True,
+            schedule=False,
+        )
+        config = SimpleNamespace(
+            refresh_stock_list=MagicMock(),
+            single_stock_notify=False,
+            merge_email_notification=False,
+            market_review_enabled=False,
+            market_review_region="cn",
+            daily_market_context_enabled=False,
+            analysis_delay=0,
+            backtest_enabled=False,
+        )
+        pipeline = MagicMock()
+        pipeline.run.return_value = [SimpleNamespace(code="600519", success=True)]
+        pipeline._last_local_report_path = None
+        pipeline._last_local_report_error = "permission denied"
+
+        with patch.object(main, "_refresh_stock_index_cache_for_analysis"), patch.object(
+            main,
+            "_compute_trading_day_filter",
+            return_value=(["600519"], "cn", False),
+        ), patch(
+            "src.core.pipeline.StockAnalysisPipeline",
+            return_value=pipeline,
+        ), patch(
+            "src.core.market_review.run_market_review",
+        ), patch(
+            "src.feishu_doc.FeishuDocManager",
+        ) as feishu_manager:
+            feishu_manager.return_value.is_configured.return_value = False
+            result = main.run_full_analysis(config, args, ["600519"])
+
+        self.assertFalse(result)
+        pipeline.run.assert_called_once()
+
     def test_run_full_analysis_uses_futu_holdings_and_reloads_each_run(self):
         args = SimpleNamespace(
             portfolio="futu",
