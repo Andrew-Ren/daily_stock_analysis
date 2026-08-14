@@ -541,6 +541,35 @@ class MainScheduleModeTestCase(unittest.TestCase):
         )
         run_full_analysis.assert_called_once_with(runtime_config, args, None)
 
+    def test_schedule_mode_raises_task_failure_when_analysis_returns_false(self) -> None:
+        args = self._make_args(schedule=True)
+        runtime_config = self._make_config(schedule_enabled=True, schedule_time="09:30")
+        scheduled_call = {}
+
+        def fake_run_with_schedule(
+            task,
+            schedule_time,
+            run_immediately,
+            background_tasks=None,
+            schedule_time_provider=None,
+        ):
+            scheduled_call["task"] = task
+
+        with patch("main.parse_arguments", return_value=args), \
+             patch("main.get_config", return_value=self._make_config(schedule_enabled=True, schedule_time="18:00")), \
+             patch("main._reload_runtime_config", return_value=runtime_config), \
+             patch("main._build_schedule_time_provider", return_value=lambda: "09:30"), \
+             patch("main.setup_logging"), \
+             patch("main.run_full_analysis", return_value=False) as run_full_analysis, \
+             patch.object(main, "_LAST_ANALYSIS_FAILURE_REASON", "no_report"), \
+             patch("src.scheduler.run_with_schedule", side_effect=fake_run_with_schedule):
+            exit_code = main.main()
+            with self.assertRaisesRegex(RuntimeError, "scheduled analysis reported failure: no_report"):
+                scheduled_call["task"]()
+
+        self.assertEqual(exit_code, 0)
+        run_full_analysis.assert_called_once_with(runtime_config, args, None)
+
     def test_schedule_mode_registers_event_monitor_background_task(self) -> None:
         args = self._make_args(schedule=True)
         config = self._make_config(

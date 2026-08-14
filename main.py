@@ -754,6 +754,10 @@ def run_full_analysis(
     global _LAST_ANALYSIS_FAILURE_REASON
     _LAST_ANALYSIS_FAILURE_REASON = None
 
+    def _return_with_auto_backtest(result: bool) -> bool:
+        _run_auto_backtest(config)
+        return result
+
     try:
         _refresh_stock_index_cache_for_analysis(config)
         if portfolio_stock_codes is not None:
@@ -826,7 +830,7 @@ def run_full_analysis(
             logger.error(
                 "本轮分析未生成报告：STOCK_LIST 为空，且未启用大盘复盘。"
             )
-            return False
+            return _return_with_auto_backtest(False)
         should_use_daily_market_context = (
             should_run_market_review
             and getattr(config, 'daily_market_context_enabled', True)
@@ -1020,13 +1024,13 @@ def run_full_analysis(
                 "本轮分析已生成个股结果，但汇总报告保存失败，未生成本地报告文件: %s",
                 save_error,
             )
-            return False
+            return _return_with_auto_backtest(False)
         if expected_stock_report and not results and not market_report:
             _LAST_ANALYSIS_FAILURE_REASON = "no_report"
             logger.error(
                 "本轮分析未生成任何报告：股票列表非空，但个股分析未产出成功结果，且未生成大盘复盘。"
             )
-            return False
+            return _return_with_auto_backtest(False)
 
         # Issue #190: 合并推送（个股+大盘复盘）
         if merge_notification and (results or market_report) and not args.no_notify:
@@ -1101,10 +1105,7 @@ def run_full_analysis(
         except Exception as e:
             logger.error(f"飞书文档生成失败: {e}")
 
-        # === Auto backtest ===
-        _run_auto_backtest(config)
-
-        return True
+        return _return_with_auto_backtest(True)
 
     except Exception as e:
         if _LAST_ANALYSIS_FAILURE_REASON is None:
@@ -1606,7 +1607,12 @@ def main() -> int:
 
             def scheduled_task():
                 runtime_config = _reload_runtime_config()
-                run_full_analysis(runtime_config, args, scheduled_stock_codes)
+                result = run_full_analysis(runtime_config, args, scheduled_stock_codes)
+                if result is False:
+                    reason = _LAST_ANALYSIS_FAILURE_REASON or "unknown"
+                    raise RuntimeError(
+                        f"scheduled analysis reported failure: {reason}"
+                    )
 
             background_tasks = []
             if getattr(config, 'agent_event_monitor_enabled', False):

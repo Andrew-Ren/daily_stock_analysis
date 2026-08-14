@@ -122,12 +122,16 @@ class MainPortfolioTest(unittest.TestCase):
             "src.core.market_review.run_market_review",
         ), patch(
             "src.feishu_doc.FeishuDocManager",
-        ) as feishu_manager:
+        ) as feishu_manager, patch.object(
+            main,
+            "_run_auto_backtest",
+        ) as run_auto_backtest:
             feishu_manager.return_value.is_configured.return_value = False
             result = main.run_full_analysis(config, args, ["600519"])
 
         self.assertFalse(result)
         pipeline.run.assert_called_once()
+        run_auto_backtest.assert_called_once_with(config)
 
     def test_run_full_analysis_returns_false_when_stock_list_is_empty_without_market_review(self):
         args = SimpleNamespace(
@@ -160,11 +164,15 @@ class MainPortfolioTest(unittest.TestCase):
             "src.core.market_review.run_market_review",
         ), patch(
             "src.core.pipeline.StockAnalysisPipeline",
-        ) as pipeline_cls:
+        ) as pipeline_cls, patch.object(
+            main,
+            "_run_auto_backtest",
+        ) as run_auto_backtest:
             result = main.run_full_analysis(config, args)
 
         self.assertFalse(result)
         pipeline_cls.assert_not_called()
+        run_auto_backtest.assert_called_once_with(config)
 
     def test_run_full_analysis_returns_false_when_local_report_save_fails(self):
         args = SimpleNamespace(
@@ -203,12 +211,16 @@ class MainPortfolioTest(unittest.TestCase):
             "src.core.market_review.run_market_review",
         ), patch(
             "src.feishu_doc.FeishuDocManager",
-        ) as feishu_manager:
+        ) as feishu_manager, patch.object(
+            main,
+            "_run_auto_backtest",
+        ) as run_auto_backtest:
             feishu_manager.return_value.is_configured.return_value = False
             result = main.run_full_analysis(config, args, ["600519"])
 
         self.assertFalse(result)
         pipeline.run.assert_called_once()
+        run_auto_backtest.assert_called_once_with(config)
 
     def test_run_full_analysis_uses_futu_holdings_and_reloads_each_run(self):
         args = SimpleNamespace(
