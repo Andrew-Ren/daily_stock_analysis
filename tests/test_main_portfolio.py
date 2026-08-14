@@ -159,7 +159,7 @@ class MainPortfolioTest(unittest.TestCase):
         with patch.object(main, "_refresh_stock_index_cache_for_analysis"), patch.object(
             main,
             "_compute_trading_day_filter",
-            return_value=([], "cn", False),
+            side_effect=AssertionError("empty STOCK_LIST must fail before trading-day filter"),
         ), patch(
             "src.core.market_review.run_market_review",
         ), patch(
@@ -171,6 +171,7 @@ class MainPortfolioTest(unittest.TestCase):
             result = main.run_full_analysis(config, args)
 
         self.assertFalse(result)
+        self.assertEqual(main._LAST_ANALYSIS_FAILURE_REASON, "empty_stock_list")
         pipeline_cls.assert_not_called()
         run_auto_backtest.assert_called_once_with(config)
 

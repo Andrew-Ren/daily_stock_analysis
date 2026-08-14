@@ -768,8 +768,22 @@ def run_full_analysis(
             config.refresh_stock_list()
 
         using_config_stock_list = stock_codes is None and portfolio_stock_codes is None
-        # Issue #373: Trading day filter (per-stock, per-market)
         effective_codes = stock_codes if stock_codes is not None else config.stock_list
+        # Fail fast on an empty persisted watchlist before trading-day filtering.
+        # Otherwise should_skip=True would mask the configuration error as success.
+        if (
+            not getattr(args, "dry_run", False)
+            and using_config_stock_list
+            and not effective_codes
+            and not market_review_requested
+        ):
+            _LAST_ANALYSIS_FAILURE_REASON = "empty_stock_list"
+            logger.error(
+                "本轮分析未生成报告：STOCK_LIST 为空，且未启用大盘复盘。"
+            )
+            return _return_with_auto_backtest(False)
+
+        # Issue #373: Trading day filter (per-stock, per-market)
         filtered_codes, effective_region, should_skip = _compute_trading_day_filter(
             config, args, effective_codes
         )
