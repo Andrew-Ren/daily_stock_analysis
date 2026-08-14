@@ -2108,6 +2108,31 @@ class MainScheduleModeTestCase(unittest.TestCase):
         self.assertEqual(call_args.kwargs["override_region"], "cn,us")
         self.assertEqual(call_args.kwargs["trigger_source"], "cli")
 
+    def test_market_review_mode_returns_nonzero_when_no_report_is_generated(self) -> None:
+        args = self._make_args(market_review=True)
+        config = self._make_config(
+            trading_day_check_enabled=True,
+            market_review_region="both",
+            market_review_enabled=False,
+            database_path=str(Path(self.temp_dir.name) / "stock_analysis.db"),
+        )
+
+        with patch("main.parse_arguments", return_value=args), \
+             patch("main.get_config", return_value=config), \
+             patch("main.setup_logging"), \
+             patch(
+                 "src.core.market_review_runtime.build_market_review_runtime",
+                 return_value=(MagicMock(), MagicMock(), MagicMock()),
+             ), \
+             patch("main._run_market_review_with_shared_lock", return_value=None) as run_with_lock, \
+             patch("src.core.market_review.run_market_review"), \
+             patch("src.core.trading_calendar.get_open_markets_today", return_value={"cn", "us"}), \
+             patch("src.core.trading_calendar.compute_effective_region", return_value="cn,us"):
+            exit_code = main.main()
+
+        self.assertEqual(exit_code, 1)
+        run_with_lock.assert_called_once()
+
     def test_market_review_mode_respects_comma_list_market_review_region(self) -> None:
         args = self._make_args(market_review=True)
         config = self._make_config(

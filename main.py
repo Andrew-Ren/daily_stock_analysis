@@ -1585,7 +1585,7 @@ def main() -> int:
             logger.info("模式: 仅大盘复盘")
             notifier, analyzer, search_service = build_market_review_runtime(config)
 
-            _run_market_review_with_shared_lock(
+            market_review_result = _run_market_review_with_shared_lock(
                 config,
                 run_market_review,
                 notifier=notifier,
@@ -1595,7 +1595,7 @@ def main() -> int:
                 override_region=effective_region,
                 trigger_source="cli",
             )
-            return 0
+            return 0 if market_review_result else 1
 
         # 模式2: 定时任务模式
         if args.schedule or config.schedule_enabled:
