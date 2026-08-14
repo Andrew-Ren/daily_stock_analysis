@@ -1070,9 +1070,6 @@ def run_full_analysis(
                     else:
                         logger.warning("合并推送失败")
 
-        if deferred_failure_result is not None:
-            return _return_with_auto_backtest(deferred_failure_result)
-
         # 输出摘要
         if results:
             logger.info("\n===== 分析结果摘要 =====")
@@ -1127,7 +1124,11 @@ def run_full_analysis(
         except Exception as e:
             logger.error(f"飞书文档生成失败: {e}")
 
-        return _return_with_auto_backtest(True)
+        return _return_with_auto_backtest(
+            deferred_failure_result
+            if deferred_failure_result is not None
+            else True
+        )
 
     except Exception as e:
         if _LAST_ANALYSIS_FAILURE_REASON is None:
