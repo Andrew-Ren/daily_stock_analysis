@@ -223,6 +223,119 @@ class MainPortfolioTest(unittest.TestCase):
         pipeline.run.assert_called_once()
         run_auto_backtest.assert_called_once_with(config)
 
+    def test_run_full_analysis_still_sends_merged_notification_before_report_save_failure(self):
+        args = SimpleNamespace(
+            portfolio=None,
+            single_notify=False,
+            no_context_snapshot=True,
+            no_market_review=False,
+            workers=1,
+            dry_run=False,
+            no_notify=False,
+            schedule=False,
+        )
+        config = SimpleNamespace(
+            refresh_stock_list=MagicMock(),
+            single_stock_notify=False,
+            merge_email_notification=True,
+            market_review_enabled=True,
+            market_review_region="cn",
+            daily_market_context_enabled=False,
+            analysis_delay=0,
+            backtest_enabled=False,
+            report_type="simple",
+        )
+        pipeline = MagicMock()
+        pipeline.run.return_value = [SimpleNamespace(code="600519", success=True)]
+        pipeline._last_local_report_path = None
+        pipeline._last_local_report_error = "permission denied"
+        pipeline.notifier = MagicMock(
+            is_available=MagicMock(return_value=True),
+            generate_aggregate_report=MagicMock(return_value="dashboard"),
+            send=MagicMock(return_value=True),
+        )
+
+        with patch.object(main, "_refresh_stock_index_cache_for_analysis"), patch.object(
+            main,
+            "_compute_trading_day_filter",
+            return_value=(["600519"], "cn", False),
+        ), patch(
+            "src.core.pipeline.StockAnalysisPipeline",
+            return_value=pipeline,
+        ), patch(
+            "src.core.market_review.run_market_review",
+        ), patch.object(
+            main,
+            "_run_market_review_with_shared_lock",
+            return_value=SimpleNamespace(report="market review"),
+        ), patch(
+            "src.feishu_doc.FeishuDocManager",
+        ) as feishu_manager, patch.object(
+            main,
+            "_run_auto_backtest",
+        ) as run_auto_backtest:
+            feishu_manager.return_value.is_configured.return_value = False
+            result = main.run_full_analysis(config, args, ["600519"])
+
+        self.assertFalse(result)
+        pipeline.notifier.send.assert_called_once()
+        combined_content = pipeline.notifier.send.call_args.args[0]
+        self.assertIn("# 📈 大盘复盘\n\nmarket review", combined_content)
+        self.assertIn("# 🚀 个股决策仪表盘\n\ndashboard", combined_content)
+        run_auto_backtest.assert_called_once_with(config)
+
+    def test_run_full_analysis_returns_false_when_market_review_only_run_generates_no_report(self):
+        args = SimpleNamespace(
+            portfolio=None,
+            single_notify=False,
+            no_context_snapshot=True,
+            no_market_review=False,
+            workers=1,
+            dry_run=False,
+            no_notify=True,
+            schedule=True,
+        )
+        config = SimpleNamespace(
+            refresh_stock_list=MagicMock(),
+            single_stock_notify=False,
+            merge_email_notification=False,
+            market_review_enabled=True,
+            market_review_region="cn",
+            daily_market_context_enabled=False,
+            analysis_delay=0,
+            backtest_enabled=False,
+        )
+        pipeline = MagicMock()
+        pipeline.run.return_value = []
+
+        with patch.object(main, "_refresh_stock_index_cache_for_analysis"), patch.object(
+            main,
+            "_compute_trading_day_filter",
+            return_value=([], "cn", False),
+        ), patch(
+            "src.core.pipeline.StockAnalysisPipeline",
+            return_value=pipeline,
+        ), patch(
+            "src.core.market_review.run_market_review",
+        ), patch.object(
+            main,
+            "_run_market_review_with_shared_lock",
+            return_value=None,
+        ) as run_with_lock, patch(
+            "src.feishu_doc.FeishuDocManager",
+        ) as feishu_manager, patch.object(
+            main,
+            "_run_auto_backtest",
+        ) as run_auto_backtest:
+            feishu_manager.return_value.is_configured.return_value = False
+            result = main.run_full_analysis(config, args, [])
+
+        self.assertFalse(result)
+        self.assertEqual(main._LAST_ANALYSIS_FAILURE_REASON, "no_report")
+        pipeline.run.assert_called_once()
+        run_with_lock.assert_called_once()
+        run_auto_backtest.assert_called_once_with(config)
+
     def test_run_full_analysis_uses_futu_holdings_and_reloads_each_run(self):
         args = SimpleNamespace(
             portfolio="futu",

@@ -1029,6 +1029,7 @@ def run_full_analysis(
             and bool(stock_codes)
             and not skip_futu_stock_analysis
         )
+        deferred_failure_result = None
         if expected_stock_report and results and not getattr(
             pipeline, "_last_local_report_path", None
         ):
@@ -1038,11 +1039,15 @@ def run_full_analysis(
                 "本轮分析已生成个股结果，但汇总报告保存失败，未生成本地报告文件: %s",
                 save_error,
             )
-            return _return_with_auto_backtest(False)
-        if expected_stock_report and not results and not market_report:
+            deferred_failure_result = False
+        expected_market_report = (
+            not getattr(args, "dry_run", False)
+            and should_run_market_review
+        )
+        if (expected_stock_report or expected_market_report) and not results and not market_report:
             _LAST_ANALYSIS_FAILURE_REASON = "no_report"
             logger.error(
-                "本轮分析未生成任何报告：股票列表非空，但个股分析未产出成功结果，且未生成大盘复盘。"
+                "本轮分析未生成任何报告：预期的个股分析或大盘复盘均未产出结果。"
             )
             return _return_with_auto_backtest(False)
 
@@ -1064,6 +1069,9 @@ def run_full_analysis(
                         logger.info("已合并推送（个股+大盘复盘）")
                     else:
                         logger.warning("合并推送失败")
+
+        if deferred_failure_result is not None:
+            return _return_with_auto_backtest(deferred_failure_result)
 
         # 输出摘要
         if results:
