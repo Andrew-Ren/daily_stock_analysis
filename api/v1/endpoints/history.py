@@ -647,16 +647,18 @@ def get_history_detail(
             sector_rankings=extracted_boards.get("sector_rankings"),
             concept_rankings=extracted_boards.get("concept_rankings"),
             market_structure=market_structure,
-            strategy_synthesis=extract_strategy_synthesis_payload(result.get("raw_result")) or None,
+            strategy_synthesis=(
+                extract_strategy_synthesis_payload(result.get("raw_result")) or None
+            ),
         )
-        
+
         return AnalysisReport(
             meta=meta,
             summary=summary,
             strategy=strategy,
-            details=details
+            details=details,
         )
-        
+
     except HTTPException:
         raise
     except Exception as e:

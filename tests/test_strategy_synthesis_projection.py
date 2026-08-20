@@ -1,3 +1,5 @@
+# -*- coding: utf-8 -*-
+
 from api.v1.schemas.history import ReportDetails
 from api.v1.endpoints import analysis as analysis_endpoint
 from api.v1.endpoints.analysis import _build_analysis_report
@@ -42,7 +44,9 @@ def test_report_details_extracts_only_valid_versioned_projection():
 
     assert details.strategy_synthesis is not None
     assert details.strategy_synthesis.final_signal == "buy"
-    assert extract_strategy_synthesis_payload({"dashboard": {"strategy_synthesis": {"final_signal": "buy"}}}) == {}
+    assert extract_strategy_synthesis_payload(
+        {"dashboard": {"strategy_synthesis": {"final_signal": "buy"}}}
+    ) == {}
 
 
 def test_invalid_or_legacy_synthesis_is_hidden_from_public_field():

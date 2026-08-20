@@ -4026,9 +4026,17 @@ class TestStrategyEngineE2E(unittest.TestCase):
         report = svc.generate_dashboard_report([result])
 
         # invalid count 行必须出现
-        self.assertIn("另有 3 个策略解析失败", report, "invalid count line missing from dashboard report")
+        self.assertIn(
+            "另有 3 个策略解析失败",
+            report,
+            "invalid count line missing from dashboard report",
+        )
         # consensus_level=insufficient → localize → 证据不足
-        self.assertIn("证据不足", report, "localized 'insufficient' missing from dashboard report")
+        self.assertIn(
+            "证据不足",
+            report,
+            "localized 'insufficient' missing from dashboard report",
+        )
 
     def test_bad_shape_summary_params_never_crashes_renderers(self):
         """OR-COM-34818459 回归：summary_params 为字符串/列表时，所有渲染路径必须静默降级而非崩溃。"""
@@ -4042,10 +4050,10 @@ class TestStrategyEngineE2E(unittest.TestCase):
         from src.analyzer import AnalysisResult
 
         bad_shapes = [
-            "bad-shape",          # 字符串
-            ["a", "b"],           # 列表
-            42,                   # 整数
-            None,                 # None（已有守卫，但确认不退化）
+            "bad-shape",  # 字符串
+            ["a", "b"],  # 列表
+            42,  # 整数
+            None,  # None（已有守卫，但确认不退化）
         ]
 
         for bad in bad_shapes:

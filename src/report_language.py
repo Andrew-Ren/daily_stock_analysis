@@ -1320,11 +1320,11 @@ def extract_strategy_synthesis_payload(
     *fallback_values: Any,
 ) -> Dict[str, Any]:
     """Extract a validated v1 projection using the renderer normalization path."""
-    queue = [
-        candidate
-        for candidate in (value, *fallback_values)
-        if isinstance(candidate, dict)
-    ]
+    queue = []
+    for candidate in (value, *fallback_values):
+        if isinstance(candidate, dict):
+            queue.append(candidate)
+
     seen: set[int] = set()
     while queue:
         candidate = queue.pop(0)
@@ -1339,7 +1339,13 @@ def extract_strategy_synthesis_payload(
         except (TypeError, ValueError):
             pass
 
-        for key in ("strategy_synthesis", "dashboard", "raw_result", "details", "report"):
+        for key in (
+            "strategy_synthesis",
+            "dashboard",
+            "raw_result",
+            "details",
+            "report",
+        ):
             nested = candidate.get(key)
             if isinstance(nested, dict):
                 queue.append(nested)

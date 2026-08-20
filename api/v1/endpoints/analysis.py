@@ -439,7 +439,7 @@ def _handle_async_analysis_batch(
         )
         return JSONResponse(
             status_code=202,
-            content=task_accepted.model_dump()
+            content=task_accepted.model_dump(),
         )
     
     # 批量：返回汇总结果
@@ -450,7 +450,7 @@ def _handle_async_analysis_batch(
     )
     return JSONResponse(
         status_code=202,
-        content=batch_response.model_dump()
+        content=batch_response.model_dump(),
     )
 
 
