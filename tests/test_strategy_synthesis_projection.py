@@ -1,5 +1,7 @@
 # -*- coding: utf-8 -*-
 
+from api.app import create_app
+from api.v1.schemas.analysis import AnalysisResultResponse
 from api.v1.schemas.history import ReportDetails
 from api.v1.endpoints import analysis as analysis_endpoint
 from api.v1.endpoints.analysis import _build_analysis_report
@@ -177,3 +179,46 @@ def test_openapi_schema_exposes_typed_strategy_synthesis():
 
     assert "strategy_synthesis" in schema["properties"]
     assert "StrategySynthesis" in str(schema)
+
+
+def test_analysis_endpoints_openapi_exposes_typed_strategy_synthesis():
+    openapi = create_app().openapi()
+    schemas = openapi["components"]["schemas"]
+
+    analysis_result = schemas["AnalysisResultResponse"]
+    report_schema = analysis_result["properties"]["report"]
+    assert "AnalysisReport" in str(report_schema)
+
+    analysis_report = schemas["AnalysisReport"]
+    assert "ReportDetails" in str(analysis_report["properties"]["details"])
+    assert "StrategySynthesis" in str(
+        schemas["ReportDetails"]["properties"]["strategy_synthesis"]
+    )
+
+    analyze_responses = openapi["paths"]["/api/v1/analysis/analyze"]["post"]["responses"]
+    assert "AnalysisResultResponse" in str(analyze_responses["200"])
+
+    status_responses = openapi["paths"]["/api/v1/analysis/status/{task_id}"]["get"][
+        "responses"
+    ]
+    assert "TaskStatus" in str(status_responses["200"])
+    assert "AnalysisResultResponse" in str(schemas["TaskStatus"]["properties"]["result"])
+
+
+def test_typed_report_schema_preserves_legacy_runtime_dict_contract():
+    report = {
+        "meta": {"query_id": "q", "stock_code": "600519"},
+        "summary": {},
+        "details": {"strategy_synthesis": _build_synthesis()},
+        "legacy_extension": {"kept": True},
+    }
+
+    response = AnalysisResultResponse(
+        query_id="q",
+        stock_code="600519",
+        report=report,
+        created_at="2026-08-20T00:00:00",
+    )
+
+    assert isinstance(response.report, dict)
+    assert response.report["legacy_extension"] == {"kept": True}

@@ -13,7 +13,9 @@
 from typing import Optional, List, Any, Literal
 from enum import Enum
 
-from pydantic import AliasChoices, BaseModel, ConfigDict, Field, field_validator
+from pydantic import AliasChoices, BaseModel, ConfigDict, Field, SkipValidation, field_validator
+
+from api.v1.schemas.history import AnalysisReport
 from src.utils.analysis_metadata import SELECTION_SOURCE_PATTERN
 from src.utils.market_review_region import normalize_market_review_region_strict
 
@@ -175,7 +177,13 @@ class AnalysisResultResponse(BaseModel):
     trace_id: Optional[str] = Field(None, description="诊断 trace ID")
     stock_code: str = Field(..., description="股票代码")
     stock_name: Optional[str] = Field(None, description="股票名称")
-    report: Optional[Any] = Field(None, description="分析报告")
+    report: Optional[SkipValidation[AnalysisReport]] = Field(
+        None,
+        description=(
+            "类型化分析报告；details.strategy_synthesis 为可选的多策略综合结果。"
+            "运行时保留历史 dict 载荷，避免改变现有 Python 调用方契约。"
+        ),
+    )
     diagnostic_summary: Optional[Any] = Field(None, description="运行诊断摘要")
     created_at: str = Field(..., description="创建时间")
     
