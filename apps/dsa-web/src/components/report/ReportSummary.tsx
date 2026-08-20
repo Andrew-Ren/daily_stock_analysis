@@ -1,6 +1,7 @@
 import React from 'react';
 import type { AnalysisResult, AnalysisReport } from '../../types/analysis';
 import { ReportOverview } from './ReportOverview';
+import { StrategySynthesisCard } from './StrategySynthesisCard';
 import { ReportStrategy } from './ReportStrategy';
 import { ReportNews } from './ReportNews';
 import { ReportDetails } from './ReportDetails';
@@ -69,6 +70,8 @@ export const ReportSummary: React.FC<ReportSummaryProps> = ({
       />
 
       {/* 策略点位区 */}
+      <StrategySynthesisCard synthesis={details?.strategySynthesis} language={reportLanguage} />
+
       <ReportStrategy strategy={strategy} language={reportLanguage} />
 
       {/* 资讯区 */}

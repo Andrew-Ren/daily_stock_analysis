@@ -135,6 +135,7 @@ Baseline 禁止使用 `sum(...) or 1.0` 之类的兜底把零权重掩盖成分�
 
 ```json
 {
+  "schema_version": "strategy-synthesis-v1", // 稳定公共投影版本；旧版/畸形载荷不进入类型化 API 字段
   "final_signal": "hold",                 // canonical signal
   "weighted_score": 3.0,                  // 保留 4 位小数
   "confidence": 0.72,                     // 折减后的置信度
@@ -144,6 +145,12 @@ Baseline 禁止使用 `sum(...) or 1.0` 之类的兜底把零权重掩盖成分�
   "conflicts": [ /* ConflictDetector 输出的 dict 列表 */ ],
   "supporting_skills": [ /* opinion item */ ],
   "opposing_skills":   [ /* opinion item */ ],
+  "signal_distribution": {               // 按实际聚合权重计算，不由前端重算
+    "bullish": { "count": 1, "weight_share": 0.6 },
+    "neutral": { "count": 1, "weight_share": 0.1 },
+    "bearish": { "count": 1, "weight_share": 0.3 }
+  },
+  "primary_dissent": { /* 反方中实际权重最高的 opinion item；可为 null */ },
   "consensus_level": "high",              // high | medium | low | insufficient
   "summary_key": "strategy_synthesis.no_conflicts",   // 动态 i18n 摘要键名，随共识和冲突状态确定
   "summary_params": {
@@ -369,14 +376,15 @@ Phase 2 只在 Phase 1/1.5/1.6/1.7/1.8/1.9 契约下新增 2–4 策略并发调
 - Phase 2 不改变 renderer 展示逻辑；scheduler timeout/error/no-opinion 与 signal 校验失败统一进入 StrategyEngine 的 authoritative Diagnostics，`invalid_opinion_count` / `total_opinion_count` 覆盖这些失败 skill。
 - `ctx.meta["skill_scheduler"]` 仅作为运行时诊断，记录调度模式、并发数、单 skill timeout、调度数量、完成数量和 invalid 数量；不得参与综合评分。
 
-## Phase 3 前端多语言完整展示（本 PR 不做）
+## Phase 3 前端多语言完整展示
 
 Phase 3 只在 Phase 2 之上补前端（`apps/dsa-web/`、`apps/dsa-desktop/`）对 `strategy_synthesis` 的完整多语言展示：
 
-- Web 报告详情页展示 `final_signal` / `consensus_level` / `supporting_skills` / `opposing_skills` / `conflicts` / `invalid_opinion_count`。
+- API 在 `report.details.strategy_synthesis` 暴露经 `strategy-synthesis-v1` 校验的低敏类型化投影；旧记录、未知版本或畸形载荷不进入该字段，原始 `raw_result` 兼容性不变。
+- Web 报告详情页展示 `final_signal` / `consensus_level` / `signal_distribution` / `supporting_skills` / `opposing_skills` / `primary_dissent` / `conflicts`；不在浏览器重算权重、共识或最终信号。
 - 桌面端复用 Web 展示逻辑。
-- 多语言 label 表复用 `src/report_language.py` 已有的 zh/en/ko 三语；前端只做投影，不重新定义。
-- Phase 3 不改变 Baseline 契约、不新增 payload 字段、不新增 API 端点。
+- 多语言 label 由 Web 报告组件的 zh/en/ko 静态字典提供；前端只做权威投影，不生成投资结论。
+- Phase 3 不新增 API 端点；新增字段保持 additive，桌面端继续复用同一 Web 组件。
 
 ## Phase 4 Skill Outcome 权重反馈闭环
 

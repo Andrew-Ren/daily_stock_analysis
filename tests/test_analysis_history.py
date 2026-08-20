@@ -47,6 +47,8 @@ from src.storage import (
     DecisionSignalRecord,
 )
 from src.analyzer import AnalysisResult
+from src.agent.protocols import StrategyOpinion
+from src.agent.skills.synthesis import StrategySynthesizer
 from src.daily_market_context_guardrail import apply_daily_market_context_guardrail
 from src.services.history_service import HistoryService
 import src.auth as auth
@@ -269,6 +271,38 @@ class AnalysisHistoryTestCase(unittest.TestCase):
                 self.fail("未找到保存的历史记录")
             self.assertEqual(row.id, saved)
             return row.id
+
+    def test_history_detail_projects_versioned_strategy_synthesis(self) -> None:
+        if get_history_detail is None:
+            self.skipTest("fastapi is not installed in this test environment")
+        synthesis = StrategySynthesizer().synthesize(
+            [
+                StrategyOpinion(skill_id="trend", signal="buy", confidence=0.8),
+                StrategyOpinion(skill_id="value", signal="sell", confidence=0.7),
+            ],
+            weighted_score=3.6,
+            final_signal="buy",
+            weighted_confidence=0.75,
+            conflicts=[],
+            weights=[0.7, 0.3],
+        )
+        result = self._build_result()
+        result.dashboard = {"strategy_synthesis": synthesis}
+        record_id = self.db.save_analysis_history(
+            result=result,
+            query_id="query_strategy_synthesis_projection",
+            report_type="simple",
+            news_content="新闻摘要",
+            context_snapshot=None,
+            save_snapshot=False,
+        )
+
+        report = get_history_detail(str(record_id), db_manager=self.db)
+
+        self.assertIsNotNone(report.details)
+        self.assertIsNotNone(report.details.strategy_synthesis)
+        self.assertEqual(report.details.strategy_synthesis.schema_version, "strategy-synthesis-v1")
+        self.assertEqual(report.details.raw_result["dashboard"]["strategy_synthesis"], synthesis)
 
     def test_save_analysis_history_with_snapshot(self) -> None:
         """保存历史记录并写入上下文快照"""

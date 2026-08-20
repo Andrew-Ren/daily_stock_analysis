@@ -47,6 +47,8 @@ except Exception:  # pragma: no cover - optional dependency environments
 
 from src.enums import ReportType
 from src.config import Config
+from src.agent.protocols import StrategyOpinion
+from src.agent.skills.synthesis import StrategySynthesizer
 from src.services.analysis_service import AnalysisService
 from src.services.image_stock_extractor import _call_litellm_vision
 from src.services.task_queue import AnalysisTaskQueue, TaskInfo as QueueTaskInfo, TaskStatus
@@ -829,6 +831,55 @@ class AnalysisApiContractTestCase(unittest.TestCase):
         self.assertEqual(status.result.report["summary"]["operation_advice"], "不建议买入")
         self.assertEqual(status.result.report["summary"]["action"], "avoid")
         self.assertEqual(status.result.report["summary"]["action_label"], "回避")
+
+    def test_completed_queue_status_projects_strategy_synthesis(self) -> None:
+        if get_analysis_status is None or analysis_endpoint_module is None:
+            self.skipTest("analysis endpoint helpers unavailable in this environment")
+        synthesis = StrategySynthesizer().synthesize(
+            [
+                StrategyOpinion(skill_id="trend", signal="buy", confidence=0.8),
+                StrategyOpinion(skill_id="value", signal="sell", confidence=0.7),
+            ],
+            weighted_score=3.6,
+            final_signal="buy",
+            weighted_confidence=0.75,
+            conflicts=[],
+            weights=[0.7, 0.3],
+        )
+        queue = MagicMock()
+        queue.get_task.return_value = SimpleNamespace(
+            task_id="task-strategy-projection",
+            region=None,
+            stock_code="600519",
+            stock_name="贵州茅台",
+            status=analysis_endpoint_module.TaskStatusEnum.COMPLETED,
+            progress=100,
+            result={
+                "stock_code": "600519",
+                "stock_name": "贵州茅台",
+                "report": {
+                    "meta": {"query_id": "task-strategy-projection", "stock_code": "600519"},
+                    "summary": {},
+                    "details": {
+                        "raw_result": {"dashboard": {"strategy_synthesis": synthesis}},
+                    },
+                },
+            },
+            error=None,
+            original_query=None,
+            selection_source=None,
+            analysis_phase="auto",
+            created_at=datetime(2026, 8, 20, 10, 0, 0),
+            completed_at=datetime(2026, 8, 20, 10, 1, 0),
+        )
+
+        with patch("api.v1.endpoints.analysis.get_task_queue", return_value=queue):
+            status = get_analysis_status("task-strategy-projection")
+
+        self.assertEqual(
+            status.result.report["details"]["strategy_synthesis"]["schema_version"],
+            "strategy-synthesis-v1",
+        )
 
     def test_get_analysis_status_prefers_raw_result_action_over_summary_action(self) -> None:
         if get_analysis_status is None or analysis_endpoint_module is None:
