@@ -227,6 +227,32 @@ class TestAnalyzerGenerateText:
             return_generation_result=True,
         )
 
+    def test_generate_text_with_metadata_resolves_router_alias_provider(self):
+        analyzer = self._make_analyzer()
+        analyzer._config_override.generation_backend = "litellm"
+        analyzer._config_override.generation_fallback_backend = ""
+        analyzer._config_override.litellm_model = "analysis-route"
+        analyzer._config_override.litellm_fallback_models = []
+        analyzer._config_override.llm_model_list = [
+            {
+                "model_name": "analysis-route",
+                "litellm_params": {"model": "anthropic/claude-sonnet-test"},
+            }
+        ]
+        response = SimpleNamespace(
+            choices=[SimpleNamespace(message=SimpleNamespace(content="复盘"))],
+            usage=None,
+        )
+
+        with patch.object(analyzer, "_dispatch_litellm_completion", return_value=response):
+            result = analyzer.generate_text_with_metadata("写一份复盘")
+
+        assert result is not None
+        assert result.backend == "litellm"
+        assert result.model == "analysis-route"
+        assert result.provider == "anthropic"
+        assert result.usage["provider"] == "anthropic"
+
     def test_generate_text_with_metadata_preserves_exhausted_fallback_failure(self):
         from src.analyzer import _AllModelsFailedError
         from src.llm.generation_backend import GenerationError
@@ -2934,6 +2960,7 @@ class TestMarketAnalyzerBypassFix:
         ma.analyzer._config_override.generation_backend = "codex_cli"
         ma.analyzer._config_override.generation_fallback_backend = "litellm"
         ma.analyzer.get_generation_backend_identity.return_value = ("codex_cli", "codex_cli")
+        ma.analyzer.get_generation_backend_config_error = MagicMock(return_value=None)
         ma.analyzer.generate_text_with_metadata = ma.analyzer.__class__.generate_text_with_metadata.__get__(
             ma.analyzer,
             ma.analyzer.__class__,

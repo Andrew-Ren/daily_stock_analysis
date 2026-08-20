@@ -3271,6 +3271,8 @@ class GeminiAnalyzer:
                     last_response_text = _stream_text
                     last_model = model
                     _stream_usage = _attach_usage_audit(_stream_usage, call_kwargs["messages"])
+                    if usage_provider:
+                        _stream_usage.setdefault("provider", usage_provider)
                     last_usage = _stream_usage
                     if response_validator is not None:
                         response_validator(_stream_text)
@@ -3301,6 +3303,8 @@ class GeminiAnalyzer:
                     )
                     if audit_context is not None:
                         usage = _attach_usage_audit(usage, call_kwargs["messages"])
+                    if usage_provider:
+                        usage.setdefault("provider", usage_provider)
                     last_response_text = content
                     last_model = model
                     last_usage = usage
