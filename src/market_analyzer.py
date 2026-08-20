@@ -162,14 +162,22 @@ class MarketAnalyzer:
         model: str,
         backend: str,
         usage_provider: str = "",
+        response_model: str = "",
     ) -> str:
         """Resolve LiteLLM router aliases before persisting diagnostics."""
         normalized_backend = str(backend or "").strip().lower()
         normalized_model = str(model or "").strip()
         normalized_usage_provider = str(usage_provider or "").strip()
+        normalized_response_model = str(response_model or "").strip()
         normalized_provider = str(provider or "").strip()
         if normalized_usage_provider:
             return normalized_usage_provider
+        if normalized_response_model:
+            _wire_model, resolved_provider = resolved_model_provider_identity(
+                normalized_response_model,
+            )
+            if resolved_provider:
+                return resolved_provider
         if normalized_backend != "litellm" or not normalized_model:
             return normalized_provider
 
@@ -728,6 +736,9 @@ Focus on index trend, liquidity, and sector rotation to shape the next-session t
                 temperature=0.7,
             )
             review = generation_result.text if generation_result else None
+            generation_diagnostics = (
+                getattr(generation_result, "diagnostics", None) if generation_result is not None else None
+            )
             if generation_result is not None:
                 model = generation_result.model or model
                 usage_payload = getattr(generation_result, "usage", None)
@@ -737,6 +748,9 @@ Focus on index trend, liquidity, and sector rotation to shape the next-session t
                     backend=generation_result.backend or "",
                     usage_provider=(
                         usage_payload.get("provider") if isinstance(usage_payload, dict) else ""
+                    ),
+                    response_model=(
+                        usage_payload.get("response_model") if isinstance(usage_payload, dict) else ""
                     ),
                 )
         except Exception as exc:
@@ -756,14 +770,26 @@ Focus on index trend, liquidity, and sector rotation to shape the next-session t
             )
             raise
 
+        failed_all_models = (
+            isinstance(generation_diagnostics, dict)
+            and generation_diagnostics.get("reason") == "all_models_failed"
+        )
         record_llm_run(
             success=bool(review),
             provider=provider,
             model=model,
             call_type="market_review",
             duration_ms=int((time.perf_counter() - llm_started_at) * 1000),
-            error_type=None if review else "EmptyResponse",
-            error_message=None if review else "empty market review response",
+            error_type=None if review else ("AllModelsFailed" if failed_all_models else "EmptyResponse"),
+            error_message=(
+                None
+                if review
+                else (
+                    generation_diagnostics
+                    if failed_all_models
+                    else "empty market review response"
+                )
+            ),
         )
 
         if review:

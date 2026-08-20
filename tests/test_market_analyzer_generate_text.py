@@ -253,6 +253,38 @@ class TestAnalyzerGenerateText:
         assert result.provider == "anthropic"
         assert result.usage["provider"] == "anthropic"
 
+    def test_generate_text_with_metadata_prefers_actual_response_model(self):
+        analyzer = self._make_analyzer()
+        analyzer._config_override.generation_backend = "litellm"
+        analyzer._config_override.generation_fallback_backend = ""
+        analyzer._config_override.litellm_model = "analysis-route"
+        analyzer._config_override.litellm_fallback_models = []
+        analyzer._config_override.llm_model_list = [
+            {
+                "model_name": "analysis-route",
+                "litellm_params": {"model": "openai/gpt-4o-mini"},
+            },
+            {
+                "model_name": "analysis-route",
+                "litellm_params": {"model": "anthropic/claude-sonnet-test"},
+            },
+        ]
+        response = SimpleNamespace(
+            model="anthropic/claude-sonnet-test",
+            choices=[SimpleNamespace(message=SimpleNamespace(content="复盘"))],
+            usage=None,
+        )
+
+        with patch.object(analyzer, "_dispatch_litellm_completion", return_value=response):
+            result = analyzer.generate_text_with_metadata("写一份复盘")
+
+        assert result is not None
+        assert result.backend == "litellm"
+        assert result.model == "anthropic/claude-sonnet-test"
+        assert result.provider == "anthropic"
+        assert result.usage["provider"] == "anthropic"
+        assert result.usage["response_model"] == "anthropic/claude-sonnet-test"
+
     def test_generate_text_with_metadata_preserves_exhausted_fallback_failure(self):
         from src.analyzer import _AllModelsFailedError
         from src.llm.generation_backend import GenerationError
@@ -280,6 +312,37 @@ class TestAnalyzerGenerateText:
             "configured_primary_backend": "codex_cli",
             "configured_fallback_backend": "litellm",
             "last_model": "analysis-route",
+        }
+
+    def test_generate_text_with_metadata_preserves_primary_litellm_exhaustion_metadata(self):
+        from src.analyzer import _AllModelsFailedError
+        from src.llm.generation_backend import GenerationResult
+
+        analyzer = self._make_analyzer()
+        analyzer._config_override.generation_backend = "litellm"
+        analyzer._config_override.generation_fallback_backend = ""
+        exhausted = _AllModelsFailedError(
+            "all primary models failed",
+            last_model="analysis-route",
+            last_provider="anthropic",
+            last_usage={},
+        )
+
+        with patch.object(analyzer, "_call_litellm", side_effect=exhausted):
+            result = analyzer.generate_text_with_metadata("写一份复盘")
+
+        assert isinstance(result, GenerationResult)
+        assert result.text == ""
+        assert result.backend == "litellm"
+        assert result.provider == "anthropic"
+        assert result.model == "analysis-route"
+        assert result.usage["provider"] == "anthropic"
+        assert result.diagnostics == {
+            "reason": "all_models_failed",
+            "configured_primary_backend": "litellm",
+            "configured_fallback_backend": None,
+            "last_model": "analysis-route",
+            "template_fallback": True,
         }
 
     def test_call_litellm_impl_tracks_last_model_when_all_attempts_fail(self):
@@ -3030,6 +3093,38 @@ class TestMarketAnalyzerBypassFix:
         assert recorded.call_args.kwargs["provider"] == "anthropic"
         assert recorded.call_args.kwargs["model"] == "analysis-route"
 
+    def test_market_review_prefers_actual_response_model_provider_for_duplicate_aliases(self):
+        from src.market_analyzer import MarketOverview
+
+        ma = self._make_market_analyzer_with_mock_generate_text("复盘结果")
+        ma.analyzer.get_generation_backend_identity.return_value = ("codex_cli", "codex_cli")
+        ma.config.llm_model_list = [
+            {
+                "model_name": "analysis-route",
+                "litellm_params": {"model": "openai/gpt-4o-mini"},
+            },
+            {
+                "model_name": "analysis-route",
+                "litellm_params": {"model": "anthropic/claude-sonnet-test"},
+            },
+        ]
+        ma.analyzer.generate_text_with_metadata.return_value = SimpleNamespace(
+            text="复盘结果",
+            provider="openai",
+            model="analysis-route",
+            backend="litellm",
+            usage={"response_model": "anthropic/claude-sonnet-test"},
+        )
+
+        with patch("src.market_analyzer.record_llm_run_started") as started, \
+             patch("src.market_analyzer.record_llm_run") as recorded:
+            ma.generate_market_review(MarketOverview(date="2026-03-05"), [])
+
+        assert started.call_args.kwargs["provider"] == "codex_cli"
+        assert started.call_args.kwargs["model"] == "codex_cli"
+        assert recorded.call_args.kwargs["provider"] == "anthropic"
+        assert recorded.call_args.kwargs["model"] == "analysis-route"
+
     def test_market_review_records_failed_fallback_last_model(self):
         from src.analyzer import _AllModelsFailedError
         from src.llm.generation_backend import GenerationError
@@ -3065,6 +3160,51 @@ class TestMarketAnalyzerBypassFix:
         assert recorded.call_args.kwargs["provider"] == "anthropic"
         assert recorded.call_args.kwargs["model"] == "analysis-route"
         assert recorded.call_args.kwargs["success"] is False
+
+    def test_market_review_preserves_template_fallback_for_primary_litellm_exhaustion(self):
+        from src.market_analyzer import MarketOverview, MarketIndex
+
+        ma = self._make_market_analyzer_with_mock_generate_text(return_value=None)
+        ma.analyzer.get_generation_backend_identity.return_value = ("litellm", "analysis-route")
+        overview = MarketOverview(
+            date="2026-03-05",
+            indices=[
+                MarketIndex(
+                    code="000001",
+                    name="上证指数",
+                    current=3300.0,
+                    change=5.0,
+                    change_pct=0.15,
+                )
+            ],
+        )
+        ma.analyzer.generate_text_with_metadata.return_value = SimpleNamespace(
+            text="",
+            provider="anthropic",
+            model="analysis-route",
+            backend="litellm",
+            usage={"provider": "anthropic"},
+            diagnostics={
+                "reason": "all_models_failed",
+                "configured_primary_backend": "litellm",
+                "configured_fallback_backend": None,
+                "last_model": "analysis-route",
+                "template_fallback": True,
+            },
+        )
+
+        with patch.object(ma, "_generate_template_review", wraps=ma._generate_template_review) as template_review, \
+             patch("src.market_analyzer.record_llm_run_started") as started, \
+             patch("src.market_analyzer.record_llm_run") as recorded:
+            result = ma.generate_market_review(overview, [])
+
+        assert isinstance(result, str) and len(result) > 0
+        template_review.assert_called_once()
+        assert started.call_args.kwargs["provider"] == "litellm"
+        assert recorded.call_args.kwargs["provider"] == "anthropic"
+        assert recorded.call_args.kwargs["model"] == "analysis-route"
+        assert recorded.call_args.kwargs["success"] is False
+        assert recorded.call_args.kwargs["error_type"] == "AllModelsFailed"
 
     def test_generate_template_review_uses_english_shell_for_cn_when_report_language_is_en(self):
         from src.market_analyzer import MarketOverview, MarketIndex

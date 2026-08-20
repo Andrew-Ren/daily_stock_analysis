@@ -2814,6 +2814,18 @@ class GeminiAnalyzer:
             return obj.get(key)
         return getattr(obj, key, None)
 
+    def _resolve_response_model_provider(
+        self,
+        response: Any,
+        *,
+        fallback_provider: Optional[str] = None,
+    ) -> Tuple[str, str]:
+        """Return the actual response model/provider when LiteLLM exposes them."""
+        response_model = str(self._get_response_field(response, "model") or "").strip()
+        if response_model:
+            return response_model, resolved_model_provider_identity(response_model)[1]
+        return "", str(fallback_provider or "").strip()
+
     def _extract_text_blocks(self, blocks: Any, *, strip: bool = True) -> str:
         """Extract final-answer text from OpenAI-compatible content blocks.
 
@@ -3300,23 +3312,32 @@ class GeminiAnalyzer:
 
                 content = self._extract_completion_text(response)
                 if content:
+                    response_model, response_provider = self._resolve_response_model_provider(
+                        response,
+                        fallback_provider=usage_provider,
+                    )
+                    actual_model = response_model or model
                     usage_messages = None if audit_context is not None else call_kwargs["messages"]
                     usage = self._normalize_usage(
                         extract_usage_payload(response),
-                        model=usage_model or model,
-                        provider=usage_provider,
+                        model=response_model or usage_model or model,
+                        provider=response_provider or usage_provider,
                         messages=usage_messages,
                     )
                     if audit_context is not None:
                         usage = _attach_usage_audit(usage, call_kwargs["messages"])
-                    if usage_provider:
-                        usage.setdefault("provider", usage_provider)
+                    if response_model:
+                        usage.setdefault("response_model", response_model)
+                    if response_provider or usage_provider:
+                        usage.setdefault("provider", response_provider or usage_provider)
                     last_response_text = content
-                    last_model = model
+                    last_model = actual_model
+                    if response_provider:
+                        last_provider = response_provider
                     last_usage = usage
                     if response_validator is not None:
                         response_validator(content)
-                    return (content, model, usage)
+                    return (content, actual_model, usage)
                 raise ValueError("LLM returned empty response")
 
             except Exception as e:
@@ -3400,6 +3421,28 @@ class GeminiAnalyzer:
             raise
         except _AllModelsFailedError as exc:
             backend_id, fallback_backend_id = self._resolve_generation_backend_config()
+            if not fallback_backend_id and backend_id == LITELLM_BACKEND_ID:
+                logger.warning(
+                    "[generate_text_with_metadata] Primary LiteLLM exhausted all configured models; "
+                    "returning empty GenerationResult so caller fallback can continue"
+                )
+                usage = dict(exc.last_usage or {})
+                if exc.last_provider:
+                    usage.setdefault("provider", exc.last_provider)
+                return GenerationResult(
+                    text="",
+                    model=exc.last_model or str(getattr(self._get_runtime_config(), "litellm_model", "") or ""),
+                    provider=exc.last_provider or backend_id,
+                    backend=backend_id,
+                    usage=usage,
+                    diagnostics={
+                        "reason": "all_models_failed",
+                        "configured_primary_backend": backend_id,
+                        "configured_fallback_backend": fallback_backend_id,
+                        "last_model": exc.last_model,
+                        "template_fallback": True,
+                    },
+                )
             failed_backend = fallback_backend_id or backend_id
             raise GenerationError(
                 error_code=GenerationErrorCode.UNKNOWN_BACKEND_ERROR,
