@@ -2920,6 +2920,9 @@ class GeminiAnalyzer:
                 candidate_model,
                 recovery_model_list,
             )
+            explicit_provider = get_explicit_llm_channel_model_provider(candidate_model)
+            if candidate_provider and not explicit_provider:
+                return resolved_model or candidate_model, candidate_provider
             if resolved_provider:
                 return resolved_model or candidate_model, resolved_provider
         return "", candidate_provider

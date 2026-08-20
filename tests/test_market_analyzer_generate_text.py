@@ -503,6 +503,40 @@ class TestAnalyzerGenerateText:
         assert exc_info.value.last_model == "anthropic/claude-sonnet-test"
         assert exc_info.value.last_provider == "anthropic"
 
+    def test_call_litellm_impl_prefers_transport_provider_for_unqualified_failure_model(self):
+        from src.analyzer import _AllModelsFailedError
+
+        class RouterTransportError(RuntimeError):
+            def __init__(self):
+                super().__init__("router transport error")
+                self.deployment_model = "claude-sonnet-test"
+                self.llm_provider = "anthropic"
+
+        analyzer = self._make_analyzer()
+        analyzer._router = MagicMock()
+        analyzer._config_override.litellm_model = "analysis-route"
+        analyzer._config_override.litellm_fallback_models = []
+        analyzer._config_override.llm_model_list = [
+            {
+                "model_name": "analysis-route",
+                "litellm_params": {"model": "anthropic/claude-sonnet-test"},
+            },
+        ]
+
+        with patch.object(
+            analyzer,
+            "_dispatch_litellm_completion",
+            side_effect=RouterTransportError(),
+        ):
+            with pytest.raises(_AllModelsFailedError) as exc_info:
+                analyzer._call_litellm_impl(
+                    "写一份复盘",
+                    {"max_tokens": 128, "temperature": 0.7},
+                )
+
+        assert exc_info.value.last_model == "claude-sonnet-test"
+        assert exc_info.value.last_provider == "anthropic"
+
     @pytest.mark.parametrize(
         ("generation_backend", "executable_name"),
         [
