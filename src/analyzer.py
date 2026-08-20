@@ -2820,17 +2820,43 @@ class GeminiAnalyzer:
         response: Any,
         *,
         fallback_provider: Optional[str] = None,
+        configured_model: str = "",
+        model_list: Optional[List[Dict[str, Any]]] = None,
     ) -> Tuple[str, str]:
         """Return the actual response model/provider when LiteLLM exposes them."""
+        configured_provider = str(fallback_provider or "").strip()
+        normalized_configured_model = str(configured_model or "").strip()
+        if normalized_configured_model:
+            resolved_configured_model, _ = resolved_model_provider_identity(
+                normalized_configured_model,
+                model_list,
+            )
+            configured_route = str(resolved_configured_model or normalized_configured_model).strip().lower()
+            if configured_route.startswith("openai/~") or "openrouter" in configured_route:
+                configured_provider = "openrouter"
         response_model = str(self._get_response_field(response, "model") or "").strip()
         if response_model:
             if "/" not in response_model:
-                return response_model, str(fallback_provider or "").strip()
+                return response_model, configured_provider
             response_provider = get_explicit_llm_channel_model_provider(response_model)
+            if configured_provider == "openrouter":
+                return response_model, configured_provider
             if response_provider:
                 return response_model, response_provider
-            return response_model, str(fallback_provider or "").strip()
-        return "", str(fallback_provider or "").strip()
+            return response_model, configured_provider
+        return "", configured_provider
+
+    @staticmethod
+    def _promote_error_identity(details: Any) -> Dict[str, str]:
+        """Lift route/model diagnostics from nested GenerationError details."""
+        if not isinstance(details, dict):
+            return {}
+        promoted: Dict[str, str] = {}
+        for key in ("last_model", "route_name", "last_provider"):
+            candidate = str(details.get(key) or "").strip()
+            if candidate:
+                promoted[key] = candidate
+        return promoted
 
     def _resolve_router_failure_identity(
         self,
@@ -3151,6 +3177,7 @@ class GeminiAnalyzer:
             except _AllModelsFailedError:
                 raise
             except GenerationError as fallback_exc:
+                fallback_identity = self._promote_error_identity(fallback_exc.details)
                 raise GenerationError(
                     error_code=fallback_exc.error_code,
                     stage="fallback",
@@ -3160,6 +3187,7 @@ class GeminiAnalyzer:
                     provider=fallback_exc.provider,
                     details={
                         "reason": "fallback_backend_failed",
+                        **fallback_identity,
                         "primary_error": {
                             "error_code": exc.error_code.value,
                             "backend": exc.backend,
@@ -3416,6 +3444,8 @@ class GeminiAnalyzer:
                     response_model, response_provider = self._resolve_response_model_provider(
                         response,
                         fallback_provider=usage_provider,
+                        configured_model=model,
+                        model_list=recovery_model_list,
                     )
                     actual_model = response_model or model
                     usage_messages = None if audit_context is not None else call_kwargs["messages"]

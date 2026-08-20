@@ -170,6 +170,16 @@ class MarketAnalyzer:
         normalized_usage_provider = str(usage_provider or "").strip()
         normalized_response_model = str(response_model or "").strip()
         normalized_provider = str(provider or "").strip()
+        resolved_route_model = ""
+        resolved_route_provider = ""
+        if normalized_backend == "litellm" and normalized_model:
+            resolved_route_model, resolved_route_provider = resolved_model_provider_identity(
+                normalized_model,
+                getattr(self.config, "llm_model_list", None) or [],
+            )
+            normalized_route = str(resolved_route_model or normalized_model).strip().lower()
+            if normalized_route.startswith("openai/~") or "openrouter" in normalized_route:
+                return "openrouter"
         if normalized_usage_provider:
             return normalized_usage_provider
         if normalized_response_model:
@@ -180,12 +190,7 @@ class MarketAnalyzer:
                 return resolved_provider
         if normalized_backend != "litellm" or not normalized_model:
             return normalized_provider
-
-        _wire_model, resolved_provider = resolved_model_provider_identity(
-            normalized_model,
-            getattr(self.config, "llm_model_list", None) or [],
-        )
-        return resolved_provider or normalized_provider or "openai"
+        return resolved_route_provider or normalized_provider or "openai"
 
     def _resolve_recorded_error_model(
         self,
@@ -196,10 +201,30 @@ class MarketAnalyzer:
         """Preserve route/model diagnostics for LiteLLM configuration failures."""
         details = getattr(error, "details", None)
         if isinstance(details, dict):
-            for key in ("last_model", "route_name"):
-                candidate = str(details.get(key) or "").strip()
-                if candidate:
-                    return candidate
+            visited: set[int] = set()
+
+            def _find_error_model(payload: Dict[str, Any]) -> str:
+                payload_id = id(payload)
+                if payload_id in visited:
+                    return ""
+                visited.add(payload_id)
+                for key in ("last_model", "route_name"):
+                    candidate = str(payload.get(key) or "").strip()
+                    if candidate:
+                        return candidate
+                fallback_error = payload.get("fallback_error")
+                if isinstance(fallback_error, dict):
+                    nested_details = fallback_error.get("details")
+                    if isinstance(nested_details, dict):
+                        candidate = _find_error_model(nested_details)
+                        if candidate:
+                            return candidate
+                    return _find_error_model(fallback_error)
+                return ""
+
+            candidate = _find_error_model(details)
+            if candidate:
+                return candidate
         backend = str(getattr(error, "backend", "") or "").strip()
         configured_model = str(getattr(self.config, "litellm_model", "") or "").strip()
         normalized_fallback_model = str(fallback_model or "").strip()
