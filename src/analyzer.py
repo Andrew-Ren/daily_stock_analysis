@@ -35,6 +35,7 @@ from src.config import (
     get_api_keys_for_model,
     get_config,
     get_configured_llm_models,
+    get_explicit_llm_channel_model_provider,
     resolve_news_window_days,
 )
 from src.llm.hermes import (
@@ -2825,7 +2826,10 @@ class GeminiAnalyzer:
         if response_model:
             if "/" not in response_model:
                 return response_model, str(fallback_provider or "").strip()
-            return response_model, resolved_model_provider_identity(response_model)[1]
+            response_provider = get_explicit_llm_channel_model_provider(response_model)
+            if response_provider:
+                return response_model, response_provider
+            return response_model, str(fallback_provider or "").strip()
         return "", str(fallback_provider or "").strip()
 
     def _resolve_router_failure_identity(
