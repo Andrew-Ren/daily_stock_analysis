@@ -20,6 +20,7 @@ from typing import Optional, Dict, Any, List
 
 import pandas as pd
 
+from src.agent.provider_trace import resolved_model_provider_identity
 from src.config import get_config
 from src.report_language import normalize_report_language
 from src.search_service import SearchService
@@ -153,6 +154,30 @@ class MarketAnalyzer:
 
     def _log_context(self) -> str:
         return f"component=market_review region={self.region}"
+
+    def _resolve_recorded_provider(
+        self,
+        *,
+        provider: str,
+        model: str,
+        backend: str,
+        usage_provider: str = "",
+    ) -> str:
+        """Resolve LiteLLM router aliases before persisting diagnostics."""
+        normalized_backend = str(backend or "").strip().lower()
+        normalized_model = str(model or "").strip()
+        normalized_usage_provider = str(usage_provider or "").strip()
+        normalized_provider = str(provider or "").strip()
+        if normalized_usage_provider:
+            return normalized_usage_provider
+        if normalized_backend != "litellm" or not normalized_model:
+            return normalized_provider
+
+        _wire_model, resolved_provider = resolved_model_provider_identity(
+            normalized_model,
+            getattr(self.config, "llm_model_list", None) or [],
+        )
+        return resolved_provider or normalized_provider or "openai"
 
     def _get_output_language(self) -> str:
         """Return the truthful report language (zh/en/ko) for payload and directives."""
@@ -704,8 +729,16 @@ Focus on index trend, liquidity, and sector rotation to shape the next-session t
             )
             review = generation_result.text if generation_result else None
             if generation_result is not None:
-                provider = generation_result.provider or generation_result.backend or provider
                 model = generation_result.model or model
+                usage_payload = getattr(generation_result, "usage", None)
+                provider = self._resolve_recorded_provider(
+                    provider=generation_result.provider or generation_result.backend or provider,
+                    model=model,
+                    backend=generation_result.backend or "",
+                    usage_provider=(
+                        usage_payload.get("provider") if isinstance(usage_payload, dict) else ""
+                    ),
+                )
         except Exception as exc:
             error_details = getattr(exc, "details", None)
             error_provider = getattr(exc, "provider", None) or getattr(exc, "backend", None) or provider

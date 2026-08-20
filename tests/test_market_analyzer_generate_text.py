@@ -2951,6 +2951,55 @@ class TestMarketAnalyzerBypassFix:
         assert recorded.call_args.kwargs["provider"] == "openai"
         assert recorded.call_args.kwargs["model"] == "openai/qwen3.7-max"
 
+    def test_market_review_prefers_generation_usage_provider_when_recording(self):
+        from src.market_analyzer import MarketOverview
+
+        ma = self._make_market_analyzer_with_mock_generate_text("复盘结果")
+        ma.analyzer.get_generation_backend_identity.return_value = ("codex_cli", "codex_cli")
+        ma.analyzer.generate_text_with_metadata.return_value = SimpleNamespace(
+            text="复盘结果",
+            provider="openai",
+            model="analysis-route",
+            backend="litellm",
+            usage={"provider": "anthropic"},
+        )
+
+        with patch("src.market_analyzer.record_llm_run_started") as started, \
+             patch("src.market_analyzer.record_llm_run") as recorded:
+            ma.generate_market_review(MarketOverview(date="2026-03-05"), [])
+
+        assert started.call_args.kwargs["provider"] == "codex_cli"
+        assert started.call_args.kwargs["model"] == "codex_cli"
+        assert recorded.call_args.kwargs["provider"] == "anthropic"
+        assert recorded.call_args.kwargs["model"] == "analysis-route"
+
+    def test_market_review_resolves_litellm_alias_provider_before_recording(self):
+        from src.market_analyzer import MarketOverview
+
+        ma = self._make_market_analyzer_with_mock_generate_text("复盘结果")
+        ma.analyzer.get_generation_backend_identity.return_value = ("codex_cli", "codex_cli")
+        ma.config.llm_model_list = [
+            {
+                "model_name": "analysis-route",
+                "litellm_params": {"model": "anthropic/claude-sonnet-test"},
+            }
+        ]
+        ma.analyzer.generate_text_with_metadata.return_value = SimpleNamespace(
+            text="复盘结果",
+            provider="openai",
+            model="analysis-route",
+            backend="litellm",
+        )
+
+        with patch("src.market_analyzer.record_llm_run_started") as started, \
+             patch("src.market_analyzer.record_llm_run") as recorded:
+            ma.generate_market_review(MarketOverview(date="2026-03-05"), [])
+
+        assert started.call_args.kwargs["provider"] == "codex_cli"
+        assert started.call_args.kwargs["model"] == "codex_cli"
+        assert recorded.call_args.kwargs["provider"] == "anthropic"
+        assert recorded.call_args.kwargs["model"] == "analysis-route"
+
     def test_market_review_records_failed_fallback_last_model(self):
         from src.analyzer import _AllModelsFailedError
         from src.llm.generation_backend import GenerationError
