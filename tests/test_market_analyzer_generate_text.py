@@ -262,7 +262,8 @@ class TestAnalyzerGenerateText:
         analyzer._config_override.generation_fallback_backend = "litellm"
         exhausted = _AllModelsFailedError(
             "all fallback models failed",
-            last_model="openai/qwen3.7-max",
+            last_model="analysis-route",
+            last_provider="anthropic",
             last_usage={},
         )
 
@@ -273,11 +274,12 @@ class TestAnalyzerGenerateText:
         error = exc_info.value
         assert error.stage == "fallback"
         assert error.backend == "litellm"
+        assert error.provider == "anthropic"
         assert error.details == {
             "reason": "all_models_failed",
             "configured_primary_backend": "codex_cli",
             "configured_fallback_backend": "litellm",
-            "last_model": "openai/qwen3.7-max",
+            "last_model": "analysis-route",
         }
 
     def test_call_litellm_impl_tracks_last_model_when_all_attempts_fail(self):
@@ -304,6 +306,34 @@ class TestAnalyzerGenerateText:
                 )
 
         assert exc_info.value.last_model == "openai/fallback-model"
+        assert exc_info.value.last_provider == "openai"
+
+    def test_call_litellm_impl_preserves_resolved_provider_for_router_alias_failure(self):
+        from src.analyzer import _AllModelsFailedError
+
+        analyzer = self._make_analyzer()
+        analyzer._config_override.litellm_model = "analysis-route"
+        analyzer._config_override.litellm_fallback_models = []
+        analyzer._config_override.llm_model_list = [
+            {
+                "model_name": "analysis-route",
+                "litellm_params": {"model": "anthropic/claude-sonnet-test"},
+            }
+        ]
+
+        with patch.object(
+            analyzer,
+            "_dispatch_litellm_completion",
+            side_effect=RuntimeError("router transport error"),
+        ):
+            with pytest.raises(_AllModelsFailedError) as exc_info:
+                analyzer._call_litellm_impl(
+                    "写一份复盘",
+                    {"max_tokens": 128, "temperature": 0.7},
+                )
+
+        assert exc_info.value.last_model == "analysis-route"
+        assert exc_info.value.last_provider == "anthropic"
 
     @pytest.mark.parametrize(
         ("generation_backend", "executable_name"),
@@ -3016,7 +3046,8 @@ class TestMarketAnalyzerBypassFix:
         )
         exhausted = _AllModelsFailedError(
             "all fallback models failed",
-            last_model="openai/qwen3.7-max",
+            last_model="analysis-route",
+            last_provider="anthropic",
         )
 
         with patch.object(ma.analyzer, "_call_litellm", side_effect=exhausted), \
@@ -3027,11 +3058,12 @@ class TestMarketAnalyzerBypassFix:
 
         assert exc_info.value.stage == "fallback"
         assert exc_info.value.backend == "litellm"
-        assert exc_info.value.details["last_model"] == "openai/qwen3.7-max"
+        assert exc_info.value.provider == "anthropic"
+        assert exc_info.value.details["last_model"] == "analysis-route"
         assert started.call_args.kwargs["provider"] == "codex_cli"
         assert started.call_args.kwargs["model"] == "codex_cli"
-        assert recorded.call_args.kwargs["provider"] == "litellm"
-        assert recorded.call_args.kwargs["model"] == "openai/qwen3.7-max"
+        assert recorded.call_args.kwargs["provider"] == "anthropic"
+        assert recorded.call_args.kwargs["model"] == "analysis-route"
         assert recorded.call_args.kwargs["success"] is False
 
     def test_generate_template_review_uses_english_shell_for_cn_when_report_language_is_en(self):

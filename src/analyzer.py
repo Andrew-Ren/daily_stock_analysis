@@ -276,8 +276,9 @@ class _AllModelsFailedError(Exception):
     that *did* return a response (but whose JSON could not be validated), so
     callers can still attempt a best-effort text fallback.
 
-    ``last_model`` and ``last_usage`` record the model name and token usage
-    from the last attempt so callers can persist usage even on fallback.
+    ``last_model``, ``last_provider`` and ``last_usage`` record the resolved
+    route identity and token usage from the last attempt so callers can persist
+    diagnostics even on fallback.
     """
 
     def __init__(
@@ -286,11 +287,13 @@ class _AllModelsFailedError(Exception):
         *,
         last_response_text: Optional[str] = None,
         last_model: Optional[str] = None,
+        last_provider: Optional[str] = None,
         last_usage: Optional[Dict[str, Any]] = None,
     ):
         super().__init__(message)
         self.last_response_text = last_response_text
         self.last_model = last_model
+        self.last_provider = last_provider
         self.last_usage = last_usage or {}
 
 
@@ -3132,6 +3135,7 @@ class GeminiAnalyzer:
         last_error = None
         last_response_text: Optional[str] = None
         last_model: Optional[str] = None
+        last_provider: Optional[str] = None
         last_usage: Dict[str, Any] = {}
         effective_system_prompt = system_prompt or self.TEXT_SYSTEM_PROMPT
         router_model_names = set(get_configured_llm_models(config.llm_model_list))
@@ -3144,6 +3148,8 @@ class GeminiAnalyzer:
             if legacy_router_model_list and model == config.litellm_model and not use_channel_router:
                 recovery_model_list = legacy_router_model_list
             usage_model, usage_provider = resolved_model_provider_identity(model, recovery_model_list)
+            if usage_provider:
+                last_provider = usage_provider
 
             try:
                 def _attach_usage_audit(
@@ -3323,6 +3329,7 @@ class GeminiAnalyzer:
             f"All LLM models failed (tried {len(models_to_try)} model(s)). Last error: {last_error}",
             last_response_text=last_response_text,
             last_model=last_model,
+            last_provider=last_provider,
             last_usage=last_usage,
         )
 
@@ -3400,7 +3407,7 @@ class GeminiAnalyzer:
                 retryable=False,
                 fallbackable=False,
                 backend=failed_backend,
-                provider=failed_backend,
+                provider=exc.last_provider or failed_backend,
                 details={
                     "reason": "all_models_failed",
                     "configured_primary_backend": backend_id,
