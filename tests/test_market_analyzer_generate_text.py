@@ -426,6 +426,44 @@ class TestAnalyzerGenerateText:
         assert exc_info.value.last_model == "analysis-route"
         assert exc_info.value.last_provider == "anthropic"
 
+    def test_call_litellm_impl_uses_last_router_deployment_provider_for_alias_failure(self):
+        from src.analyzer import _AllModelsFailedError
+
+        class RouterTransportError(RuntimeError):
+            def __init__(self):
+                super().__init__("router transport error")
+                self.model = "anthropic/claude-sonnet-test"
+                self.llm_provider = "anthropic"
+
+        analyzer = self._make_analyzer()
+        analyzer._router = MagicMock()
+        analyzer._config_override.litellm_model = "analysis-route"
+        analyzer._config_override.litellm_fallback_models = []
+        analyzer._config_override.llm_model_list = [
+            {
+                "model_name": "analysis-route",
+                "litellm_params": {"model": "openai/gpt-4o-mini"},
+            },
+            {
+                "model_name": "analysis-route",
+                "litellm_params": {"model": "anthropic/claude-sonnet-test"},
+            },
+        ]
+
+        with patch.object(
+            analyzer,
+            "_dispatch_litellm_completion",
+            side_effect=RouterTransportError(),
+        ):
+            with pytest.raises(_AllModelsFailedError) as exc_info:
+                analyzer._call_litellm_impl(
+                    "写一份复盘",
+                    {"max_tokens": 128, "temperature": 0.7},
+                )
+
+        assert exc_info.value.last_model == "anthropic/claude-sonnet-test"
+        assert exc_info.value.last_provider == "anthropic"
+
     @pytest.mark.parametrize(
         ("generation_backend", "executable_name"),
         [
@@ -3003,6 +3041,63 @@ class TestMarketAnalyzerBypassFix:
             assert exc_info.value.details["requested_backend"] == "codex"
             template_review.assert_not_called()
             mock_record_llm_run.assert_called_once()
+
+    def test_generation_backend_config_error_records_failing_route_model(self):
+        from src.llm.generation_backend import GenerationError, GenerationErrorCode
+        from src.market_analyzer import MarketOverview
+
+        ma = self._make_market_analyzer_with_mock_generate_text(return_value=None)
+        ma.analyzer.get_generation_backend_config_error = MagicMock(return_value=GenerationError(
+            error_code=GenerationErrorCode.UNSAFE_CONFIG,
+            stage="configuration",
+            retryable=False,
+            fallbackable=False,
+            backend="litellm",
+            provider="hermes",
+            details={
+                "reason": "invalid_model",
+                "field": "LLM_HERMES_MODELS",
+            },
+        ))
+        ma.config.litellm_model = "bad hermes route"
+
+        with patch("src.market_analyzer.record_llm_run") as mock_record_llm_run:
+            with pytest.raises(GenerationError):
+                ma.generate_market_review(MarketOverview(date="2026-03-05"), [])
+
+        diagnostic = mock_record_llm_run.call_args.kwargs
+        assert diagnostic["provider"] == "hermes"
+        assert diagnostic["model"] == "bad hermes route"
+        assert diagnostic["success"] is False
+
+    def test_generation_backend_config_error_prefers_route_name_diagnostics(self):
+        from src.llm.generation_backend import GenerationError, GenerationErrorCode
+        from src.market_analyzer import MarketOverview
+
+        ma = self._make_market_analyzer_with_mock_generate_text(return_value=None)
+        ma.analyzer.get_generation_backend_config_error = MagicMock(return_value=GenerationError(
+            error_code=GenerationErrorCode.UNSAFE_CONFIG,
+            stage="configuration",
+            retryable=False,
+            fallbackable=False,
+            backend="litellm",
+            provider="hermes",
+            details={
+                "reason": "mixed_hermes_route_unsupported",
+                "field": "LLM_CHANNELS",
+                "route_name": "invalid-shared-route",
+            },
+        ))
+        ma.config.litellm_model = "configured-primary-route"
+
+        with patch("src.market_analyzer.record_llm_run") as mock_record_llm_run:
+            with pytest.raises(GenerationError):
+                ma.generate_market_review(MarketOverview(date="2026-03-05"), [])
+
+        diagnostic = mock_record_llm_run.call_args.kwargs
+        assert diagnostic["provider"] == "hermes"
+        assert diagnostic["model"] == "invalid-shared-route"
+        assert diagnostic["success"] is False
 
     def test_market_review_uses_8192_max_tokens(self):
         """generate_market_review() should request a larger output budget to avoid truncation."""

@@ -187,6 +187,26 @@ class MarketAnalyzer:
         )
         return resolved_provider or normalized_provider or "openai"
 
+    def _resolve_recorded_error_model(
+        self,
+        *,
+        error: Any,
+        fallback_model: str = "",
+    ) -> str:
+        """Preserve route/model diagnostics for LiteLLM configuration failures."""
+        details = getattr(error, "details", None)
+        if isinstance(details, dict):
+            for key in ("last_model", "route_name"):
+                candidate = str(details.get(key) or "").strip()
+                if candidate:
+                    return candidate
+        backend = str(getattr(error, "backend", "") or "").strip()
+        configured_model = str(getattr(self.config, "litellm_model", "") or "").strip()
+        normalized_fallback_model = str(fallback_model or "").strip()
+        if backend == "litellm":
+            return normalized_fallback_model or configured_model or backend
+        return normalized_fallback_model or backend
+
     def _get_output_language(self) -> str:
         """Return the truthful report language (zh/en/ko) for payload and directives."""
         return normalize_report_language(
@@ -703,7 +723,7 @@ Focus on index trend, liquidity, and sector rotation to shape the next-session t
             record_llm_run(
                 success=False,
                 provider=backend_error.provider or backend_error.backend,
-                model=backend_error.backend,
+                model=self._resolve_recorded_error_model(error=backend_error),
                 call_type="market_review",
                 error_type=type(backend_error).__name__,
                 error_message=backend_error,
@@ -754,11 +774,11 @@ Focus on index trend, liquidity, and sector rotation to shape the next-session t
                     ),
                 )
         except Exception as exc:
-            error_details = getattr(exc, "details", None)
             error_provider = getattr(exc, "provider", None) or getattr(exc, "backend", None) or provider
-            error_model = (
-                error_details.get("last_model") if isinstance(error_details, dict) else None
-            ) or getattr(exc, "backend", None) or model
+            error_model = self._resolve_recorded_error_model(
+                error=exc,
+                fallback_model=model,
+            )
             record_llm_run(
                 success=False,
                 provider=error_provider,

@@ -2828,6 +2828,98 @@ class GeminiAnalyzer:
             return response_model, resolved_model_provider_identity(response_model)[1]
         return "", str(fallback_provider or "").strip()
 
+    def _resolve_router_failure_identity(
+        self,
+        exc: Any,
+        *,
+        route_name: str,
+        recovery_model_list: List[Dict[str, Any]],
+    ) -> Tuple[str, str]:
+        """Resolve the final Router deployment identity from a transport exception."""
+        normalized_route_name = str(route_name or "").strip()
+        origins = route_deployment_origins(recovery_model_list, normalized_route_name)
+        deployment_count = len(origins.hermes_deployments) + len(origins.non_hermes_deployments)
+        candidate_models: List[str] = []
+        candidate_provider = ""
+        seen_payloads: set[int] = set()
+
+        def _remember_model(value: Any) -> None:
+            normalized = str(value or "").strip()
+            if not normalized:
+                return
+            if deployment_count > 1 and normalized == normalized_route_name:
+                return
+            if normalized not in candidate_models:
+                candidate_models.append(normalized)
+
+        def _remember_provider(value: Any) -> None:
+            nonlocal candidate_provider
+            normalized = str(value or "").strip()
+            if normalized and not candidate_provider:
+                candidate_provider = normalized
+
+        def _walk(payload: Any) -> None:
+            if payload is None:
+                return
+            payload_id = id(payload)
+            if payload_id in seen_payloads:
+                return
+            seen_payloads.add(payload_id)
+
+            if isinstance(payload, dict):
+                params = payload.get("litellm_params")
+                if isinstance(params, dict):
+                    _remember_model(params.get("model"))
+                    _remember_provider(
+                        params.get("custom_llm_provider") or params.get("provider")
+                    )
+                for key in (
+                    "litellm_model",
+                    "response_model",
+                    "deployment_model",
+                    "model",
+                    "model_name",
+                ):
+                    _remember_model(payload.get(key))
+                _remember_provider(
+                    payload.get("llm_provider")
+                    or payload.get("litellm_provider")
+                    or payload.get("custom_llm_provider")
+                    or payload.get("provider")
+                )
+                for key in ("response", "error", "details", "metadata", "body"):
+                    _walk(payload.get(key))
+                return
+
+            for key in ("response", "error", "details", "metadata", "body"):
+                nested = getattr(payload, key, None)
+                if nested is not payload:
+                    _walk(nested)
+            _remember_provider(
+                getattr(payload, "llm_provider", None)
+                or getattr(payload, "litellm_provider", None)
+                or getattr(payload, "custom_llm_provider", None)
+                or getattr(payload, "provider", None)
+            )
+            for key in (
+                "litellm_model",
+                "response_model",
+                "deployment_model",
+                "model",
+                "model_name",
+            ):
+                _remember_model(getattr(payload, key, None))
+
+        _walk(exc)
+        for candidate_model in candidate_models:
+            resolved_model, resolved_provider = resolved_model_provider_identity(
+                candidate_model,
+                recovery_model_list,
+            )
+            if resolved_provider:
+                return resolved_model or candidate_model, resolved_provider
+        return "", candidate_provider
+
     def _extract_text_blocks(self, blocks: Any, *, strip: bool = True) -> str:
         """Extract final-answer text from OpenAI-compatible content blocks.
 
@@ -3343,6 +3435,16 @@ class GeminiAnalyzer:
                 raise ValueError("LLM returned empty response")
 
             except Exception as e:
+                if uses_router:
+                    router_model, router_provider = self._resolve_router_failure_identity(
+                        e,
+                        route_name=model,
+                        recovery_model_list=recovery_model_list,
+                    )
+                    if router_model:
+                        last_model = router_model
+                    if router_provider:
+                        last_provider = router_provider
                 safe_error = self._sanitize_litellm_exception_text(e, config=config, model=model)
                 logger.warning("[LiteLLM] %s failed: %s", model, safe_error)
                 last_error = RuntimeError(f"{type(e).__name__}: {safe_error}")
