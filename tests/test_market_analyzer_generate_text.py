@@ -254,6 +254,31 @@ class TestAnalyzerGenerateText:
             "last_model": "openai/qwen3.7-max",
         }
 
+    def test_call_litellm_impl_tracks_last_model_when_all_attempts_fail(self):
+        from src.analyzer import _AllModelsFailedError
+
+        analyzer = self._make_analyzer()
+        analyzer._config_override.litellm_model = "openai/primary-model"
+        analyzer._config_override.litellm_fallback_models = ["openai/fallback-model"]
+        analyzer._config_override.llm_model_list = []
+
+        def fake_dispatch(model, call_kwargs, **kwargs):
+            if model == "openai/primary-model":
+                return SimpleNamespace(
+                    choices=[SimpleNamespace(message=SimpleNamespace(content=None))],
+                    usage=None,
+                )
+            raise RuntimeError("fallback transport error")
+
+        with patch.object(analyzer, "_dispatch_litellm_completion", side_effect=fake_dispatch):
+            with pytest.raises(_AllModelsFailedError) as exc_info:
+                analyzer._call_litellm_impl(
+                    "写一份复盘",
+                    {"max_tokens": 128, "temperature": 0.7},
+                )
+
+        assert exc_info.value.last_model == "openai/fallback-model"
+
     @pytest.mark.parametrize(
         ("generation_backend", "executable_name"),
         [
@@ -2899,6 +2924,39 @@ class TestMarketAnalyzerBypassFix:
         assert started.call_args.kwargs["model"] == "codex_cli"
         assert recorded.call_args.kwargs["provider"] == "openai"
         assert recorded.call_args.kwargs["model"] == "openai/qwen3.7-max"
+
+    def test_market_review_records_failed_fallback_last_model(self):
+        from src.analyzer import _AllModelsFailedError
+        from src.llm.generation_backend import GenerationError
+        from src.market_analyzer import MarketOverview
+
+        ma = self._make_market_analyzer_with_mock_generate_text(return_value=None)
+        ma.analyzer._config_override.generation_backend = "codex_cli"
+        ma.analyzer._config_override.generation_fallback_backend = "litellm"
+        ma.analyzer.get_generation_backend_identity.return_value = ("codex_cli", "codex_cli")
+        ma.analyzer.generate_text_with_metadata = ma.analyzer.__class__.generate_text_with_metadata.__get__(
+            ma.analyzer,
+            ma.analyzer.__class__,
+        )
+        exhausted = _AllModelsFailedError(
+            "all fallback models failed",
+            last_model="openai/qwen3.7-max",
+        )
+
+        with patch.object(ma.analyzer, "_call_litellm", side_effect=exhausted), \
+             patch("src.market_analyzer.record_llm_run_started") as started, \
+             patch("src.market_analyzer.record_llm_run") as recorded:
+            with pytest.raises(GenerationError) as exc_info:
+                ma.generate_market_review(MarketOverview(date="2026-03-05"), [])
+
+        assert exc_info.value.stage == "fallback"
+        assert exc_info.value.backend == "litellm"
+        assert exc_info.value.details["last_model"] == "openai/qwen3.7-max"
+        assert started.call_args.kwargs["provider"] == "codex_cli"
+        assert started.call_args.kwargs["model"] == "codex_cli"
+        assert recorded.call_args.kwargs["provider"] == "litellm"
+        assert recorded.call_args.kwargs["model"] == "openai/qwen3.7-max"
+        assert recorded.call_args.kwargs["success"] is False
 
     def test_generate_template_review_uses_english_shell_for_cn_when_report_language_is_en(self):
         from src.market_analyzer import MarketOverview, MarketIndex

@@ -707,10 +707,15 @@ Focus on index trend, liquidity, and sector rotation to shape the next-session t
                 provider = generation_result.provider or generation_result.backend or provider
                 model = generation_result.model or model
         except Exception as exc:
+            error_details = getattr(exc, "details", None)
+            error_provider = getattr(exc, "provider", None) or getattr(exc, "backend", None) or provider
+            error_model = (
+                error_details.get("last_model") if isinstance(error_details, dict) else None
+            ) or getattr(exc, "backend", None) or model
             record_llm_run(
                 success=False,
-                provider=getattr(exc, "provider", None) or getattr(exc, "backend", None) or provider,
-                model=getattr(exc, "backend", None) or model,
+                provider=error_provider,
+                model=error_model,
                 call_type="market_review",
                 duration_ms=int((time.perf_counter() - llm_started_at) * 1000),
                 error_type=type(exc).__name__,
