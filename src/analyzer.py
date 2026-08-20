@@ -3386,9 +3386,26 @@ class GeminiAnalyzer:
             return result
         except GenerationError:
             raise
+        except _AllModelsFailedError as exc:
+            backend_id, fallback_backend_id = self._resolve_generation_backend_config()
+            failed_backend = fallback_backend_id or backend_id
+            raise GenerationError(
+                error_code=GenerationErrorCode.UNKNOWN_BACKEND_ERROR,
+                stage="fallback" if fallback_backend_id else "generation",
+                retryable=False,
+                fallbackable=False,
+                backend=failed_backend,
+                provider=failed_backend,
+                details={
+                    "reason": "all_models_failed",
+                    "configured_primary_backend": backend_id,
+                    "configured_fallback_backend": fallback_backend_id,
+                    "last_model": exc.last_model,
+                },
+            ) from exc
         except Exception as exc:
             logger.error("[generate_text_with_metadata] LLM call failed: %s", exc)
-            return None
+            raise
 
     def analyze(
         self, 

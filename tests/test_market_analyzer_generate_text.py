@@ -227,6 +227,33 @@ class TestAnalyzerGenerateText:
             return_generation_result=True,
         )
 
+    def test_generate_text_with_metadata_preserves_exhausted_fallback_failure(self):
+        from src.analyzer import _AllModelsFailedError
+        from src.llm.generation_backend import GenerationError
+
+        analyzer = self._make_analyzer()
+        analyzer._config_override.generation_backend = "codex_cli"
+        analyzer._config_override.generation_fallback_backend = "litellm"
+        exhausted = _AllModelsFailedError(
+            "all fallback models failed",
+            last_model="openai/qwen3.7-max",
+            last_usage={},
+        )
+
+        with patch.object(analyzer, "_call_litellm", side_effect=exhausted):
+            with pytest.raises(GenerationError) as exc_info:
+                analyzer.generate_text_with_metadata("写一份复盘")
+
+        error = exc_info.value
+        assert error.stage == "fallback"
+        assert error.backend == "litellm"
+        assert error.details == {
+            "reason": "all_models_failed",
+            "configured_primary_backend": "codex_cli",
+            "configured_fallback_backend": "litellm",
+            "last_model": "openai/qwen3.7-max",
+        }
+
     @pytest.mark.parametrize(
         ("generation_backend", "executable_name"),
         [
