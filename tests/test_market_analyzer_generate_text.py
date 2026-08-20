@@ -285,6 +285,34 @@ class TestAnalyzerGenerateText:
         assert result.usage["provider"] == "anthropic"
         assert result.usage["response_model"] == "anthropic/claude-sonnet-test"
 
+    def test_generate_text_with_metadata_preserves_fallback_provider_for_unqualified_response_model(self):
+        analyzer = self._make_analyzer()
+        analyzer._config_override.generation_backend = "litellm"
+        analyzer._config_override.generation_fallback_backend = ""
+        analyzer._config_override.litellm_model = "analysis-route"
+        analyzer._config_override.litellm_fallback_models = []
+        analyzer._config_override.llm_model_list = [
+            {
+                "model_name": "analysis-route",
+                "litellm_params": {"model": "anthropic/claude-sonnet-test"},
+            },
+        ]
+        response = SimpleNamespace(
+            model="claude-sonnet-test",
+            choices=[SimpleNamespace(message=SimpleNamespace(content="复盘"))],
+            usage=None,
+        )
+
+        with patch.object(analyzer, "_dispatch_litellm_completion", return_value=response):
+            result = analyzer.generate_text_with_metadata("写一份复盘")
+
+        assert result is not None
+        assert result.backend == "litellm"
+        assert result.model == "claude-sonnet-test"
+        assert result.provider == "anthropic"
+        assert result.usage["provider"] == "anthropic"
+        assert result.usage["response_model"] == "claude-sonnet-test"
+
     def test_generate_text_with_metadata_preserves_exhausted_fallback_failure(self):
         from src.analyzer import _AllModelsFailedError
         from src.llm.generation_backend import GenerationError

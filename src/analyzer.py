@@ -2823,6 +2823,8 @@ class GeminiAnalyzer:
         """Return the actual response model/provider when LiteLLM exposes them."""
         response_model = str(self._get_response_field(response, "model") or "").strip()
         if response_model:
+            if "/" not in response_model:
+                return response_model, str(fallback_provider or "").strip()
             return response_model, resolved_model_provider_identity(response_model)[1]
         return "", str(fallback_provider or "").strip()
 
