@@ -2212,6 +2212,48 @@ class TestAnalyzerGenerateText:
         assert "贵州茅台" not in usage["known_dynamic_marker_positions"]
         assert "2026-06-19" not in usage["known_dynamic_marker_positions"]
 
+    def test_call_litellm_non_stream_preserves_resolved_provider_with_audit_context(self):
+        analyzer = self._make_analyzer()
+        analyzer._config_override = SimpleNamespace(
+            litellm_model="analysis-route",
+            litellm_fallback_models=[],
+            llm_model_list=[
+                {
+                    "model_name": "analysis-route",
+                    "litellm_params": {"model": "openai/gpt-4o-mini"},
+                },
+                {
+                    "model_name": "analysis-route",
+                    "litellm_params": {"model": "anthropic/claude-sonnet-test"},
+                },
+            ],
+        )
+        response = SimpleNamespace(
+            model="anthropic/claude-sonnet-test",
+            choices=[SimpleNamespace(message=SimpleNamespace(content="ok"))],
+            usage=SimpleNamespace(prompt_tokens=10, completion_tokens=1, total_tokens=11),
+        )
+
+        with patch.object(analyzer, "_dispatch_litellm_completion", return_value=response):
+            text, model_used, usage = analyzer._call_litellm(
+                "same user prompt 600519",
+                {"max_tokens": 128, "temperature": 0.2},
+                system_prompt="system prompt zh cn",
+                audit_context={
+                    "language": "zh",
+                    "market_group": "cn",
+                    "analysis_mode": "stock_analysis",
+                },
+            )
+
+        assert text == "ok"
+        assert model_used == "anthropic/claude-sonnet-test"
+        _assert_usage_contains(usage, {"prompt_tokens": 10, "completion_tokens": 1, "total_tokens": 11})
+        assert usage["provider"] == "anthropic"
+        assert usage["response_model"] == "anthropic/claude-sonnet-test"
+        assert usage["transport"] == "litellm"
+        assert usage["analysis_mode"] == "stock_analysis"
+
     def test_call_litellm_system_hmac_distinguishes_language_and_market_prompt(self):
         analyzer = self._make_analyzer()
         analyzer._config_override = SimpleNamespace(

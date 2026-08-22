@@ -3349,7 +3349,9 @@ class GeminiAnalyzer:
                             config,
                         )
                     effective_audit_context = dict(audit_context)
-                    effective_audit_context["provider"] = usage_provider
+                    effective_audit_context["provider"] = (
+                        usage.get("provider") or usage_provider
+                    )
                     effective_audit_context["transport"] = (
                         effective_audit_context.get("transport") or "litellm"
                     )
@@ -3463,6 +3465,8 @@ class GeminiAnalyzer:
                 if _stream_text is not None:
                     last_response_text = _stream_text
                     last_model = model
+                    if usage_provider:
+                        _stream_usage["provider"] = usage_provider
                     _stream_usage = _attach_usage_audit(_stream_usage, call_kwargs["messages"])
                     if usage_provider:
                         _stream_usage.setdefault("provider", usage_provider)
@@ -3505,6 +3509,8 @@ class GeminiAnalyzer:
                         provider=response_provider or usage_provider,
                         messages=usage_messages,
                     )
+                    if response_provider or usage_provider:
+                        usage["provider"] = response_provider or usage_provider
                     if audit_context is not None:
                         usage = _attach_usage_audit(usage, call_kwargs["messages"])
                     if response_model:
