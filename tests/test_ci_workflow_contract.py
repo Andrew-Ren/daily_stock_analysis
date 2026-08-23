@@ -76,6 +76,7 @@ def test_heavy_ci_jobs_are_path_filtered_and_backend_tests_are_sharded() -> None
 
     assert changes_job["outputs"]["backend"] == (
         "${{ steps.backend-filter.outputs.backend_non_web == 'true' || "
+        "steps.filter.outputs.backend_contract_assets == 'true' || "
         "steps.filter.outputs.backend_web_contract == 'true' }}"
     )
     assert changes_job["outputs"]["docker"] == "${{ steps.filter.outputs.docker }}"
@@ -106,6 +107,14 @@ def test_heavy_ci_jobs_are_path_filtered_and_backend_tests_are_sharded() -> None
         "apps/dsa-web/src/locales/settingsHelp.ts",
     }
     assert parsed_filters["backend_web_contract"][1] == "!**/*.md"
+    assert set(
+        _expand_brace_pattern(parsed_filters["backend_contract_assets"][0])
+    ) >= {
+        "docs/architecture/**",
+        "docs/alerts.md",
+        "docs/full-guide.md",
+        "tests/fixtures/**",
+    }
 
     backend_tests_job = ci["jobs"]["backend-tests"]
     backend_gate_job = ci["jobs"]["backend-gate"]
@@ -172,8 +181,10 @@ def test_backend_filter_covers_mixed_changes_and_shared_web_assets() -> None:
     )["frontend_code"]
 
     def outputs(changed_paths: list[str]) -> tuple[bool, bool, bool, bool]:
-        backend = _filter_output(changed_paths, backend_filters) or _filter_output(
-            changed_paths, filters["backend_web_contract"]
+        backend = (
+            _filter_output(changed_paths, backend_filters)
+            or _filter_output(changed_paths, filters["backend_contract_assets"])
+            or _filter_output(changed_paths, filters["backend_web_contract"])
         )
         return (
             backend,
@@ -183,7 +194,11 @@ def test_backend_filter_covers_mixed_changes_and_shared_web_assets() -> None:
         )
 
     assert backend_filter_step["with"]["predicate-quantifier"] == "every"
-    assert outputs(["docs/CHANGELOG.md"]) == (False, False, False, False)
+    assert outputs(["docs/CHANGELOG.md"]) == (True, False, False, False)
+    assert outputs(["docs/architecture/api_spec.json"])[0] is True
+    assert outputs(["docs/alerts.md"])[0] is True
+    assert outputs(["tests/fixtures/notification_reports/aggregate_report.md"])[0] is True
+    assert outputs(["docs/CONTRIBUTING.md"]) == (False, False, False, False)
     assert outputs(["README.md"]) == (False, False, False, False)
     assert outputs(["LICENSE"]) == (False, False, False, False)
     assert outputs(["apps/dsa-web/README.md"]) == (False, False, False, False)
@@ -192,7 +207,7 @@ def test_backend_filter_covers_mixed_changes_and_shared_web_assets() -> None:
     assert outputs(["requirements.txt"]) == (True, True, False, True)
     assert outputs(["apps/dsa-web/src/App.tsx"]) == (False, True, True, False)
     assert outputs(["apps/dsa-web/src/App.tsx", "docs/CHANGELOG.md"]) == (
-        False,
+        True,
         True,
         True,
         False,
