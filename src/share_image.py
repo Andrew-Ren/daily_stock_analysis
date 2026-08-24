@@ -2119,7 +2119,9 @@ def build_share_image_html(
   <style>
     * {{ box-sizing: border-box; }}
     html, body {{ margin: 0; width: 1080px; background: #eef4fd; }}
-    body {{ color: #081b40; font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "PingFang SC", "Microsoft YaHei", Arial, sans-serif; font-size: 22px; line-height: 1.5; -webkit-font-smoothing: antialiased; }}
+    body {{ color: #081b40; font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Segoe UI", Arial, sans-serif; font-size: 22px; line-height: 1.5; -webkit-font-smoothing: antialiased; }}
+    html[lang="zh-CN"] body {{ font-family: "Noto Sans CJK SC", "Noto Sans SC", "PingFang SC", "Microsoft YaHei", -apple-system, BlinkMacSystemFont, "Segoe UI", Arial, sans-serif; }}
+    html[lang="ko"] body {{ font-family: "Noto Sans CJK KR", "Noto Sans KR", "Apple SD Gothic Neo", "Malgun Gothic", -apple-system, BlinkMacSystemFont, "Segoe UI", Arial, sans-serif; }}
     .poster {{ width: 1080px; padding: 38px 34px 24px; border: 1px solid #aebdd4; border-radius: 28px; background: radial-gradient(circle at 92% 6%, rgba(48,123,255,.15), transparent 260px), linear-gradient(180deg,#fff 0%,#fbfdff 78%,#eef5ff 100%); }}
     .poster-header {{ display: table; width: 100%; margin-bottom: 28px; }}
     .brand, .meta {{ display: table-cell; vertical-align: middle; }}

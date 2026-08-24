@@ -1967,3 +1967,20 @@ def test_desktop_backend_build_scripts_bundle_share_image_assets():
     for relative_path in ("scripts/build-backend.ps1", "scripts/build-backend-macos.sh"):
         content = (root / relative_path).read_text(encoding="utf-8")
         assert "src/assets/share_image" in content
+
+
+def test_share_image_declares_cjk_fonts_and_docker_installs_them():
+    html = build_share_image_html(
+        "# 贵州茅台 600519 分析报告\n\n## 核心判断\n\n- 趋势偏多\n",
+        generated_on=date(2026, 8, 24),
+    )
+
+    assert 'html[lang="zh-CN"] body' in html
+    assert '"Noto Sans CJK SC"' in html
+    assert 'html[lang="ko"] body' in html
+    assert '"Noto Sans CJK KR"' in html
+
+    dockerfile = (
+        Path(__file__).resolve().parents[1] / "docker" / "Dockerfile"
+    ).read_text(encoding="utf-8")
+    assert "fonts-noto-cjk \\" in dockerfile
