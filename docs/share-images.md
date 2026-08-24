@@ -25,6 +25,36 @@
 分享图需要运行环境提供对应语言字体。官方 Docker 镜像已内置 Noto CJK 字体；Debian/Ubuntu 源码部署使用默认 `wkhtmltoimage` 引擎时，应安装 `wkhtmltopdf fonts-noto-cjk`。如果只安装转图工具而缺少 CJK 字体，中文或韩文可能在 PNG 中消失，只剩数字、英文和边框。
 `fonts-noto-cjk` 是 Debian 字体包名，不代表新增日文报告语言。项目的报告输出仍只支持 `REPORT_LANGUAGE=zh|en|ko`；日股个股和日本市场复盘中的日文原生名称由通用 Noto CJK fallback 覆盖，页面语言仍跟随所选报告语言，不会根据 `7203.T` 或 `region=jp` 切换成未支持的 `ja` 输出。
 
+## Linux / Docker CJK 可视化验收
+
+本次修复的运行面有三层：Docker 运行时需要提供 `fonts-noto-cjk`，分享图 HTML/CSS 需要声明稳定的 CJK fallback，最终验收要落到 Linux `wkhtmltoimage` 光栅化后的 PNG，而不只是检查 HTML 或 Dockerfile 文本。
+
+按 `AGENTS.md`，一次性验收截图不要作为仓库文件提交；请把 PNG 和命令输出附到 PR 描述、PR 评论或 Actions artifact。仓库内提供了可复现的 smoke 脚本：
+
+```bash
+python scripts/share_image_cjk_smoke.py --output-dir tmp/share-image-cjk-after
+```
+
+脚本会生成以下证据文件：
+
+- `tmp/share-image-cjk-after/zh-stock.html` 与 `zh-stock.png`：中文个股分享图
+- `tmp/share-image-cjk-after/ko-market.html` 与 `ko-market.png`：韩文报告 + 日文指数名的市场复盘分享图
+- `tmp/share-image-cjk-after/fontconfig.txt`：`fc-match` 对 `Noto Sans CJK SC/KR` 的解析结果
+
+如果 reviewer 需要 Linux `before/after` 对比，请在未安装 `fonts-noto-cjk` 的 Debian/Ubuntu 环境额外执行一次：
+
+```bash
+python scripts/share_image_cjk_smoke.py --output-dir tmp/share-image-cjk-before
+```
+
+建议附到审查中的最小证据为：
+
+- `*-zh-stock.png`：可见 `贵州茅台`、中文栏目与页脚
+- `*-ko-market.png`：可见韩文固定文案，以及 `日経平均株価` 这类 CJK 原生名称
+- `fontconfig.txt`：`fc-match` 命中 `Noto Sans CJK SC` / `Noto Sans CJK KR`
+
+若本地缺少 `wkhtmltoimage`，脚本可改为 `python scripts/share_image_cjk_smoke.py --skip-render --output-dir tmp/share-image-cjk-html-only` 先导出 HTML 与 `fontconfig.txt`，再在官方 Docker 镜像或具备 `wkhtmltoimage` 的 Debian/Ubuntu 环境补跑 PNG。
+
 小红书品牌使用以下可选配置。全部留空时展示仓库内置二维码及昵称 `@霸天土小豆`；配置任一自定义值后仅使用这组自定义品牌信息，避免把自定义账号与默认二维码混合：
 
 ```dotenv

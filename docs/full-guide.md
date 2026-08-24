@@ -138,7 +138,7 @@ daily_stock_analysis/
 | `NOTIFICATION_MIN_SEVERITY` | 最低通知级别：`info`、`warning`、`error`、`critical`；留空保持现状 | 可选 |
 | `NOTIFICATION_DAILY_DIGEST_ENABLED` | 每日摘要预留开关；当前不会发送摘要或持久化摘要内容 | 可选 |
 | `MARKDOWN_TO_IMAGE_MAX_CHARS` | 超过此长度不转图片，避免超大图片（默认 15000） | 可选 |
-| `MD2IMG_ENGINE` | 转图引擎：`wkhtmltoimage`（默认）、`markdown-to-file` 或 `playwright`（需安装 Web 依赖与 Chromium） | 可选 |
+| `MD2IMG_ENGINE` | 转图引擎：`wkhtmltoimage`（默认）、`markdown-to-file` 或 `playwright`（需安装 Web 依赖与 Chromium）。Debian/Ubuntu 使用 `wkhtmltoimage` 时应安装 `wkhtmltopdf fonts-noto-cjk`；Linux/Docker 的 CJK 验收命令见 `docs/share-images.md` | 可选 |
 | `SHARE_IMAGE_XIAOHONGSHU_URL` | 分享图小红书主页 URL；留空可不显示链接 | 可选 |
 | `SHARE_IMAGE_XIAOHONGSHU_HANDLE` | 分享图小红书昵称；全部小红书配置留空时显示内置昵称 `@霸天土小豆` | 可选 |
 | `SHARE_IMAGE_XIAOHONGSHU_QR_PATH` | 分享图小红书二维码文件路径；支持绝对路径或相对项目根目录，全部小红书配置留空时使用仓库内置二维码 | 可选 |
@@ -1280,6 +1280,7 @@ PUSHOVER_API_TOKEN=your_api_token
 单股推送模式（`SINGLE_STOCK_NOTIFY=true`）下，若希望 Telegram 等渠道以图片形式推送，需同时配置 `MARKDOWN_TO_IMAGE_CHANNELS=telegram` 并安装转图工具（wkhtmltopdf 或 markdown-to-file）。个股日报汇总同样支持转图，无需额外配置。
 
 **故障排查**：若日志出现「Markdown 转图片失败，将回退为文本发送」，请检查 `MARKDOWN_TO_IMAGE_CHANNELS` 配置及转图工具是否已正确安装（`which wkhtmltoimage` 或 `which m2f`）。
+若此次变更需要在 PR 中附 Linux / Docker CJK 渲染证据，可执行 `python scripts/share_image_cjk_smoke.py --output-dir tmp/share-image-cjk-after`；如需 before/after，对无 `fonts-noto-cjk` 的 Debian/Ubuntu 环境再执行一次到 `tmp/share-image-cjk-before`，并将 PNG 与 `fontconfig.txt` 作为 PR / Actions artifact 附件，不要入库。
 
 ---
 

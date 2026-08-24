@@ -126,7 +126,7 @@ Go to your forked repo → `Settings` → `Secrets and variables` → `Actions` 
 | `SAVE_CONTEXT_SNAPSHOT` | Whether to persist analysis-history `context_snapshot`; defaults to `true`. Set to `false` or use `--no-context-snapshot` to stop persisting the full snapshot | Optional |
 | `MARKDOWN_TO_IMAGE_CHANNELS` | Notification channels that receive report images: telegram,wechat,custom,email,slack | Optional |
 | `MARKDOWN_TO_IMAGE_MAX_CHARS` | Skip image conversion above this Markdown length (default 15000) | Optional |
-| `MD2IMG_ENGINE` | Image renderer: `wkhtmltoimage` (default), `markdown-to-file`, or `playwright`. Debian/Ubuntu deployments using `wkhtmltoimage` should install both `wkhtmltopdf` and `fonts-noto-cjk` so supported Chinese and Korean report text renders correctly | Optional |
+| `MD2IMG_ENGINE` | Image renderer: `wkhtmltoimage` (default), `markdown-to-file`, or `playwright`. Debian/Ubuntu deployments using `wkhtmltoimage` should install both `wkhtmltopdf` and `fonts-noto-cjk` so supported Chinese and Korean report text renders correctly; Linux/Docker CJK verification commands are documented in `docs/share-images.md` | Optional |
 | `SHARE_IMAGE_XIAOHONGSHU_URL` | Xiaohongshu profile URL shown in share images; empty disables the link | Optional |
 | `SHARE_IMAGE_XIAOHONGSHU_HANDLE` | Xiaohongshu nickname shown in share images; when all Xiaohongshu settings are empty, uses bundled nickname `@霸天土小豆` | Optional |
 | `SHARE_IMAGE_XIAOHONGSHU_QR_PATH` | QR image path, absolute or relative to the project root; when all Xiaohongshu settings are empty, uses the bundled QR | Optional |
@@ -1146,6 +1146,8 @@ Features:
 - Supports notification priority and sound settings
 - Free quota sufficient for personal use (10,000 messages/month)
 - Messages retained for 7 days
+
+If Markdown-to-image delivery falls back to plain text, first confirm the renderer is installed correctly (`which wkhtmltoimage` or `which m2f`). For Linux/Docker CJK rendering evidence in a PR, run `python scripts/share_image_cjk_smoke.py --output-dir tmp/share-image-cjk-after`; for a reviewer-requested before/after comparison, rerun it on a Debian/Ubuntu environment without `fonts-noto-cjk` into `tmp/share-image-cjk-before`, then attach the PNGs and `fontconfig.txt` as PR or Actions artifacts instead of committing them.
 
 ---
 

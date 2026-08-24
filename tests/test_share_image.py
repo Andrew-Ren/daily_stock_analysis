@@ -2,6 +2,8 @@
 
 from datetime import date
 from pathlib import Path
+import subprocess
+import sys
 from types import SimpleNamespace
 
 import pytest
@@ -2024,3 +2026,70 @@ def test_japanese_market_share_image_uses_korean_report_font_contract():
     assert 'html[lang="ko"] body' in html
     assert '"Noto Sans CJK KR"' in html
     assert "日経平均株価" in html
+
+
+def test_share_image_docs_describe_linux_cjk_visual_evidence_workflow():
+    root = Path(__file__).resolve().parents[1]
+    share_image_doc = (root / "docs" / "share-images.md").read_text(encoding="utf-8")
+    full_guide_doc = (root / "docs" / "full-guide.md").read_text(encoding="utf-8")
+    full_guide_en_doc = (root / "docs" / "full-guide_EN.md").read_text(encoding="utf-8")
+
+    assert "Linux / Docker CJK 可视化验收" in share_image_doc
+    assert "python scripts/share_image_cjk_smoke.py --output-dir tmp/share-image-cjk-after" in share_image_doc
+    assert "tmp/share-image-cjk-before" in share_image_doc
+    assert "fontconfig.txt" in share_image_doc
+    assert "--skip-render" in share_image_doc
+    assert "PR 描述、PR 评论或 Actions artifact" in share_image_doc
+
+    assert "python scripts/share_image_cjk_smoke.py --output-dir tmp/share-image-cjk-after" in full_guide_doc
+    assert "python scripts/share_image_cjk_smoke.py --output-dir tmp/share-image-cjk-after" in full_guide_en_doc
+    assert "docs/share-images.md" in full_guide_en_doc
+
+
+def test_share_image_cjk_smoke_script_generates_reproducible_html_artifacts(tmp_path):
+    root = Path(__file__).resolve().parents[1]
+    output_dir = tmp_path / "share-image-cjk-smoke"
+    subprocess.run(
+        [
+            sys.executable,
+            str(root / "scripts" / "share_image_cjk_smoke.py"),
+            "--skip-render",
+            "--output-dir",
+            str(output_dir),
+        ],
+        check=True,
+        cwd=root,
+    )
+
+    zh_html = (output_dir / "zh-stock.html").read_text(encoding="utf-8")
+    ko_html = (output_dir / "ko-market.html").read_text(encoding="utf-8")
+    fontconfig_report = (output_dir / "fontconfig.txt").read_text(encoding="utf-8")
+
+    assert "贵州茅台" in zh_html
+    assert "日経平均株価" in ko_html
+    assert "Noto Sans CJK SC" in fontconfig_report
+    assert "Noto Sans CJK KR" in fontconfig_report
+
+
+def test_share_image_cjk_smoke_script_reports_missing_wkhtmltoimage(tmp_path):
+    root = Path(__file__).resolve().parents[1]
+    output_dir = tmp_path / "share-image-cjk-smoke-missing-renderer"
+    completed = subprocess.run(
+        [
+            sys.executable,
+            str(root / "scripts" / "share_image_cjk_smoke.py"),
+            "--output-dir",
+            str(output_dir),
+        ],
+        check=False,
+        cwd=root,
+        capture_output=True,
+        text=True,
+        env={"PATH": ""},
+    )
+
+    assert completed.returncode == 2
+    assert "wkhtmltoimage not found" in completed.stderr
+
+    fontconfig_report = (output_dir / "fontconfig.txt").read_text(encoding="utf-8")
+    assert "fc-match not found in PATH" in fontconfig_report
