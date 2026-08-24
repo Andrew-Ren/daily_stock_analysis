@@ -1977,6 +1977,8 @@ def test_share_image_declares_cjk_fonts_and_docker_installs_them():
 
     assert 'html[lang="zh-CN"] body' in html
     assert '"Noto Sans CJK SC"' in html
+    assert 'html[lang="ja"] body' in html
+    assert '"Noto Sans CJK JP"' in html
     assert 'html[lang="ko"] body' in html
     assert '"Noto Sans CJK KR"' in html
 
@@ -1984,3 +1986,26 @@ def test_share_image_declares_cjk_fonts_and_docker_installs_them():
         Path(__file__).resolve().parents[1] / "docker" / "Dockerfile"
     ).read_text(encoding="utf-8")
     assert "fonts-noto-cjk \\" in dockerfile
+
+
+def test_share_image_uses_japanese_lang_branch_for_japanese_reports():
+    html = build_share_image_html(
+        "# トヨタ自動車 7203.T 分析レポート\n\n## コア判断\n\n- 需要は堅調\n",
+        generated_on=date(2026, 8, 24),
+        structured_payload={"report_language": "ja-JP"},
+    )
+
+    assert '<html lang="ja">' in html
+    assert 'html[lang="ja"] body' in html
+    assert '"Noto Sans CJK JP"' in html
+
+
+def test_share_image_detects_japanese_lang_branch_from_markdown_without_payload():
+    html = build_share_image_html(
+        "# トヨタ自動車 7203.T 分析レポート\n\n## コア判断\n\n- 需要は堅調です\n",
+        generated_on=date(2026, 8, 24),
+    )
+
+    assert '<html lang="ja">' in html
+    assert 'html[lang="ja"] body' in html
+    assert '"Noto Sans CJK JP"' in html
