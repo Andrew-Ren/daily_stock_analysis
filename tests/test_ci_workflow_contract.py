@@ -110,6 +110,7 @@ def test_heavy_ci_jobs_are_path_filtered_and_backend_tests_are_sharded() -> None
     assert set(
         _expand_brace_pattern(parsed_filters["backend_contract_assets"][0])
     ) >= {
+        "THIRD_PARTY_NOTICES.md",
         "docs/architecture/**",
         "docs/alerts.md",
         "docs/full-guide.md",
@@ -198,6 +199,7 @@ def test_backend_filter_covers_mixed_changes_and_shared_web_assets() -> None:
     assert outputs(["docs/architecture/api_spec.json"])[0] is True
     assert outputs(["docs/alerts.md"])[0] is True
     assert outputs(["tests/fixtures/notification_reports/aggregate_report.md"])[0] is True
+    assert outputs(["THIRD_PARTY_NOTICES.md"])[0] is True
     assert outputs(["docs/CONTRIBUTING.md"]) == (False, False, False, False)
     assert outputs(["README.md"]) == (False, False, False, False)
     assert outputs(["LICENSE"]) == (False, False, False, False)
