@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import logging
+import os
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any, Dict, Iterable, List, Optional, Sequence
@@ -104,23 +105,28 @@ _PROVIDER_DEFINITIONS: Sequence[_ProviderDefinition] = (
         label="Futu OpenD",
         fetcher_name="FutuFetcher",
         markets=("hk",),
-        datasets=("quote.realtime", "financial.snapshot"),
+        datasets=("quote.realtime", "kline.daily", "financial.snapshot"),
     ),
     _ProviderDefinition(
         name="finnhub",
         label="Finnhub",
         fetcher_name="FinnhubFetcher",
         markets=("us",),
-        datasets=("quote.realtime",),
+        datasets=("quote.realtime", "kline.daily"),
     ),
     _ProviderDefinition(
         name="alphavantage",
         label="Alpha Vantage",
         fetcher_name="AlphaVantageFetcher",
         markets=("us",),
-        datasets=("quote.realtime",),
+        datasets=("quote.realtime", "kline.daily"),
     ),
 )
+
+_PROVIDER_DEFINITION_MAP = {
+    definition.name: definition
+    for definition in _PROVIDER_DEFINITIONS
+}
 
 _FETCHER_TO_PROVIDER = {
     definition.fetcher_name: definition.name
@@ -173,7 +179,7 @@ class DataCapabilityService:
         providers = self._build_provider_capabilities(fetchers)
         provider_map = {item["name"]: item for item in providers}
         priorities = self._build_priority_views(fetchers)
-        datasets = self._build_dataset_quality(provider_map, priorities)
+        datasets = self._build_dataset_quality(provider_map, priorities, fetchers)
         warnings = self._build_global_warnings(provider_map, priorities)
 
         return {
@@ -386,6 +392,9 @@ class DataCapabilityService:
         return tokens
 
     def _screening_snapshot_priority(self) -> List[str]:
+        explicit = os.getenv("SNAPSHOT_SOURCE_PRIORITY")
+        if explicit not in (None, ""):
+            return _split_priority(explicit)
         try:
             from src.services.screening_service import _resolve_screening_snapshot_source_priority
 
@@ -422,8 +431,13 @@ class DataCapabilityService:
         self,
         provider_map: Dict[str, Dict[str, Any]],
         priorities: Sequence[Dict[str, Any]],
+        fetchers: Sequence[Any],
     ) -> List[Dict[str, Any]]:
         priority_map = {item["scenario"]: item for item in priorities}
+        daily_market_priorities = self._daily_market_priorities(
+            fetchers,
+            priority_map.get("daily.generic", {}),
+        )
         datasets = [
             self._aggregate_market_dataset(
                 dataset="quote.realtime",
@@ -436,9 +450,9 @@ class DataCapabilityService:
                 disabled=not bool(getattr(self.config, "enable_realtime_quote", True)),
                 disabled_warning="realtime_quote_disabled",
             ),
-            self._dataset_from_priority(
+            self._aggregate_market_dataset(
                 dataset="kline.daily",
-                priority=priority_map.get("daily.generic", {}),
+                market_priorities=daily_market_priorities,
                 provider_map=provider_map,
             ),
             self._dataset_from_priority(
@@ -467,6 +481,86 @@ class DataCapabilityService:
             self._local_dataset("portfolio.account", "portfolio"),
         ]
         return datasets
+
+    def _daily_market_priorities(
+        self,
+        fetchers: Sequence[Any],
+        generic_priority: Dict[str, Any],
+    ) -> Dict[str, Dict[str, Any]]:
+        generic_providers = list(generic_priority.get("providers") or [])
+        generic_warnings = list(generic_priority.get("warnings") or [])
+        return {
+            "cn": self._filter_market_dataset_priority(
+                providers=generic_providers,
+                dataset="kline.daily",
+                market="cn",
+                warnings=generic_warnings,
+            ),
+            "hk": self._filter_market_dataset_priority(
+                providers=generic_providers,
+                dataset="kline.daily",
+                market="hk",
+                warnings=generic_warnings,
+            ),
+            "us": {
+                "providers": self._us_daily_priority(fetchers),
+                "warnings": [],
+            },
+        }
+
+    def _filter_market_dataset_priority(
+        self,
+        *,
+        providers: Sequence[str],
+        dataset: str,
+        market: str,
+        warnings: Sequence[str],
+    ) -> Dict[str, Any]:
+        filtered = [
+            provider
+            for provider in providers
+            if self._provider_supports_market_dataset(
+                provider,
+                dataset=dataset,
+                market=market,
+            )
+        ]
+        return {
+            "providers": filtered,
+            "warnings": list(warnings),
+        }
+
+    @staticmethod
+    def _provider_supports_market_dataset(
+        provider: str,
+        *,
+        dataset: str,
+        market: str,
+    ) -> bool:
+        definition = _PROVIDER_DEFINITION_MAP.get(provider)
+        if definition is None:
+            return True
+        return dataset in definition.datasets and market in definition.markets
+
+    def _us_daily_priority(self, fetchers: Sequence[Any]) -> List[str]:
+        fetcher_map = {str(getattr(fetcher, "name", "")): fetcher for fetcher in fetchers}
+        longbridge = fetcher_map.get("LongbridgeFetcher")
+        if longbridge is not None and self._fetcher_available_for_capability(
+            longbridge,
+            capability="daily_data",
+        ):
+            return ["longbridge", "finnhub", "alphavantage", "yfinance"]
+        return ["finnhub", "alphavantage", "yfinance", "longbridge"]
+
+    @staticmethod
+    def _fetcher_available_for_capability(fetcher: Any, *, capability: str) -> bool:
+        result = DataCapabilityService._probe_fetcher_available(fetcher, capability)
+        if result is not None:
+            return result
+        known_available = getattr(fetcher, "_available", None)
+        if known_available is not None:
+            return bool(known_available)
+        return True
 
     def _aggregate_market_dataset(
         self,

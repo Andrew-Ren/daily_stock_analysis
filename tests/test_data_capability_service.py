@@ -176,6 +176,82 @@ def test_realtime_dataset_quality_is_market_aware() -> None:
     assert quote_quality["coverage"]["markets"]["us"]["status"] == "ok"
 
 
+def test_daily_dataset_quality_is_market_aware() -> None:
+    manager = _FetcherManager([
+        _Fetcher("EfinanceFetcher", 0, available=True),
+        _Fetcher("YfinanceFetcher", 4, available=False),
+    ])
+    service = DataCapabilityService(
+        config=_config(),
+        fetcher_manager=manager,
+    )
+
+    overview = service.get_overview()
+    daily_quality = _dataset(overview, "kline.daily")
+
+    assert daily_quality["status"] == "partial"
+    assert daily_quality["coverage"]["markets"]["cn"]["status"] == "ok"
+    assert daily_quality["coverage"]["markets"]["cn"]["source"] == "efinance"
+    assert daily_quality["coverage"]["markets"]["hk"]["status"] == "unavailable"
+    assert daily_quality["coverage"]["markets"]["us"]["status"] == "unavailable"
+    assert "hk:source_status:yfinance:unavailable" in daily_quality["warnings"]
+    assert "us:source_status:yfinance:unavailable" in daily_quality["warnings"]
+
+
+def test_daily_dataset_quality_prefers_longbridge_for_us_when_available() -> None:
+    manager = _FetcherManager([
+        _Fetcher("LongbridgeFetcher", 5, available=True, is_available_for_request=True),
+        _Fetcher("YfinanceFetcher", 4, available=True),
+    ])
+    service = DataCapabilityService(
+        config=_config(longbridge_app_key="key"),
+        fetcher_manager=manager,
+    )
+
+    overview = service.get_overview()
+    daily_quality = _dataset(overview, "kline.daily")
+
+    assert daily_quality["coverage"]["markets"]["us"]["status"] == "ok"
+    assert daily_quality["coverage"]["markets"]["us"]["source"] == "longbridge"
+    assert "us:finnhub" not in daily_quality["fallback_from"]
+
+
+def test_screening_snapshot_priority_preserves_explicit_env_override() -> None:
+    service = DataCapabilityService(
+        config=_config(screening_enabled=True),
+        fetcher_manager=_FetcherManager([]),
+    )
+
+    with patch.dict("os.environ", {"SNAPSHOT_SOURCE_PRIORITY": "tushare,em_datacenter"}, clear=False):
+        with patch(
+            "src.services.screening_service._resolve_screening_snapshot_source_priority",
+            side_effect=AssertionError("resolver should not run when override is set"),
+        ):
+            overview = service.get_overview()
+
+    priorities = {item["scenario"]: item for item in overview["priorities"]}
+    screening = priorities["screening.snapshot"]
+
+    assert screening["providers"] == ["tushare", "em_datacenter"]
+
+
+def test_daily_capability_contract_includes_market_specific_daily_fetchers() -> None:
+    service = DataCapabilityService(
+        config=_config(
+            futu_opend_host="127.0.0.1",
+            finnhub_api_key="key",
+            alphavantage_api_key="key",
+        ),
+        fetcher_manager=_FetcherManager([]),
+    )
+
+    overview = service.get_overview()
+
+    assert "kline.daily" in _provider(overview, "futu")["datasets"]
+    assert "kline.daily" in _provider(overview, "finnhub")["datasets"]
+    assert "kline.daily" in _provider(overview, "alphavantage")["datasets"]
+
+
 def test_disabled_runtime_features_surface_dataset_quality_warnings() -> None:
     manager = _FetcherManager([_Fetcher("AkshareFetcher", 1), _Fetcher("YfinanceFetcher", 4)])
     service = DataCapabilityService(
