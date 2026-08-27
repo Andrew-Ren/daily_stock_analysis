@@ -1,5 +1,5 @@
 import type React from 'react';
-import { useMemo, useState } from 'react';
+import { useId, useMemo, useState } from 'react';
 import {
   ArrowDownWideNarrow,
   CalendarDays,
@@ -55,6 +55,15 @@ interface WatchlistRowSignals {
   change: WatchlistSignal;
   state: WatchlistSignal;
   nextAction: WatchlistSignal;
+}
+
+function buildSignalDescription(
+  signals: WatchlistSignal[],
+  t: (key: UiTextKey, params?: UiTextParams) => string,
+) {
+  return signals
+    .map((signal) => t('watchlist.signalSummaryItem', { label: signal.label, value: signal.value }))
+    .join(t('watchlist.signalSummarySeparator'));
 }
 
 interface HomeStockWorkspaceProps {
@@ -193,12 +202,12 @@ const ScoreBadge: React.FC<{ item?: StockBarItem }> = ({ item }) => {
 
 const WatchlistSignalCell: React.FC<{ signal: WatchlistSignal }> = ({ signal }) => (
   <span className="min-w-0 rounded-lg border border-subtle bg-base/35 px-2 py-1.5">
-    <span className="block truncate text-[10px] font-medium text-muted-text">
+    <span className="block text-[10px] font-medium text-muted-text">
       {signal.label}
     </span>
-    <span className="mt-1 flex min-w-0 items-center gap-1.5 text-[11px] font-medium text-secondary-text">
+    <span className="mt-1 flex min-w-0 items-start gap-1.5 text-[11px] font-medium text-secondary-text">
       <StatusDot tone={signal.tone} pulse={signal.pulse} className="h-1.5 w-1.5" />
-      <span className="truncate">{signal.value}</span>
+      <span className="min-w-0 whitespace-normal break-words leading-snug">{signal.value}</span>
     </span>
   </span>
 );
@@ -211,6 +220,7 @@ const WatchlistRowItem: React.FC<{
   selected: boolean;
 }> = ({ row, onRemove, onOpenDetail, disabled, selected }) => {
   const { t } = useUiLanguage();
+  const signalDescriptionId = useId();
   const taskLabel = getTaskStatusLabel(row.activeTask, t);
   const isLatestDetailLoading = Boolean(row.isTodayStatusLoading);
   const isLatestDetailUnavailable = !isLatestDetailLoading && Boolean(row.isTodayStatusUnknown);
@@ -225,6 +235,7 @@ const WatchlistRowItem: React.FC<{
     taskLabel,
     t,
   });
+  const signalDescription = buildSignalDescription([signals.change, signals.state, signals.nextAction], t);
 
   const handleOpenDetail = () => {
     onOpenDetail(row);
@@ -249,9 +260,13 @@ const WatchlistRowItem: React.FC<{
             : isLatestDetailUnavailable
               ? t('watchlist.latestDetailUnavailableAria', { code: row.code })
             : t('watchlist.noLatestDetailAria', { code: row.code })}
+        aria-describedby={signalDescriptionId}
         className="grid min-w-0 cursor-pointer gap-2 rounded-lg text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan/30"
         onClick={handleOpenDetail}
       >
+        <span id={signalDescriptionId} className="sr-only">
+          {signalDescription}
+        </span>
         <div className="min-w-0">
           <div className="flex min-w-0 items-center gap-2">
             <span className="truncate text-sm font-semibold text-foreground">
@@ -287,7 +302,7 @@ const WatchlistRowItem: React.FC<{
                   : t('watchlist.noLatestDetailCta')}
             </span>
           </div>
-          <div className="mt-2 grid min-w-0 grid-cols-1 gap-1.5 sm:grid-cols-3">
+          <div className="mt-2 grid min-w-0 grid-cols-1 gap-1.5">
             <WatchlistSignalCell signal={signals.change} />
             <WatchlistSignalCell signal={signals.state} />
             <WatchlistSignalCell signal={signals.nextAction} />

@@ -10,15 +10,17 @@ function renderWorkspace({
   selectedRecordId,
   selectedStockCode,
   activeTab = 'watchlist',
+  language = 'zh',
 }: {
   watchlistRows: HomeWatchlistRow[];
   selectedRecordId?: number;
   selectedStockCode?: string;
   activeTab?: HomeWorkspaceTab;
+  language?: 'zh' | 'en';
 }) {
   const onHistoryItemClick = vi.fn();
   const onRemoveFromWatchlist = vi.fn().mockResolvedValue(undefined);
-  window.localStorage.setItem(UI_LANGUAGE_STORAGE_KEY, 'zh');
+  window.localStorage.setItem(UI_LANGUAGE_STORAGE_KEY, language);
 
   const renderView = (rows: HomeWatchlistRow[]) => (
     <UiLanguageProvider>
@@ -153,16 +155,50 @@ describe('HomeStockWorkspace', () => {
     expect(analyzedRow.getByText('今日已更新')).toBeInTheDocument();
     expect(analyzedRow.getByText('已完成')).toBeInTheDocument();
     expect(analyzedRow.getByText('打开最新报告')).toBeInTheDocument();
+    const analyzedButton = analyzedRow.getByRole('button', { name: '打开 600519 最新分析详情' });
+    expect(analyzedButton).toHaveAccessibleDescription('变化：今日已更新；状态：已完成；下一步：打开最新报告');
+    const signalGrid = analyzedRow.getByText('变化').parentElement?.parentElement;
+    expect(signalGrid).toHaveClass('grid-cols-1');
+    expect(signalGrid).not.toHaveClass('sm:grid-cols-3');
 
     const staleRow = within(screen.getByTestId('watchlist-row-00700'));
     expect(staleRow.getByText('有历史报告')).toBeInTheDocument();
     expect(staleRow.getByText('待更新')).toBeInTheDocument();
     expect(staleRow.getByText('运行今日分析')).toBeInTheDocument();
+    expect(staleRow.getByRole('button', { name: '打开 00700 最新分析详情' })).toHaveAccessibleDescription(
+      '变化：有历史报告；状态：待更新；下一步：运行今日分析',
+    );
 
     const taskRow = within(screen.getByTestId('watchlist-row-AAPL'));
     expect(taskRow.getByText('等待首次分析')).toBeInTheDocument();
     expect(taskRow.getAllByText('任务分析中')).toHaveLength(2);
     expect(taskRow.getByText('等待任务完成')).toBeInTheDocument();
+    expect(taskRow.getByRole('button', { name: '暂无 AAPL 的分析详情，可先分析' })).toHaveAccessibleDescription(
+      '变化：等待首次分析；状态：任务分析中；下一步：等待任务完成',
+    );
+  });
+
+  it('localizes watchlist signal descriptions for assistive technology', () => {
+    renderWorkspace({
+      language: 'en',
+      watchlistRows: [{
+        code: 'AAPL',
+        analyzedToday: false,
+        latestItem: {
+          id: 22,
+          stockCode: 'AAPL',
+          stockName: 'Apple',
+          sentimentScore: 68,
+          operationAdvice: 'neutral',
+          analysisCount: 1,
+          lastAnalysisTime: '2026-03-18T09:00:00+08:00',
+        },
+      }],
+    });
+
+    expect(screen.getByRole('button', { name: 'Open the latest analysis details for AAPL' })).toHaveAccessibleDescription(
+      'Change: Has prior report; State: Pending update; Next action: Run today analysis',
+    );
   });
 
   it('shows an explicit notice when a watchlist row has no detail yet', async () => {
