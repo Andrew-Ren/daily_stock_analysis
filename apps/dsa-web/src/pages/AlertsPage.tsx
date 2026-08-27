@@ -4,6 +4,7 @@ import { BellRing } from 'lucide-react';
 import { alertsApi } from '../api/alerts';
 import type { ParsedApiError } from '../api/error';
 import { getParsedApiError } from '../api/error';
+import { AlertInvalidationRadar } from '../components/alerts/AlertInvalidationRadar';
 import { AlertRuleForm } from '../components/alerts/AlertRuleForm';
 import {
   AlertRuleList,
@@ -280,6 +281,13 @@ const AlertsPage: React.FC = () => {
         />
       ) : null}
       {rulesError ? <ApiErrorAlert error={rulesError} onDismiss={() => setRulesError(null)} /> : null}
+
+      <AlertInvalidationRadar
+        rules={rules}
+        triggers={triggers}
+        rulesLoading={rulesLoading}
+        triggersLoading={triggersLoading}
+      />
 
       <div className="grid items-stretch gap-5 xl:grid-cols-[380px_minmax(0,1fr)]">
         <AlertRuleForm onSubmit={handleCreateRule} isSubmitting={createLoading} />
