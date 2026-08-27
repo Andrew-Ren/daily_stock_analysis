@@ -127,6 +127,18 @@ describe('SidebarNav', () => {
     expect(alertsLink).toHaveClass('font-medium');
   });
 
+  it('renders the data center navigation item and marks it active', () => {
+    render(
+      <MemoryRouter initialEntries={['/data-center']}>
+        <SidebarNav />
+      </MemoryRouter>,
+    );
+
+    const dataCenterLink = screen.getByRole('link', { name: '数据' });
+    expect(dataCenterLink).toHaveAttribute('href', '/data-center');
+    expect(dataCenterLink).toHaveClass('font-medium');
+  });
+
   it('renders the AI signals navigation item and marks it active', () => {
     render(
       <MemoryRouter initialEntries={['/decision-signals']}>

@@ -56,6 +56,10 @@ vi.mock('./pages/AlertsPage', () => ({
   default: () => <div data-testid="alerts-page">Alerts</div>,
 }));
 
+vi.mock('./pages/DataCenterPage', () => ({
+  default: () => <div data-testid="data-center-page">Data Center</div>,
+}));
+
 vi.mock('./pages/TokenUsagePage', () => ({
   default: () => <div data-testid="token-usage-page">Usage</div>,
 }));
@@ -149,6 +153,16 @@ describe('App routing behavior', () => {
 
     expect(await screen.findByTestId('decision-signals-page')).toBeInTheDocument();
     expect(setCurrentRoute).toHaveBeenCalledWith('/decision-signals');
+    expect(screen.queryByTestId('home-page')).not.toBeInTheDocument();
+  });
+
+  it('routes /data-center to the data center page after auth is ready', async () => {
+    window.history.pushState({}, '', '/data-center');
+
+    render(<App />);
+
+    expect(await screen.findByTestId('data-center-page')).toBeInTheDocument();
+    expect(setCurrentRoute).toHaveBeenCalledWith('/data-center');
     expect(screen.queryByTestId('home-page')).not.toBeInTheDocument();
   });
 
