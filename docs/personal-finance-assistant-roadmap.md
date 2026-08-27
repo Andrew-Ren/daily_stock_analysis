@@ -57,23 +57,23 @@ DSA 当前更像“自动化股票分析与通知系统”：擅长多市场股�
 
 参考链接：
 
-- tick-stock-panel：https://github.com/shy3130/tick-stock-panel
-- tick-stock-panel features：https://github.com/shy3130/tick-stock-panel/blob/main/docs/features.md
-- tick-stock-panel strategy：https://github.com/shy3130/tick-stock-panel/blob/main/docs/strategy.md
-- tick-stock-panel mining：https://github.com/shy3130/tick-stock-panel/blob/main/docs/mining.md
-- tick-stock-panel custom data source：https://github.com/shy3130/tick-stock-panel/blob/main/docs/custom-data-source.md
-- tick-stock-panel plugin development：https://github.com/shy3130/tick-stock-panel/blob/main/docs/plugin-development.md
-- Opptrix：https://github.com/Travisun/Opptrix
-- OpenTerminalUI：https://github.com/Hitheshkaranth/OpenTerminalUI
-- Equilima 介绍：https://medium.com/@kaveh.kamali/i-built-an-ai-powered-stock-analysis-platform-that-runs-entirely-on-open-source-4eddae5fd305
-- trading-command-center：https://github.com/saketnayak/trading-command-center
-- OpenBB：https://github.com/OpenBB-finance/OpenBB
-- TradingAgents：https://github.com/tauricresearch/tradingagents
-- FinRobot：https://github.com/AI4Finance-Foundation/FinRobot
-- Ghostfolio：https://github.com/ghostfolio/ghostfolio
-- Wealthfolio：https://github.com/wealthfolio/wealthfolio
-- Portfolio Performance：https://github.com/portfolio-performance/portfolio
-- rotki：https://github.com/rotki/rotki
+- [tick-stock-panel](https://github.com/shy3130/tick-stock-panel)
+- [tick-stock-panel features](https://github.com/shy3130/tick-stock-panel/blob/main/docs/features.md)
+- [tick-stock-panel strategy](https://github.com/shy3130/tick-stock-panel/blob/main/docs/strategy.md)
+- [tick-stock-panel mining](https://github.com/shy3130/tick-stock-panel/blob/main/docs/mining.md)
+- [tick-stock-panel custom data source](https://github.com/shy3130/tick-stock-panel/blob/main/docs/custom-data-source.md)
+- [tick-stock-panel plugin development](https://github.com/shy3130/tick-stock-panel/blob/main/docs/plugin-development.md)
+- [Opptrix](https://github.com/Travisun/Opptrix)
+- [OpenTerminalUI](https://github.com/Hitheshkaranth/OpenTerminalUI)
+- [Equilima 介绍](https://medium.com/@kaveh.kamali/i-built-an-ai-powered-stock-analysis-platform-that-runs-entirely-on-open-source-4eddae5fd305)
+- [trading-command-center](https://github.com/saketnayak/trading-command-center)
+- [OpenBB](https://github.com/OpenBB-finance/OpenBB)
+- [TradingAgents](https://github.com/tauricresearch/tradingagents)
+- [FinRobot](https://github.com/AI4Finance-Foundation/FinRobot)
+- [Ghostfolio](https://github.com/ghostfolio/ghostfolio)
+- [Wealthfolio](https://github.com/wealthfolio/wealthfolio)
+- [Portfolio Performance](https://github.com/portfolio-performance/portfolio)
+- [rotki](https://github.com/rotki/rotki)
 
 ## tick-stock-panel 专项拆解
 
