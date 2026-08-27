@@ -42,6 +42,21 @@ interface BatchStatus {
   message: string;
 }
 
+type WatchlistSignalTone = 'success' | 'warning' | 'danger' | 'info' | 'neutral';
+
+interface WatchlistSignal {
+  label: string;
+  value: string;
+  tone: WatchlistSignalTone;
+  pulse?: boolean;
+}
+
+interface WatchlistRowSignals {
+  change: WatchlistSignal;
+  state: WatchlistSignal;
+  nextAction: WatchlistSignal;
+}
+
 interface HomeStockWorkspaceProps {
   activeTab: HomeWorkspaceTab;
   onTabChange: (tab: HomeWorkspaceTab) => void;
@@ -77,6 +92,72 @@ function getTaskStatusLabel(task: TaskInfo | undefined, t: (key: UiTextKey, para
   return task.status;
 }
 
+function buildWatchlistRowSignals({
+  row,
+  canOpenDetail,
+  isLatestDetailLoading,
+  isLatestDetailUnavailable,
+  taskLabel,
+  t,
+}: {
+  row: HomeWatchlistRow;
+  canOpenDetail: boolean;
+  isLatestDetailLoading: boolean;
+  isLatestDetailUnavailable: boolean;
+  taskLabel: string;
+  t: (key: UiTextKey, params?: UiTextParams) => string;
+}): WatchlistRowSignals {
+  let change: Omit<WatchlistSignal, 'label'>;
+  let state: Omit<WatchlistSignal, 'label'>;
+  let nextAction: Omit<WatchlistSignal, 'label'>;
+
+  if (isLatestDetailLoading) {
+    change = { value: t('watchlist.changeLoading'), tone: 'info', pulse: true };
+    state = { value: t('watchlist.stateLoading'), tone: 'info', pulse: true };
+    nextAction = { value: t('watchlist.nextWaitStatus'), tone: 'info', pulse: true };
+  } else if (isLatestDetailUnavailable) {
+    change = { value: t('watchlist.changeUnknown'), tone: 'warning' };
+    state = { value: t('watchlist.stateUnknown'), tone: 'warning' };
+    nextAction = { value: t('watchlist.nextRefresh'), tone: 'warning' };
+  } else {
+    if (row.analyzedToday) {
+      change = { value: t('watchlist.changeAnalyzedToday'), tone: 'success' };
+      state = { value: t('watchlist.stateAnalyzed'), tone: 'success' };
+      nextAction = {
+        value: canOpenDetail ? t('watchlist.nextOpenLatest') : t('watchlist.nextRefresh'),
+        tone: canOpenDetail ? 'success' : 'warning',
+      };
+    } else if (row.latestItem) {
+      change = { value: t('watchlist.changeHasLatest'), tone: 'info' };
+      state = { value: t('watchlist.statePending'), tone: 'warning' };
+      nextAction = { value: t('watchlist.nextAnalyze'), tone: 'warning' };
+    } else {
+      change = { value: t('watchlist.changeNoReport'), tone: 'neutral' };
+      state = { value: t('watchlist.statePending'), tone: 'warning' };
+      nextAction = { value: t('watchlist.nextAnalyze'), tone: 'warning' };
+    }
+  }
+
+  if (row.activeTask) {
+    state = {
+      value: t('watchlist.stateTask', { status: taskLabel }),
+      tone: row.activeTask.status === 'processing' ? 'info' : 'neutral',
+      pulse: row.activeTask.status === 'processing',
+    };
+    nextAction = {
+      value: t('watchlist.nextWaitTask'),
+      tone: row.activeTask.status === 'processing' ? 'info' : 'neutral',
+      pulse: row.activeTask.status === 'processing',
+    };
+  }
+
+  return {
+    change: { label: t('watchlist.change'), ...change },
+    state: { label: t('watchlist.state'), ...state },
+    nextAction: { label: t('watchlist.nextAction'), ...nextAction },
+  };
+}
+
 const ScoreBadge: React.FC<{ item?: StockBarItem }> = ({ item }) => {
   const { t } = useUiLanguage();
   const score = typeof item?.sentimentScore === 'number' ? item.sentimentScore : null;
@@ -110,6 +191,18 @@ const ScoreBadge: React.FC<{ item?: StockBarItem }> = ({ item }) => {
   );
 };
 
+const WatchlistSignalCell: React.FC<{ signal: WatchlistSignal }> = ({ signal }) => (
+  <span className="min-w-0 rounded-lg border border-subtle bg-base/35 px-2 py-1.5">
+    <span className="block truncate text-[10px] font-medium text-muted-text">
+      {signal.label}
+    </span>
+    <span className="mt-1 flex min-w-0 items-center gap-1.5 text-[11px] font-medium text-secondary-text">
+      <StatusDot tone={signal.tone} pulse={signal.pulse} className="h-1.5 w-1.5" />
+      <span className="truncate">{signal.value}</span>
+    </span>
+  </span>
+);
+
 const WatchlistRowItem: React.FC<{
   row: HomeWatchlistRow;
   onRemove: (code: string) => Promise<void>;
@@ -124,6 +217,14 @@ const WatchlistRowItem: React.FC<{
   const item = isLatestDetailLoading || isLatestDetailUnavailable ? undefined : row.latestItem;
   const stockName = row.latestItem?.stockName || row.code;
   const canOpenDetail = typeof item?.id === 'number';
+  const signals = buildWatchlistRowSignals({
+    row,
+    canOpenDetail,
+    isLatestDetailLoading,
+    isLatestDetailUnavailable,
+    taskLabel,
+    t,
+  });
 
   const handleOpenDetail = () => {
     onOpenDetail(row);
@@ -183,8 +284,13 @@ const WatchlistRowItem: React.FC<{
                   ? t('watchlist.latestDetailLoadingCta')
                   : isLatestDetailUnavailable
                     ? t('watchlist.latestDetailUnavailableCta')
-                    : t('watchlist.noLatestDetailCta')}
+                  : t('watchlist.noLatestDetailCta')}
             </span>
+          </div>
+          <div className="mt-2 grid min-w-0 grid-cols-1 gap-1.5 sm:grid-cols-3">
+            <WatchlistSignalCell signal={signals.change} />
+            <WatchlistSignalCell signal={signals.state} />
+            <WatchlistSignalCell signal={signals.nextAction} />
           </div>
           {row.activeTask ? (
             <div className="flex min-w-0 items-center gap-2 text-[11px] text-muted-text">

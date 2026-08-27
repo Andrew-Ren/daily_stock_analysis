@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import { UiLanguageProvider } from '../../../contexts/UiLanguageContext';
 import { UI_LANGUAGE_STORAGE_KEY } from '../../../utils/uiLanguage';
@@ -102,6 +102,67 @@ describe('HomeStockWorkspace', () => {
     expect(onHistoryItemClick).toHaveBeenCalledWith(21);
     expect(row.tagName).toBe('BUTTON');
     expect(row).toHaveAttribute('aria-pressed', 'true');
+  });
+
+  it('shows change state and next-action signals for watchlist rows', () => {
+    renderWorkspace({
+      watchlistRows: [
+        {
+          code: '600519',
+          analyzedToday: true,
+          latestItem: {
+            id: 21,
+            stockCode: '600519',
+            stockName: '贵州茅台',
+            sentimentScore: 88,
+            operationAdvice: '买入',
+            analysisCount: 1,
+            lastAnalysisTime: '2026-03-19T09:00:00+08:00',
+          },
+        },
+        {
+          code: '00700',
+          analyzedToday: false,
+          latestItem: {
+            id: 22,
+            stockCode: '00700',
+            stockName: '腾讯控股',
+            sentimentScore: 68,
+            operationAdvice: 'neutral',
+            analysisCount: 1,
+            lastAnalysisTime: '2026-03-18T09:00:00+08:00',
+          },
+        },
+        {
+          code: 'AAPL',
+          analyzedToday: false,
+          activeTask: {
+            taskId: 'task-aapl',
+            stockCode: 'AAPL',
+            status: 'processing',
+            progress: 25,
+            reportType: 'simple',
+            createdAt: '2026-03-19T09:20:00+08:00',
+          },
+        },
+      ],
+    });
+
+    const analyzedRow = within(screen.getByTestId('watchlist-row-600519'));
+    expect(analyzedRow.getByText('变化')).toBeInTheDocument();
+    expect(analyzedRow.getByText('今日已更新')).toBeInTheDocument();
+    expect(analyzedRow.getByText('已完成')).toBeInTheDocument();
+    expect(analyzedRow.getByText('打开最新报告')).toBeInTheDocument();
+
+    const staleRow = within(screen.getByTestId('watchlist-row-00700'));
+    expect(staleRow.getByText('有历史报告')).toBeInTheDocument();
+    expect(staleRow.getByText('待更新')).toBeInTheDocument();
+    expect(staleRow.getByText('运行今日分析')).toBeInTheDocument();
+
+    const taskRow = within(screen.getByTestId('watchlist-row-AAPL'));
+    expect(taskRow.getByText('等待首次分析')).toBeInTheDocument();
+    expect(taskRow.getAllByText('任务分析中')).toHaveLength(2);
+    expect(taskRow.getByText('等待任务完成')).toBeInTheDocument();
   });
 
   it('shows an explicit notice when a watchlist row has no detail yet', async () => {
