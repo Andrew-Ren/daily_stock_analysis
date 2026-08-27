@@ -7,8 +7,8 @@ import { analysisApi, DuplicateTaskError } from '../api/analysis';
 import { historyApi } from '../api/history';
 import { agentApi, type SkillInfo } from '../api/agent';
 import { systemConfigApi } from '../api/systemConfig';
-import { ApiErrorAlert, Button, Drawer, EmptyState, InlineAlert } from '../components/common';
-import { DashboardStateBlock } from '../components/dashboard';
+import { ApiErrorAlert, Button, Drawer, InlineAlert } from '../components/common';
+import { DashboardOverview, DashboardStateBlock } from '../components/dashboard';
 import { StockAutocomplete } from '../components/StockAutocomplete';
 import { StockHistoryTrendDrawer } from '../components/history';
 import { ReportMarkdownDrawer } from '../components/report/ReportMarkdownDrawer';
@@ -323,6 +323,7 @@ const HomePage: React.FC = () => {
     isAnalyzing,
     selectedReport,
     isLoadingReport,
+    isLoadingMarketReviewHistory,
     isHistoryTrendOpen,
     marketReviewHistoryItems,
     stockHistoryItems,
@@ -641,6 +642,15 @@ const HomePage: React.FC = () => {
     setTodayAnalysisRefreshVersion((version) => version + 1);
   }, []);
 
+  const handleRefreshDashboardOverview = useCallback(async () => {
+    await Promise.all([
+      refreshStockBar(),
+      refreshMarketReviewHistory(true),
+      refreshActiveTasks(),
+    ]);
+    setTodayAnalysisRefreshVersion((version) => version + 1);
+  }, [refreshActiveTasks, refreshMarketReviewHistory, refreshStockBar]);
+
   useDashboardLifecycle({
     loadInitialHistory,
     refreshHistory,
@@ -797,6 +807,15 @@ const HomePage: React.FC = () => {
     void selectHistoryItem(recordId);
     setSidebarOpen(false);
   }, [clearMarketReviewState, selectHistoryItem]);
+
+  const openSidebarWorkspaceTab = useCallback((tab: HomeWorkspaceTab) => {
+    setSidebarWorkspaceTab(tab);
+    setSidebarOpen(true);
+  }, []);
+
+  const openTaskPanel = useCallback(() => {
+    setSidebarOpen(true);
+  }, []);
 
   const handleRefreshWatchlist = useCallback(async () => {
     await Promise.all([
@@ -1776,18 +1795,27 @@ const HomePage: React.FC = () => {
                 )}
               </div>
             ) : !marketReviewReport ? (
-              <div className="flex h-full items-center justify-center">
-                <EmptyState
-                  title={t('home.startAnalysisTitle')}
-                  description={t('home.startAnalysisDescription')}
-                  className="max-w-xl border-dashed"
-                  icon={(
-                    <svg className="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
-                    </svg>
-                  )}
-                />
-              </div>
+              <DashboardOverview
+                latestMarketReview={marketReviewHistoryItems[0]}
+                previousMarketReview={marketReviewHistoryItems[1]}
+                marketReviewCount={marketReviewHistoryItems.length}
+                marketReviewLoading={isLoadingMarketReviewHistory}
+                stockBarItems={stockBarItems}
+                stockBarLoading={isLoadingStockBar}
+                stockBarRefreshFailed={stockBarRefreshFailed}
+                watchlistRows={watchlistRows}
+                watchlistLoading={watchlistState.isLoading}
+                todayAnalysisItems={todayAnalysisItems}
+                todayLoadError={todayAnalysisLoadFailed}
+                activeTasks={activeTasks}
+                isSubmittingMarketReview={isSubmittingMarketReview}
+                onRunMarketReview={() => void handleTriggerMarketReview()}
+                onOpenMarketReview={handleHistoryItemClick}
+                onOpenStockReport={handleHistoryItemClick}
+                onOpenWorkspaceTab={openSidebarWorkspaceTab}
+                onOpenTasks={openTaskPanel}
+                onRefresh={() => void handleRefreshDashboardOverview()}
+              />
             ) : null}
           </section>
         </div>
