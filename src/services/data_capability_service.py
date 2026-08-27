@@ -220,12 +220,11 @@ class DataCapabilityService:
                 status = "unavailable"
                 warnings.append("provider_not_initialized")
             else:
-                known_available = getattr(fetcher, "_available", None)
-                if known_available is False:
-                    status = "unavailable"
+                status = self._provider_runtime_status(fetcher)
+                if status == "unavailable":
                     warnings.append("provider_marked_unavailable")
-                else:
-                    status = "ok"
+                elif status == "unknown":
+                    warnings.append("runtime_probe_not_performed")
 
             providers.append(
                 {
@@ -244,6 +243,34 @@ class DataCapabilityService:
             )
 
         return providers
+
+    @staticmethod
+    def _provider_runtime_status(fetcher: Any) -> str:
+        probe_result = DataCapabilityService._probe_fetcher_available(fetcher)
+        if probe_result is True:
+            return "ok"
+        if probe_result is False:
+            return "unavailable"
+
+        known_available = getattr(fetcher, "_available", None)
+        if known_available is True:
+            return "ok"
+        if known_available is False:
+            return "unavailable"
+        return "unknown"
+
+    @staticmethod
+    def _probe_fetcher_available(fetcher: Any, capability: str = "") -> Optional[bool]:
+        try:
+            from data_provider.base import DataFetcherManager
+
+            for probe_name in ("is_available_for_request", "is_available", "_is_available"):
+                result = DataFetcherManager._call_availability_probe(fetcher, probe_name, capability)
+                if result is not None:
+                    return result
+        except Exception as exc:  # noqa: BLE001 - diagnostics must fail open.
+            logger.debug("Failed to probe fetcher availability for capability overview: %s", exc)
+        return None
 
     def _is_provider_configured(self, definition: _ProviderDefinition) -> bool:
         if definition.builtin:
@@ -312,6 +339,12 @@ class DataCapabilityService:
                 known_sources={"futu", "longbridge", "akshare", "yfinance"},
             ),
             self._priority_view(
+                "us.realtime",
+                self._us_realtime_priority(),
+                "DataFetcherManager US realtime route",
+                known_sources={"longbridge", "yfinance"},
+            ),
+            self._priority_view(
                 "daily.generic",
                 generic_daily,
                 "DataFetcherManager.fetchers",
@@ -361,6 +394,13 @@ class DataCapabilityService:
             logger.debug("Failed to resolve screening snapshot priority: %s", exc)
             return _split_priority("sina,efinance,akshare_em,em_datacenter")
 
+    def _us_realtime_priority(self) -> List[str]:
+        if self._is_provider_configured(
+            next(item for item in _PROVIDER_DEFINITIONS if item.name == "longbridge")
+        ):
+            return ["longbridge", "yfinance"]
+        return ["yfinance", "longbridge"]
+
     @staticmethod
     def _priority_view(
         scenario: str,
@@ -385,9 +425,13 @@ class DataCapabilityService:
     ) -> List[Dict[str, Any]]:
         priority_map = {item["scenario"]: item for item in priorities}
         datasets = [
-            self._dataset_from_priority(
+            self._aggregate_market_dataset(
                 dataset="quote.realtime",
-                priority=priority_map.get("cn.realtime", {}),
+                market_priorities={
+                    "cn": priority_map.get("cn.realtime", {}),
+                    "hk": priority_map.get("hk.realtime", {}),
+                    "us": priority_map.get("us.realtime", {}),
+                },
                 provider_map=provider_map,
                 disabled=not bool(getattr(self.config, "enable_realtime_quote", True)),
                 disabled_warning="realtime_quote_disabled",
@@ -424,6 +468,82 @@ class DataCapabilityService:
         ]
         return datasets
 
+    def _aggregate_market_dataset(
+        self,
+        *,
+        dataset: str,
+        market_priorities: Dict[str, Dict[str, Any]],
+        provider_map: Dict[str, Dict[str, Any]],
+        disabled: bool = False,
+        disabled_warning: str = "",
+    ) -> Dict[str, Any]:
+        if disabled:
+            return self._dataset_from_priority(
+                dataset=dataset,
+                priority={},
+                provider_map=provider_map,
+                disabled=True,
+                disabled_warning=disabled_warning,
+            )
+
+        market_results = {
+            market: self._dataset_from_priority(
+                dataset=dataset,
+                priority=priority,
+                provider_map=provider_map,
+            )
+            for market, priority in market_priorities.items()
+        }
+        statuses = [str(result["status"]) for result in market_results.values()]
+        selected_sources = [
+            str(result["source"])
+            for result in market_results.values()
+            if result.get("source")
+        ]
+        unique_sources = sorted(set(selected_sources))
+        warnings: List[str] = []
+        fallback_from: List[str] = []
+        coverage = {"markets": {}}
+
+        for market, result in market_results.items():
+            coverage["markets"][market] = {
+                "status": result["status"],
+                "source": result["source"],
+                "fallback_from": list(result.get("fallback_from") or []),
+                "warnings": list(result.get("warnings") or []),
+            }
+            fallback_from.extend(f"{market}:{token}" for token in result.get("fallback_from") or [])
+            warnings.extend(f"{market}:{warning}" for warning in result.get("warnings") or [])
+
+        return {
+            "dataset": dataset,
+            "status": self._aggregate_market_status(statuses),
+            "source": unique_sources[0] if len(unique_sources) == 1 else None,
+            "stale": None,
+            "last_success": None,
+            "last_error": None,
+            "fallback_from": fallback_from,
+            "coverage": coverage,
+            "warnings": warnings,
+        }
+
+    @staticmethod
+    def _aggregate_market_status(statuses: Sequence[str]) -> str:
+        available_statuses = {"ok", "degraded"}
+        if statuses and all(status == "ok" for status in statuses):
+            return "ok"
+        if statuses and all(status in available_statuses for status in statuses):
+            return "degraded"
+        if any(status in available_statuses for status in statuses):
+            return "partial"
+        if statuses and all(status == "unknown" for status in statuses):
+            return "unknown"
+        if statuses and all(status == "unconfigured" for status in statuses):
+            return "unconfigured"
+        if any(status == "unknown" for status in statuses):
+            return "unknown"
+        return "unavailable"
+
     def _dataset_from_priority(
         self,
         *,
@@ -453,8 +573,10 @@ class DataCapabilityService:
 
         selected: Optional[str] = None
         fallback_from: List[str] = []
+        token_statuses: List[str] = []
         for token in providers:
             token_status = self._source_token_status(token, provider_map)
+            token_statuses.append(token_status)
             if token_status == "ok":
                 selected = token
                 break
@@ -462,6 +584,18 @@ class DataCapabilityService:
             warnings.append(f"source_status:{token}:{token_status}")
 
         if selected is None:
+            if token_statuses and any(status == "unknown" for status in token_statuses):
+                return {
+                    "dataset": dataset,
+                    "status": "unknown",
+                    "source": None,
+                    "stale": None,
+                    "last_success": None,
+                    "last_error": None,
+                    "fallback_from": fallback_from,
+                    "coverage": None,
+                    "warnings": warnings,
+                }
             return {
                 "dataset": dataset,
                 "status": "unavailable",

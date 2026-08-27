@@ -16,13 +16,26 @@ from src.services.data_capability_service import DataCapabilityService
 
 
 class _Fetcher:
-    def __init__(self, name: str, priority: int, *, available=None, last_error: str = "") -> None:
+    def __init__(
+        self,
+        name: str,
+        priority: int,
+        *,
+        available=None,
+        last_error: str = "",
+        is_available=None,
+        is_available_for_request=None,
+    ) -> None:
         self.name = name
         self.priority = priority
         if available is not None:
             self._available = available
         if last_error:
             self.last_error = last_error
+        if is_available is not None:
+            self.is_available = lambda: is_available
+        if is_available_for_request is not None:
+            self.is_available_for_request = lambda _capability="": is_available_for_request
 
 
 class _FetcherManager:
@@ -65,9 +78,10 @@ def _provider(overview, name: str):
 
 def test_overview_marks_tickflow_priority_gap_without_leaking_secret() -> None:
     manager = _FetcherManager([
-        _Fetcher("AkshareFetcher", 1),
-        _Fetcher("EfinanceFetcher", 3),
+        _Fetcher("AkshareFetcher", 1, available=True),
+        _Fetcher("EfinanceFetcher", 3, available=True),
         _Fetcher("TickFlowFetcher", 2),
+        _Fetcher("YfinanceFetcher", 4, available=True),
     ])
     secret = "tickflow-secret-value"
     service = DataCapabilityService(
@@ -78,13 +92,18 @@ def test_overview_marks_tickflow_priority_gap_without_leaking_secret() -> None:
     overview = service.get_overview()
 
     assert _provider(overview, "tickflow")["configured"] is True
-    assert _provider(overview, "tickflow")["status"] == "ok"
+    assert _provider(overview, "tickflow")["status"] == "unknown"
+    assert _provider(overview, "tickflow")["warnings"] == ["runtime_probe_not_performed"]
     assert "tickflow_configured_but_not_in_realtime_priority" in overview["warnings"]
     assert secret not in json.dumps(overview, ensure_ascii=False)
 
 
 def test_realtime_dataset_degrades_when_first_priority_source_is_unconfigured() -> None:
-    manager = _FetcherManager([_Fetcher("EfinanceFetcher", 0)])
+    manager = _FetcherManager([
+        _Fetcher("EfinanceFetcher", 0, available=True),
+        _Fetcher("AkshareFetcher", 1, available=True),
+        _Fetcher("YfinanceFetcher", 4, available=True),
+    ])
     service = DataCapabilityService(
         config=_config(realtime_source_priority="tushare,efinance"),
         fetcher_manager=manager,
@@ -94,9 +113,67 @@ def test_realtime_dataset_degrades_when_first_priority_source_is_unconfigured() 
     quote_quality = _dataset(overview, "quote.realtime")
 
     assert quote_quality["status"] == "degraded"
-    assert quote_quality["source"] == "efinance"
-    assert quote_quality["fallback_from"] == ["tushare"]
-    assert "source_status:tushare:unconfigured" in quote_quality["warnings"]
+    assert quote_quality["source"] is None
+    assert quote_quality["fallback_from"] == ["cn:tushare", "hk:futu", "hk:longbridge"]
+    assert quote_quality["coverage"]["markets"]["cn"]["status"] == "degraded"
+    assert quote_quality["coverage"]["markets"]["cn"]["source"] == "efinance"
+    assert "cn:source_status:tushare:unconfigured" in quote_quality["warnings"]
+
+
+def test_provider_runtime_probe_preserves_unknown_until_checked() -> None:
+    manager = _FetcherManager([
+        _Fetcher("TickFlowFetcher", 1),
+        _Fetcher("TushareFetcher", 2, is_available=False),
+    ])
+    service = DataCapabilityService(
+        config=_config(tickflow_api_key="secret", tushare_token="token"),
+        fetcher_manager=manager,
+    )
+
+    overview = service.get_overview()
+
+    assert _provider(overview, "tickflow")["status"] == "unknown"
+    assert _provider(overview, "tushare")["status"] == "unavailable"
+
+
+def test_provider_runtime_probe_honors_request_time_unavailable_over_cached_available_flag() -> None:
+    manager = _FetcherManager([
+        _Fetcher("LongbridgeFetcher", 1, available=True, is_available_for_request=False),
+    ])
+    service = DataCapabilityService(
+        config=_config(longbridge_app_key="key"),
+        fetcher_manager=manager,
+    )
+
+    overview = service.get_overview()
+
+    assert _provider(overview, "longbridge")["status"] == "unavailable"
+    assert _provider(overview, "longbridge")["warnings"] == ["provider_marked_unavailable"]
+
+
+def test_realtime_dataset_quality_is_market_aware() -> None:
+    manager = _FetcherManager([
+        _Fetcher("EfinanceFetcher", 0, available=True),
+        _Fetcher("YfinanceFetcher", 4, available=True),
+    ])
+    service = DataCapabilityService(
+        config=_config(
+            realtime_source_priority="efinance",
+            futu_hk_realtime_source_priority="futu,longbridge",
+        ),
+        fetcher_manager=manager,
+    )
+
+    overview = service.get_overview()
+    quote_quality = _dataset(overview, "quote.realtime")
+    priorities = {item["scenario"]: item for item in overview["priorities"]}
+
+    assert priorities["us.realtime"]["providers"] == ["yfinance", "longbridge"]
+    assert quote_quality["status"] == "partial"
+    assert quote_quality["coverage"]["markets"]["cn"]["status"] == "ok"
+    assert quote_quality["coverage"]["markets"]["cn"]["source"] == "efinance"
+    assert quote_quality["coverage"]["markets"]["hk"]["status"] == "unavailable"
+    assert quote_quality["coverage"]["markets"]["us"]["status"] == "ok"
 
 
 def test_disabled_runtime_features_surface_dataset_quality_warnings() -> None:
