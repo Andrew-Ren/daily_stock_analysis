@@ -281,7 +281,7 @@ async function waitForInitialLoad() {
   await waitFor(() => expect(getAccounts).toHaveBeenCalledTimes(1));
   await waitFor(() => expect(getSnapshot).toHaveBeenCalledTimes(1));
   await waitFor(() => expect(getRisk).toHaveBeenCalledTimes(1));
-  await waitFor(() => expect(listTrades).toHaveBeenCalledTimes(1));
+  await waitFor(() => expect(listTrades.mock.calls.length).toBeGreaterThanOrEqual(1));
 }
 
 describe('PortfolioPage FX refresh', () => {
@@ -363,6 +363,119 @@ describe('PortfolioPage FX refresh', () => {
     expect(screen.getByRole('button', { name: '刷新汇率' })).toBeInTheDocument();
   });
 
+  it('renders a personal finance calendar with ledger events and portfolio reminders', async () => {
+    getSnapshot.mockResolvedValueOnce(makeSnapshot({
+      fxStale: true,
+      positions: [
+        makePosition({ symbol: 'AAPL', market: 'us', currency: 'USD', priceStale: true }),
+        makePosition({
+          symbol: 'MSFT',
+          market: 'us',
+          currency: 'USD',
+          lastPrice: 0,
+          marketValueBase: 0,
+          unrealizedPnlBase: 0,
+          unrealizedPnlPct: null,
+          priceSource: 'missing',
+          priceStale: true,
+          priceAvailable: false,
+        }),
+      ],
+    }));
+    getRisk.mockResolvedValueOnce(makeRisk({
+      drawdown: {
+        seriesPoints: 10,
+        maxDrawdownPct: 18.5,
+        currentDrawdownPct: 12.5,
+        alert: true,
+        fxStale: false,
+      },
+      stopLoss: {
+        nearAlert: true,
+        triggeredCount: 1,
+        nearCount: 2,
+        items: [],
+      },
+      decisionSignalRisk: {
+        available: true,
+        total: 2,
+        actions: { sell: 1, reduce: 1, alert: 0 },
+        items: [],
+      },
+    }));
+    listTrades.mockResolvedValue({
+      items: [{
+        id: 11,
+        accountId: 1,
+        tradeDate: '2026-03-19',
+        side: 'buy',
+        symbol: 'AAPL',
+        market: 'us',
+        currency: 'USD',
+        quantity: 3,
+        price: 180,
+        fee: 0,
+        tax: 0,
+      }],
+      total: 1,
+      page: 1,
+      pageSize: 20,
+    });
+    listCashLedger.mockResolvedValue({
+      items: [{
+        id: 21,
+        accountId: 1,
+        eventDate: '2026-03-20',
+        direction: 'out',
+        amount: 300,
+        currency: 'CNY',
+      }],
+      total: 1,
+      page: 1,
+      pageSize: 20,
+    });
+    listCorporateActions.mockResolvedValue({
+      items: [{
+        id: 31,
+        accountId: 1,
+        effectiveDate: '2026-03-22',
+        actionType: 'cash_dividend',
+        symbol: '600519',
+        market: 'cn',
+        currency: 'CNY',
+        cashDividendPerShare: 12,
+        splitRatio: null,
+      }],
+      total: 1,
+      page: 1,
+      pageSize: 20,
+    });
+
+    render(<PortfolioPage />);
+
+    await waitForInitialLoad();
+
+    const calendar = await screen.findByText('个人财务日历');
+    const calendarSection = calendar.closest('section');
+    expect(calendarSection).not.toBeNull();
+    const calendarScope = within(calendarSection as HTMLElement);
+
+    expect(calendarScope.getByText('提醒')).toBeInTheDocument();
+    expect(calendarScope.getByText('事件时间线')).toBeInTheDocument();
+    expect(calendarScope.getByText('买入 AAPL')).toBeInTheDocument();
+    expect(calendarScope.getByText('资金流出')).toBeInTheDocument();
+    expect(calendarScope.getByText('现金分红 600519')).toBeInTheDocument();
+    expect(calendarScope.getAllByText('汇率过期').length).toBeGreaterThan(0);
+    expect(calendarScope.getAllByText('价格数据待补齐').length).toBeGreaterThan(0);
+    expect(calendarScope.getAllByText('止损提醒').length).toBeGreaterThan(0);
+    expect(calendarScope.getAllByText('回撤提醒').length).toBeGreaterThan(0);
+    expect(calendarScope.getAllByText('AI 风险信号').length).toBeGreaterThan(0);
+    expect(calendarScope.getAllByText('缺价 1 项，过期价 1 项。').length).toBeGreaterThan(0);
+    expect(calendarScope.getAllByText('已触发 1 项，接近 2 项。').length).toBeGreaterThan(0);
+    expect(listCashLedger).toHaveBeenCalledWith(expect.objectContaining({ page: 1, pageSize: 100 }));
+    expect(listCorporateActions).toHaveBeenCalledWith(expect.objectContaining({ page: 1, pageSize: 100 }));
+  });
+
   it('shows aggregate partial valuation limitations near summary totals', async () => {
     getSnapshot.mockResolvedValueOnce(makeSnapshot({
       dataQuality: 'partial',
@@ -421,7 +534,7 @@ describe('PortfolioPage FX refresh', () => {
 
     await waitForInitialLoad();
 
-    expect(screen.getByText('AI 风险信号')).toBeInTheDocument();
+    expect(screen.getAllByText('AI 风险信号').length).toBeGreaterThan(0);
     expect(screen.getByText(/风险信号: 2/)).toBeInTheDocument();
     expect(screen.getByText(/卖出: 1 · 减仓: 0 · 预警: 1/)).toBeInTheDocument();
     expect(screen.getByText('600519 · 卖出')).toBeInTheDocument();
@@ -451,7 +564,7 @@ describe('PortfolioPage FX refresh', () => {
 
     await waitForInitialLoad();
 
-    expect(screen.getByText('AI risk signals')).toBeInTheDocument();
+    expect(screen.getAllByText('AI risk signals').length).toBeGreaterThan(0);
     expect(screen.getByText('600519 · Sell')).toBeInTheDocument();
     expect(screen.queryByText('600519 · 卖出')).not.toBeInTheDocument();
     expect(screen.queryByText('600519 · sell')).not.toBeInTheDocument();
@@ -494,6 +607,8 @@ describe('PortfolioPage FX refresh', () => {
     const snapshotCallsBeforeRefresh = getSnapshot.mock.calls.length;
     const riskCallsBeforeRefresh = getRisk.mock.calls.length;
     const tradeCallsBeforeRefresh = listTrades.mock.calls.length;
+    const cashCallsBeforeRefresh = listCashLedger.mock.calls.length;
+    const corporateCallsBeforeRefresh = listCorporateActions.mock.calls.length;
 
     fireEvent.click(screen.getByRole('button', { name: '刷新汇率' }));
 
@@ -502,8 +617,8 @@ describe('PortfolioPage FX refresh', () => {
     await waitFor(() => expect(getSnapshot).toHaveBeenCalledTimes(snapshotCallsBeforeRefresh + 1));
     await waitFor(() => expect(getRisk).toHaveBeenCalledTimes(riskCallsBeforeRefresh + 1));
     expect(listTrades).toHaveBeenCalledTimes(tradeCallsBeforeRefresh);
-    expect(listCashLedger).not.toHaveBeenCalled();
-    expect(listCorporateActions).not.toHaveBeenCalled();
+    expect(listCashLedger).toHaveBeenCalledTimes(cashCallsBeforeRefresh);
+    expect(listCorporateActions).toHaveBeenCalledTimes(corporateCallsBeforeRefresh);
     expect(screen.getByText('最新')).toBeInTheDocument();
   });
 
@@ -928,6 +1043,8 @@ describe('PortfolioPage FX refresh', () => {
     const snapshotCallsBeforeRefresh = getSnapshot.mock.calls.length;
     const riskCallsBeforeRefresh = getRisk.mock.calls.length;
     const tradeCallsBeforeRefresh = listTrades.mock.calls.length;
+    const cashCallsBeforeRefresh = listCashLedger.mock.calls.length;
+    const corporateCallsBeforeRefresh = listCorporateActions.mock.calls.length;
 
     fireEvent.click(screen.getByRole('button', { name: '刷新汇率' }));
 
@@ -935,8 +1052,8 @@ describe('PortfolioPage FX refresh', () => {
     await waitFor(() => expect(getSnapshot).toHaveBeenCalledTimes(snapshotCallsBeforeRefresh + 1));
     await waitFor(() => expect(getRisk).toHaveBeenCalledTimes(riskCallsBeforeRefresh + 1));
     expect(listTrades).toHaveBeenCalledTimes(tradeCallsBeforeRefresh);
-    expect(listCashLedger).not.toHaveBeenCalled();
-    expect(listCorporateActions).not.toHaveBeenCalled();
+    expect(listCashLedger).toHaveBeenCalledTimes(cashCallsBeforeRefresh);
+    expect(listCorporateActions).toHaveBeenCalledTimes(corporateCallsBeforeRefresh);
   });
 
   it('restores the button state and shows the existing error alert when FX refresh fails', async () => {

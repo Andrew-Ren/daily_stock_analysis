@@ -1,11 +1,12 @@
 import type React from 'react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { BellRing, CalendarDays, Clock3 } from 'lucide-react';
 import { Pie, PieChart, ResponsiveContainer, Tooltip, Legend, Cell } from 'recharts';
 import { decisionSignalsApi } from '../api/decisionSignals';
 import { portfolioApi } from '../api/portfolio';
 import type { ParsedApiError } from '../api/error';
 import { getParsedApiError } from '../api/error';
-import { ApiErrorAlert, Card, Badge, ConfirmDialog, EmptyState, InlineAlert } from '../components/common';
+import { ApiErrorAlert, Card, Badge, ConfirmDialog, EmptyState, InlineAlert, StatusDot } from '../components/common';
 import { PortfolioSignalSummary } from '../components/decision-signals/DecisionSignalDisplay';
 import { useUiLanguage } from '../contexts/UiLanguageContext';
 import { formatUiText } from '../i18n/uiText';
@@ -55,6 +56,9 @@ import { buildDecisionActionLabelMap, getDecisionActionLabel } from '../utils/de
 
 const PIE_COLORS = ['#00d4ff', '#00ff88', '#ffaa00', '#ff7a45', '#7f8cff', '#ff4466'];
 const DEFAULT_PAGE_SIZE = 20;
+const FINANCE_CALENDAR_PAGE_SIZE = 100;
+const FINANCE_CALENDAR_LOOKBACK_DAYS = 14;
+const FINANCE_CALENDAR_LOOKAHEAD_DAYS = 45;
 const PORTFOLIO_SIGNAL_LOOKUP_CONCURRENCY = 6;
 const FALLBACK_BROKERS: PortfolioImportBrokerItem[] = [
   { broker: 'huatai', aliases: [], displayName: '华泰' },
@@ -81,6 +85,173 @@ type PortfolioSignalLookupResult = {
 };
 
 type PortfolioPageLanguage = 'zh' | 'en';
+
+type FinanceCalendarText = {
+  title: string;
+  window: string;
+  refresh: string;
+  refreshing: string;
+  reminders: string;
+  timeline: string;
+  needsAction: string;
+  today: string;
+  next7Days: string;
+  completed: string;
+  later: string;
+  noEventsTitle: string;
+  noEventsDescription: string;
+  warningTitle: string;
+  trade: string;
+  cash: string;
+  corporate: string;
+  valuation: string;
+  risk: string;
+  buy: string;
+  sell: string;
+  cashIn: string;
+  cashOut: string;
+  cashDividend: string;
+  splitAdjustment: string;
+  fxStaleTitle: string;
+  fxStaleDetail: string;
+  priceQualityTitle: string;
+  priceQualityDetail: string;
+  stopLossTitle: string;
+  stopLossDetail: string;
+  drawdownTitle: string;
+  drawdownDetail: string;
+  aiRiskTitle: string;
+  aiRiskDetail: string;
+  account: string;
+  quantity: string;
+  price: string;
+  amount: string;
+  dividend: string;
+  splitRatio: string;
+  missingPrice: string;
+  stalePrice: string;
+};
+
+type FinanceCalendarTone = 'success' | 'warning' | 'danger' | 'info' | 'neutral';
+type FinanceCalendarKind = 'trade' | 'cash' | 'corporate' | 'valuation' | 'risk';
+type FinanceCalendarStatus = 'completed' | 'today' | 'next7' | 'later';
+
+type FinanceCalendarItem = {
+  id: string;
+  date: string;
+  kind: FinanceCalendarKind;
+  tone: FinanceCalendarTone;
+  title: string;
+  detail: string;
+  status: FinanceCalendarStatus;
+  needsAction: boolean;
+};
+
+type FinanceCalendarStats = {
+  needsAction: number;
+  today: number;
+  next7Days: number;
+  completed: number;
+};
+
+type FinanceCalendarSourceEvents = {
+  trades: PortfolioTradeListItem[];
+  cash: PortfolioCashLedgerListItem[];
+  corporate: PortfolioCorporateActionListItem[];
+};
+
+const FINANCE_CALENDAR_TEXT: Record<PortfolioPageLanguage, FinanceCalendarText> = {
+  zh: {
+    title: '个人财务日历',
+    window: '近 14 天 / 未来 45 天',
+    refresh: '刷新日历',
+    refreshing: '刷新中...',
+    reminders: '提醒',
+    timeline: '事件时间线',
+    needsAction: '需处理',
+    today: '今日',
+    next7Days: '7 日内',
+    completed: '已记录',
+    later: '后续',
+    noEventsTitle: '暂无日历事件',
+    noEventsDescription: '当前范围没有交易、资金、公司行为或组合提醒。',
+    warningTitle: '日历加载失败',
+    trade: '交易',
+    cash: '资金',
+    corporate: '公司行为',
+    valuation: '估值',
+    risk: '风控',
+    buy: '买入',
+    sell: '卖出',
+    cashIn: '资金流入',
+    cashOut: '资金流出',
+    cashDividend: '现金分红',
+    splitAdjustment: '拆并股调整',
+    fxStaleTitle: '汇率过期',
+    fxStaleDetail: '当前账户范围仍有汇率使用 stale/fallback 口径。',
+    priceQualityTitle: '价格数据待补齐',
+    priceQualityDetail: '缺价 {missing} 项，过期价 {stale} 项。',
+    stopLossTitle: '止损提醒',
+    stopLossDetail: '已触发 {triggered} 项，接近 {near} 项。',
+    drawdownTitle: '回撤提醒',
+    drawdownDetail: '最大回撤 {max}，当前回撤 {current}。',
+    aiRiskTitle: 'AI 风险信号',
+    aiRiskDetail: '当前组合有 {total} 条防御型信号。',
+    account: '账户',
+    quantity: '数量',
+    price: '价格',
+    amount: '金额',
+    dividend: '每股分红',
+    splitRatio: '拆并股比例',
+    missingPrice: '缺价',
+    stalePrice: '过期价',
+  },
+  en: {
+    title: 'Personal finance calendar',
+    window: 'Last 14 days / next 45 days',
+    refresh: 'Refresh calendar',
+    refreshing: 'Refreshing...',
+    reminders: 'Reminders',
+    timeline: 'Event timeline',
+    needsAction: 'Needs action',
+    today: 'Today',
+    next7Days: 'Next 7 days',
+    completed: 'Recorded',
+    later: 'Later',
+    noEventsTitle: 'No calendar events',
+    noEventsDescription: 'No trades, cash flows, corporate actions, or portfolio reminders in this scope.',
+    warningTitle: 'Calendar load failed',
+    trade: 'Trade',
+    cash: 'Cash',
+    corporate: 'Corporate action',
+    valuation: 'Valuation',
+    risk: 'Risk',
+    buy: 'Buy',
+    sell: 'Sell',
+    cashIn: 'Cash inflow',
+    cashOut: 'Cash outflow',
+    cashDividend: 'Cash dividend',
+    splitAdjustment: 'Split adjustment',
+    fxStaleTitle: 'Stale FX',
+    fxStaleDetail: 'This account scope still uses stale/fallback FX rates.',
+    priceQualityTitle: 'Price data gap',
+    priceQualityDetail: '{missing} missing prices, {stale} stale prices.',
+    stopLossTitle: 'Stop-loss reminder',
+    stopLossDetail: '{triggered} triggered, {near} near.',
+    drawdownTitle: 'Drawdown reminder',
+    drawdownDetail: 'Max drawdown {max}, current drawdown {current}.',
+    aiRiskTitle: 'AI risk signals',
+    aiRiskDetail: '{total} defensive signals in this portfolio.',
+    account: 'Account',
+    quantity: 'Quantity',
+    price: 'Price',
+    amount: 'Amount',
+    dividend: 'Dividend/share',
+    splitRatio: 'Split ratio',
+    missingPrice: 'Missing',
+    stalePrice: 'Stale',
+  },
+};
 
 const PORTFOLIO_LIMITATION_LABELS: Record<string, Record<PortfolioPageLanguage, string>> = {
   realtime_quote_best_effort: {
@@ -133,6 +304,441 @@ function formatPortfolioLimitation(limitation: string, language: PortfolioPageLa
   return PORTFOLIO_LIMITATION_LABELS[limitation]?.[language] ?? limitation;
 }
 
+function parseIsoDay(value: string | null | undefined): Date | null {
+  const match = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(value || ''));
+  if (!match) return null;
+  const date = new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3]));
+  return Number.isNaN(date.getTime()) ? null : date;
+}
+
+function toIsoDay(date: Date): string {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
+function addIsoDays(value: string, days: number): string {
+  const date = parseIsoDay(value) ?? parseIsoDay(getTodayIso()) ?? new Date();
+  date.setDate(date.getDate() + days);
+  return toIsoDay(date);
+}
+
+function diffIsoDays(date: string, referenceDate: string): number {
+  const target = parseIsoDay(date);
+  const reference = parseIsoDay(referenceDate);
+  if (!target || !reference) return 0;
+  const millisecondsPerDay = 24 * 60 * 60 * 1000;
+  return Math.round((target.getTime() - reference.getTime()) / millisecondsPerDay);
+}
+
+function buildFinanceCalendarWindow(referenceDate: string): { dateFrom: string; dateTo: string } {
+  return {
+    dateFrom: addIsoDays(referenceDate, -FINANCE_CALENDAR_LOOKBACK_DAYS),
+    dateTo: addIsoDays(referenceDate, FINANCE_CALENDAR_LOOKAHEAD_DAYS),
+  };
+}
+
+function getFinanceCalendarStatus(date: string, referenceDate: string): FinanceCalendarStatus {
+  const dayDelta = diffIsoDays(date, referenceDate);
+  if (dayDelta < 0) return 'completed';
+  if (dayDelta === 0) return 'today';
+  if (dayDelta <= 7) return 'next7';
+  return 'later';
+}
+
+function getFinanceCalendarStatusLabel(status: FinanceCalendarStatus, text: FinanceCalendarText): string {
+  if (status === 'today') return text.today;
+  if (status === 'next7') return text.next7Days;
+  if (status === 'completed') return text.completed;
+  return text.later;
+}
+
+function getFinanceCalendarStatusVariant(status: FinanceCalendarStatus): 'default' | 'success' | 'warning' | 'info' {
+  if (status === 'today') return 'warning';
+  if (status === 'next7') return 'info';
+  if (status === 'completed') return 'success';
+  return 'default';
+}
+
+function getFinanceCalendarKindLabel(kind: FinanceCalendarKind, text: FinanceCalendarText): string {
+  if (kind === 'trade') return text.trade;
+  if (kind === 'cash') return text.cash;
+  if (kind === 'corporate') return text.corporate;
+  if (kind === 'valuation') return text.valuation;
+  return text.risk;
+}
+
+function getFinanceCalendarToneVariant(tone: FinanceCalendarTone): 'default' | 'success' | 'warning' | 'danger' | 'info' {
+  if (tone === 'neutral') return 'default';
+  return tone;
+}
+
+function getFinanceCalendarSeverity(tone: FinanceCalendarTone): number {
+  if (tone === 'danger') return 0;
+  if (tone === 'warning') return 1;
+  if (tone === 'info') return 2;
+  if (tone === 'success') return 3;
+  return 4;
+}
+
+function getFinanceCalendarAccountLabel(accountId: number, accountNameById: ReadonlyMap<number, string>, text: FinanceCalendarText): string {
+  return `${text.account}: ${accountNameById.get(accountId) || `#${accountId}`}`;
+}
+
+function formatFinanceCalendarSide(side: PortfolioSide, text: FinanceCalendarText): string {
+  return side === 'buy' ? text.buy : text.sell;
+}
+
+function formatFinanceCalendarCashDirection(direction: PortfolioCashDirection, text: FinanceCalendarText): string {
+  return direction === 'in' ? text.cashIn : text.cashOut;
+}
+
+function formatFinanceCalendarCorporateAction(actionType: PortfolioCorporateActionType, text: FinanceCalendarText): string {
+  return actionType === 'cash_dividend' ? text.cashDividend : text.splitAdjustment;
+}
+
+function compareFinanceCalendarItems(left: FinanceCalendarItem, right: FinanceCalendarItem): number {
+  const leftTime = parseIsoDay(left.date)?.getTime() ?? 0;
+  const rightTime = parseIsoDay(right.date)?.getTime() ?? 0;
+  if (leftTime !== rightTime) return leftTime - rightTime;
+  const severityDelta = getFinanceCalendarSeverity(left.tone) - getFinanceCalendarSeverity(right.tone);
+  if (severityDelta !== 0) return severityDelta;
+  return left.title.localeCompare(right.title);
+}
+
+function buildFinanceCalendarLedgerItems(
+  sourceEvents: FinanceCalendarSourceEvents,
+  referenceDate: string,
+  accountNameById: ReadonlyMap<number, string>,
+  text: FinanceCalendarText,
+): FinanceCalendarItem[] {
+  const items: FinanceCalendarItem[] = [];
+
+  for (const item of sourceEvents.trades) {
+    const sideLabel = formatFinanceCalendarSide(item.side, text);
+    const status = getFinanceCalendarStatus(item.tradeDate, referenceDate);
+    items.push({
+      id: `trade-${item.id}`,
+      date: item.tradeDate,
+      kind: 'trade',
+      tone: item.side === 'buy' ? 'info' : 'warning',
+      title: `${sideLabel} ${item.symbol}`,
+      detail: [
+        getFinanceCalendarAccountLabel(item.accountId, accountNameById, text),
+        `${text.quantity}: ${item.quantity}`,
+        `${text.price}: ${item.price}`,
+        item.currency,
+      ].join(' · '),
+      status,
+      needsAction: false,
+    });
+  }
+
+  for (const item of sourceEvents.cash) {
+    const status = getFinanceCalendarStatus(item.eventDate, referenceDate);
+    items.push({
+      id: `cash-${item.id}`,
+      date: item.eventDate,
+      kind: 'cash',
+      tone: item.direction === 'out' ? 'warning' : 'success',
+      title: formatFinanceCalendarCashDirection(item.direction, text),
+      detail: [
+        getFinanceCalendarAccountLabel(item.accountId, accountNameById, text),
+        `${text.amount}: ${formatMoney(item.amount, item.currency)}`,
+      ].join(' · '),
+      status,
+      needsAction: item.direction === 'out' && status !== 'completed',
+    });
+  }
+
+  for (const item of sourceEvents.corporate) {
+    const status = getFinanceCalendarStatus(item.effectiveDate, referenceDate);
+    const actionLabel = formatFinanceCalendarCorporateAction(item.actionType, text);
+    const actionDetail = item.actionType === 'cash_dividend'
+      ? `${text.dividend}: ${item.cashDividendPerShare ?? '--'} ${item.currency}`
+      : `${text.splitRatio}: ${item.splitRatio ?? '--'}`;
+    items.push({
+      id: `corporate-${item.id}`,
+      date: item.effectiveDate,
+      kind: 'corporate',
+      tone: status === 'completed' ? 'success' : 'info',
+      title: `${actionLabel} ${item.symbol}`,
+      detail: [
+        getFinanceCalendarAccountLabel(item.accountId, accountNameById, text),
+        actionDetail,
+      ].join(' · '),
+      status,
+      needsAction: status !== 'completed',
+    });
+  }
+
+  return items;
+}
+
+function buildFinanceCalendarReminderItems(
+  snapshot: PortfolioSnapshotResponse | null,
+  risk: PortfolioRiskResponse | null,
+  positions: FlatPosition[],
+  referenceDate: string,
+  text: FinanceCalendarText,
+): FinanceCalendarItem[] {
+  const items: FinanceCalendarItem[] = [];
+  const status = getFinanceCalendarStatus(referenceDate, referenceDate);
+
+  if (snapshot?.fxStale) {
+    items.push({
+      id: 'valuation-fx-stale',
+      date: referenceDate,
+      kind: 'valuation',
+      tone: 'warning',
+      title: text.fxStaleTitle,
+      detail: text.fxStaleDetail,
+      status,
+      needsAction: true,
+    });
+  }
+
+  const missingPriceCount = positions.filter((item) => !hasPositionPrice(item)).length;
+  const stalePriceCount = positions.filter((item) => hasPositionPrice(item) && item.priceStale).length;
+  if (missingPriceCount > 0 || stalePriceCount > 0) {
+    items.push({
+      id: 'valuation-price-quality',
+      date: referenceDate,
+      kind: 'valuation',
+      tone: missingPriceCount > 0 ? 'danger' : 'warning',
+      title: text.priceQualityTitle,
+      detail: formatUiText(text.priceQualityDetail, {
+        missing: missingPriceCount,
+        stale: stalePriceCount,
+      }),
+      status,
+      needsAction: true,
+    });
+  }
+
+  if ((risk?.stopLoss?.triggeredCount ?? 0) > 0 || (risk?.stopLoss?.nearCount ?? 0) > 0) {
+    items.push({
+      id: 'risk-stop-loss',
+      date: referenceDate,
+      kind: 'risk',
+      tone: (risk?.stopLoss?.triggeredCount ?? 0) > 0 ? 'danger' : 'warning',
+      title: text.stopLossTitle,
+      detail: formatUiText(text.stopLossDetail, {
+        triggered: risk?.stopLoss?.triggeredCount ?? 0,
+        near: risk?.stopLoss?.nearCount ?? 0,
+      }),
+      status,
+      needsAction: true,
+    });
+  }
+
+  if (risk?.drawdown?.alert) {
+    items.push({
+      id: 'risk-drawdown',
+      date: referenceDate,
+      kind: 'risk',
+      tone: 'warning',
+      title: text.drawdownTitle,
+      detail: formatUiText(text.drawdownDetail, {
+        max: formatPct(risk.drawdown.maxDrawdownPct),
+        current: formatPct(risk.drawdown.currentDrawdownPct),
+      }),
+      status,
+      needsAction: true,
+    });
+  }
+
+  if ((risk?.decisionSignalRisk?.total ?? 0) > 0) {
+    items.push({
+      id: 'risk-ai-signals',
+      date: referenceDate,
+      kind: 'risk',
+      tone: 'warning',
+      title: text.aiRiskTitle,
+      detail: formatUiText(text.aiRiskDetail, { total: risk?.decisionSignalRisk?.total ?? 0 }),
+      status,
+      needsAction: true,
+    });
+  }
+
+  return items;
+}
+
+function buildFinanceCalendarItems(
+  sourceEvents: FinanceCalendarSourceEvents,
+  snapshot: PortfolioSnapshotResponse | null,
+  risk: PortfolioRiskResponse | null,
+  positions: FlatPosition[],
+  accountNameById: ReadonlyMap<number, string>,
+  text: FinanceCalendarText,
+): FinanceCalendarItem[] {
+  const referenceDate = snapshot?.asOf || getTodayIso();
+  return [
+    ...buildFinanceCalendarReminderItems(snapshot, risk, positions, referenceDate, text),
+    ...buildFinanceCalendarLedgerItems(sourceEvents, referenceDate, accountNameById, text),
+  ].sort(compareFinanceCalendarItems);
+}
+
+function buildFinanceCalendarStats(items: FinanceCalendarItem[]): FinanceCalendarStats {
+  return items.reduce<FinanceCalendarStats>(
+    (stats, item) => ({
+      needsAction: stats.needsAction + (item.needsAction ? 1 : 0),
+      today: stats.today + (item.status === 'today' ? 1 : 0),
+      next7Days: stats.next7Days + (item.status === 'next7' ? 1 : 0),
+      completed: stats.completed + (item.status === 'completed' ? 1 : 0),
+    }),
+    { needsAction: 0, today: 0, next7Days: 0, completed: 0 },
+  );
+}
+
+function FinanceCalendarStat({ label, value }: { label: string; value: number }) {
+  return (
+    <div className="rounded-lg border border-white/10 bg-white/[0.02] px-3 py-2">
+      <div className="text-[11px] text-secondary">{label}</div>
+      <div className="mt-1 text-lg font-semibold text-foreground">{value}</div>
+    </div>
+  );
+}
+
+function FinanceCalendarItemRow({
+  item,
+  text,
+}: {
+  item: FinanceCalendarItem;
+  text: FinanceCalendarText;
+}) {
+  return (
+    <div className="grid grid-cols-[6rem_minmax(0,1fr)] gap-3 border-b border-white/5 py-3 last:border-0">
+      <div className="min-w-0">
+        <div className="font-mono text-xs text-foreground">{item.date}</div>
+        <div className="mt-1">
+          <Badge variant={getFinanceCalendarStatusVariant(item.status)} className="whitespace-nowrap">
+            {getFinanceCalendarStatusLabel(item.status, text)}
+          </Badge>
+        </div>
+      </div>
+      <div className="min-w-0">
+        <div className="flex flex-wrap items-center gap-2">
+          <StatusDot tone={item.tone} />
+          <span className="text-sm font-medium text-foreground">{item.title}</span>
+          <Badge variant={getFinanceCalendarToneVariant(item.tone)}>
+            {getFinanceCalendarKindLabel(item.kind, text)}
+          </Badge>
+          {item.needsAction ? <Badge variant="danger">{text.needsAction}</Badge> : null}
+        </div>
+        <div className="mt-1 truncate text-xs text-secondary">{item.detail}</div>
+      </div>
+    </div>
+  );
+}
+
+function PortfolioFinanceCalendar({
+  items,
+  stats,
+  text,
+  loading,
+  warning,
+  onRefresh,
+}: {
+  items: FinanceCalendarItem[];
+  stats: FinanceCalendarStats;
+  text: FinanceCalendarText;
+  loading: boolean;
+  warning: string | null;
+  onRefresh: () => void;
+}) {
+  const reminderItems = items.filter((item) => item.needsAction).slice(0, 4);
+
+  return (
+    <section>
+      <Card padding="md">
+        <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+          <div>
+            <div className="flex items-center gap-2">
+              <CalendarDays className="h-4 w-4 text-cyan" aria-hidden="true" />
+              <h2 className="text-sm font-semibold text-foreground">{text.title}</h2>
+            </div>
+            <div className="mt-1 flex items-center gap-2 text-xs text-secondary">
+              <Clock3 className="h-3.5 w-3.5" aria-hidden="true" />
+              <span>{text.window}</span>
+            </div>
+          </div>
+          <button
+            type="button"
+            className="btn-secondary text-sm"
+            onClick={onRefresh}
+            disabled={loading}
+          >
+            {loading ? text.refreshing : text.refresh}
+          </button>
+        </div>
+
+        {warning ? (
+          <InlineAlert
+            variant="warning"
+            title={text.warningTitle}
+            message={warning}
+            className="mt-3 rounded-xl px-3 py-2 text-xs shadow-none"
+          />
+        ) : null}
+
+        <div className="mt-4 grid grid-cols-2 gap-2 md:grid-cols-4">
+          <FinanceCalendarStat label={text.needsAction} value={stats.needsAction} />
+          <FinanceCalendarStat label={text.today} value={stats.today} />
+          <FinanceCalendarStat label={text.next7Days} value={stats.next7Days} />
+          <FinanceCalendarStat label={text.completed} value={stats.completed} />
+        </div>
+
+        <div className="mt-4 grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,0.8fr)_minmax(0,1.2fr)]">
+          <div className="rounded-lg border border-white/10 bg-white/[0.02] p-3">
+            <div className="mb-3 flex items-center gap-2">
+              <BellRing className="h-4 w-4 text-warning" aria-hidden="true" />
+              <h3 className="text-sm font-semibold text-foreground">{text.reminders}</h3>
+            </div>
+            {reminderItems.length > 0 ? (
+              <div className="space-y-2">
+                {reminderItems.map((item) => (
+                  <div key={`reminder-${item.id}`} className="rounded-lg border border-white/10 px-3 py-2">
+                    <div className="flex items-center gap-2">
+                      <StatusDot tone={item.tone} pulse={item.tone === 'danger'} />
+                      <span className="text-sm font-medium text-foreground">{item.title}</span>
+                    </div>
+                    <div className="mt-1 text-xs text-secondary">{item.detail}</div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <EmptyState
+                title={text.noEventsTitle}
+                description={text.noEventsDescription}
+                className="border-none bg-transparent px-3 py-6 shadow-none"
+              />
+            )}
+          </div>
+
+          <div className="rounded-lg border border-white/10 bg-white/[0.02] p-3">
+            <h3 className="mb-1 text-sm font-semibold text-foreground">{text.timeline}</h3>
+            <div className="max-h-80 overflow-auto">
+              {items.length > 0 ? (
+                items.map((item) => (
+                  <FinanceCalendarItemRow key={item.id} item={item} text={text} />
+                ))
+              ) : (
+                <EmptyState
+                  title={text.noEventsTitle}
+                  description={text.noEventsDescription}
+                  className="border-none bg-transparent px-3 py-8 shadow-none"
+                />
+              )}
+            </div>
+          </div>
+        </div>
+      </Card>
+    </section>
+  );
+}
+
 const DECISION_SIGNAL_MARKETS = new Set<DecisionSignalMarket>(['cn', 'hk', 'us', 'jp', 'kr', 'tw']);
 type PortfolioAccountMarket = 'cn' | 'hk' | 'us' | 'jp' | 'kr' | 'tw';
 
@@ -182,6 +788,7 @@ async function loadPortfolioSignalLookup(lookup: PortfolioSignalLookup): Promise
 const PortfolioPage: React.FC = () => {
   const { language, t } = useUiLanguage();
   const text = PORTFOLIO_TEXT[language];
+  const financeCalendarText = FINANCE_CALENDAR_TEXT[language];
   const decisionActionLabels = useMemo(() => buildDecisionActionLabelMap(t), [t]);
 
   // Set page title
@@ -241,6 +848,15 @@ const PortfolioPage: React.FC = () => {
   const [tradeEvents, setTradeEvents] = useState<PortfolioTradeListItem[]>([]);
   const [cashEvents, setCashEvents] = useState<PortfolioCashLedgerListItem[]>([]);
   const [corporateEvents, setCorporateEvents] = useState<PortfolioCorporateActionListItem[]>([]);
+  const [financeCalendarEvents, setFinanceCalendarEvents] = useState<FinanceCalendarSourceEvents>({
+    trades: [],
+    cash: [],
+    corporate: [],
+  });
+  const [financeCalendarLoading, setFinanceCalendarLoading] = useState(false);
+  const [financeCalendarWarning, setFinanceCalendarWarning] = useState<string | null>(null);
+  const [financeCalendarRefreshKey, setFinanceCalendarRefreshKey] = useState(0);
+  const financeCalendarRequestRef = useRef(0);
   const [pendingDelete, setPendingDelete] = useState<PendingDelete | null>(null);
   const [deleteLoading, setDeleteLoading] = useState(false);
   const [pendingAccountDelete, setPendingAccountDelete] = useState<PendingAccountDelete | null>(null);
@@ -287,6 +903,7 @@ const PortfolioPage: React.FC = () => {
     : eventType === 'cash'
       ? cashEvents.length
       : corporateEvents.length;
+  const financeCalendarReferenceDate = snapshot?.asOf || null;
 
   const isActiveRefreshContext = (requestedViewKey: string, requestedRequestId: number) => {
     return (
@@ -429,6 +1046,73 @@ const PortfolioPage: React.FC = () => {
     await loadEventsPage(eventPage);
   }, [eventPage, loadEventsPage]);
 
+  const loadFinanceCalendar = useCallback(async () => {
+    if (!financeCalendarReferenceDate) {
+      setFinanceCalendarEvents({ trades: [], cash: [], corporate: [] });
+      setFinanceCalendarWarning(null);
+      setFinanceCalendarLoading(false);
+      return;
+    }
+
+    const requestId = financeCalendarRequestRef.current + 1;
+    financeCalendarRequestRef.current = requestId;
+    const referenceDate = financeCalendarReferenceDate;
+    const calendarWindow = buildFinanceCalendarWindow(referenceDate);
+    const query = {
+      accountId: queryAccountId,
+      dateFrom: calendarWindow.dateFrom,
+      dateTo: calendarWindow.dateTo,
+      page: 1,
+      pageSize: FINANCE_CALENDAR_PAGE_SIZE,
+    };
+
+    setFinanceCalendarLoading(true);
+    setFinanceCalendarWarning(null);
+
+    try {
+      const [tradeResult, cashResult, corporateResult] = await Promise.allSettled([
+        portfolioApi.listTrades(query),
+        portfolioApi.listCashLedger(query),
+        portfolioApi.listCorporateActions(query),
+      ] as const);
+      if (financeCalendarRequestRef.current !== requestId) {
+        return;
+      }
+
+      const failures: string[] = [];
+      const nextEvents: FinanceCalendarSourceEvents = {
+        trades: [],
+        cash: [],
+        corporate: [],
+      };
+
+      if (tradeResult.status === 'fulfilled') {
+        nextEvents.trades = tradeResult.value.items || [];
+      } else {
+        failures.push(getParsedApiError(tradeResult.reason).message);
+      }
+
+      if (cashResult.status === 'fulfilled') {
+        nextEvents.cash = cashResult.value.items || [];
+      } else {
+        failures.push(getParsedApiError(cashResult.reason).message);
+      }
+
+      if (corporateResult.status === 'fulfilled') {
+        nextEvents.corporate = corporateResult.value.items || [];
+      } else {
+        failures.push(getParsedApiError(corporateResult.reason).message);
+      }
+
+      setFinanceCalendarEvents(nextEvents);
+      setFinanceCalendarWarning(failures[0] || null);
+    } finally {
+      if (financeCalendarRequestRef.current === requestId) {
+        setFinanceCalendarLoading(false);
+      }
+    }
+  }, [financeCalendarReferenceDate, queryAccountId]);
+
   const refreshPortfolioData = useCallback(async (page = eventPage) => {
     await Promise.all([loadSnapshotAndRisk(), loadEventsPage(page)]);
   }, [eventPage, loadEventsPage, loadSnapshotAndRisk]);
@@ -445,6 +1129,16 @@ const PortfolioPage: React.FC = () => {
   useEffect(() => {
     void loadEvents();
   }, [loadEvents]);
+
+  useEffect(() => {
+    if (!hasAccounts || !financeCalendarReferenceDate) {
+      setFinanceCalendarEvents({ trades: [], cash: [], corporate: [] });
+      setFinanceCalendarWarning(null);
+      setFinanceCalendarLoading(false);
+      return;
+    }
+    void loadFinanceCalendar();
+  }, [financeCalendarReferenceDate, financeCalendarRefreshKey, hasAccounts, loadFinanceCalendar]);
 
   useEffect(() => {
     refreshContextRef.current = {
@@ -480,6 +1174,31 @@ const PortfolioPage: React.FC = () => {
     rows.sort((a, b) => Number(b.marketValueBase || 0) - Number(a.marketValueBase || 0));
     return rows;
   }, [snapshot]);
+
+  const financeCalendarAccountNameById = useMemo(() => (
+    new Map(accounts.map((account) => [account.id, account.name]))
+  ), [accounts]);
+
+  const financeCalendarItems = useMemo(() => buildFinanceCalendarItems(
+    financeCalendarEvents,
+    snapshot,
+    risk,
+    positionRows,
+    financeCalendarAccountNameById,
+    financeCalendarText,
+  ), [
+    financeCalendarAccountNameById,
+    financeCalendarEvents,
+    financeCalendarText,
+    positionRows,
+    risk,
+    snapshot,
+  ]);
+
+  const financeCalendarStats = useMemo(
+    () => buildFinanceCalendarStats(financeCalendarItems),
+    [financeCalendarItems],
+  );
 
   const snapshotMatchesAccountScope = useMemo(() => {
     if (!snapshot) return false;
@@ -639,6 +1358,7 @@ const PortfolioPage: React.FC = () => {
         note: tradeForm.note || undefined,
       });
       await refreshPortfolioData();
+      setFinanceCalendarRefreshKey((current) => current + 1);
       setTradeForm((prev) => ({ ...prev, symbol: '', tradeUid: '', note: '' }));
     } catch (err) {
       setError(getParsedApiError(err));
@@ -662,6 +1382,7 @@ const PortfolioPage: React.FC = () => {
         note: cashForm.note || undefined,
       });
       await refreshPortfolioData();
+      setFinanceCalendarRefreshKey((current) => current + 1);
       setCashForm((prev) => ({ ...prev, note: '' }));
     } catch (err) {
       setError(getParsedApiError(err));
@@ -686,6 +1407,7 @@ const PortfolioPage: React.FC = () => {
         note: corpForm.note || undefined,
       });
       await refreshPortfolioData();
+      setFinanceCalendarRefreshKey((current) => current + 1);
       setCorpForm((prev) => ({ ...prev, symbol: '', note: '' }));
     } catch (err) {
       setError(getParsedApiError(err));
@@ -790,6 +1512,7 @@ const PortfolioPage: React.FC = () => {
         setEventPage(nextPage);
       }
       await refreshPortfolioData(nextPage);
+      setFinanceCalendarRefreshKey((current) => current + 1);
     } catch (err) {
       setError(getParsedApiError(err));
     } finally {
@@ -838,6 +1561,7 @@ const PortfolioPage: React.FC = () => {
   const handleRefresh = async () => {
     await Promise.all([loadAccounts(), loadSnapshotAndRisk(), loadEvents(), loadBrokers()]);
     setPortfolioSignalsRefreshKey((current) => current + 1);
+    setFinanceCalendarRefreshKey((current) => current + 1);
   };
 
   const reloadSnapshotAndRiskForScope = useCallback(async (
@@ -1176,6 +1900,15 @@ const PortfolioPage: React.FC = () => {
           ) : null}
         </Card>
       </section>
+
+      <PortfolioFinanceCalendar
+        items={financeCalendarItems}
+        stats={financeCalendarStats}
+        text={financeCalendarText}
+        loading={financeCalendarLoading}
+        warning={financeCalendarWarning}
+        onRefresh={() => setFinanceCalendarRefreshKey((current) => current + 1)}
+      />
 
       <section className="grid grid-cols-1 xl:grid-cols-3 gap-3">
         <Card className="xl:col-span-2" padding="md">
