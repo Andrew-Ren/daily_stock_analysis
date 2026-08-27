@@ -10,7 +10,7 @@ describe('entityLink helpers', () => {
 
     expect(link.ref).toBe('stock:CN:600519');
     expect(link.entityType).toBe('stock');
-    expect(link.links.monitor).toBe('/alerts');
+    expect(link.links.monitor).toBeUndefined();
     expect(link.links.view).toBeUndefined();
     expect(link.metadata.stock_code).toBe('600519');
 
@@ -18,6 +18,14 @@ describe('entityLink helpers', () => {
     expect(actions.view.href).toBe('/stocks/600519');
     expect(actions.view.available).toBe(false);
     expect(actions.view.disabledReason).toBe('stock_detail_route_pending');
+    expect(actions.analyze.available).toBe(false);
+    expect(actions.watch.available).toBe(false);
+    expect(actions.monitor.available).toBe(false);
+    expect(actions.ask_ai.available).toBe(false);
+    expect(actions.analyze.disabledReason).toBe('stock_action_context_pending');
+    expect(actions.watch.disabledReason).toBe('stock_action_context_pending');
+    expect(actions.monitor.disabledReason).toBe('stock_action_context_pending');
+    expect(actions.ask_ai.disabledReason).toBe('stock_action_context_pending');
     expect(actions.monitor.params.target_entity_ref).toBe('stock:CN:600519');
   });
 

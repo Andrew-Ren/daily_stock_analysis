@@ -30,10 +30,10 @@ class _RouteTemplate:
 
 _ACTION_ROUTES: Dict[Tuple[str, str], _RouteTemplate] = {
     ("stock", "view"): _RouteTemplate("/stocks/{code}", available=False, disabled_reason="stock_detail_route_pending"),
-    ("stock", "analyze"): _RouteTemplate("/"),
-    ("stock", "watch"): _RouteTemplate("/"),
-    ("stock", "monitor"): _RouteTemplate("/alerts"),
-    ("stock", "ask_ai"): _RouteTemplate("/chat"),
+    ("stock", "analyze"): _RouteTemplate("/", available=False, disabled_reason="stock_action_context_pending"),
+    ("stock", "watch"): _RouteTemplate("/", available=False, disabled_reason="stock_action_context_pending"),
+    ("stock", "monitor"): _RouteTemplate("/alerts", available=False, disabled_reason="stock_action_context_pending"),
+    ("stock", "ask_ai"): _RouteTemplate("/chat", available=False, disabled_reason="stock_action_context_pending"),
     ("stock", "compare"): _RouteTemplate("/stocks/compare", available=False, disabled_reason="compare_route_pending"),
     ("index", "view"): _RouteTemplate("/market", available=False, disabled_reason="market_detail_route_pending"),
     ("sector", "view"): _RouteTemplate("/market", available=False, disabled_reason="market_detail_route_pending"),
@@ -115,12 +115,13 @@ def build_stock_entity_link(
 ) -> Dict[str, Any]:
     """Build an EntityLink payload for a stock-like symbol."""
     entity_id = stock_entity_id(stock_code, market=market)
+    _, canonical_stock_code = _split_market_entity_id(entity_id)
     display_label = label or stock_name or stock_code
     return build_entity_link(
         "stock",
         entity_id,
         label=display_label,
-        metadata={"stock_code": normalize_stock_code(stock_code)},
+        metadata={"stock_code": canonical_stock_code},
     )
 
 

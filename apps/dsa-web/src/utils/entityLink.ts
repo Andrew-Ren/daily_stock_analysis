@@ -18,10 +18,10 @@ const ACTION_LABELS: Record<EntityActionType, string> = {
 
 const ACTION_ROUTES: Partial<Record<`${EntityType}:${EntityActionType}`, RouteTemplate>> = {
   'stock:view': { href: '/stocks/{code}', available: false, disabledReason: 'stock_detail_route_pending' },
-  'stock:analyze': { href: '/' },
-  'stock:watch': { href: '/' },
-  'stock:monitor': { href: '/alerts' },
-  'stock:ask_ai': { href: '/chat' },
+  'stock:analyze': { href: '/', available: false, disabledReason: 'stock_action_context_pending' },
+  'stock:watch': { href: '/', available: false, disabledReason: 'stock_action_context_pending' },
+  'stock:monitor': { href: '/alerts', available: false, disabledReason: 'stock_action_context_pending' },
+  'stock:ask_ai': { href: '/chat', available: false, disabledReason: 'stock_action_context_pending' },
   'stock:compare': { href: '/stocks/compare', available: false, disabledReason: 'compare_route_pending' },
   'index:view': { href: '/market', available: false, disabledReason: 'market_detail_route_pending' },
   'sector:view': { href: '/market', available: false, disabledReason: 'market_detail_route_pending' },
