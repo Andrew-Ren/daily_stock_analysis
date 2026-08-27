@@ -1,5 +1,5 @@
 import type React from 'react';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ArrowLeft,
   BarChart3,
@@ -88,6 +88,8 @@ const StockResearchPage: React.FC = () => {
   const [selectedReport, setSelectedReport] = useState<AnalysisReport | null>(null);
   const [news, setNews] = useState<NewsIntelItem[]>([]);
   const [state, setState] = useState<LoadState>({ loading: true, error: null });
+  const workspaceRequestIdRef = useRef(0);
+  const reportRequestIdRef = useRef(0);
 
   const displayName = quote?.stockName || selectedReport?.meta.stockName || reports[0]?.stockName || stockCode;
   const evidenceBlocks = selectedReport?.details?.analysisContextPackOverview?.blocks ?? [];
@@ -99,13 +101,28 @@ const StockResearchPage: React.FC = () => {
     [history?.data],
   );
 
-  const loadReportDetail = useCallback(async (recordId: number) => {
+  const loadReportDetail = useCallback(async (recordId: number, workspaceRequestId = workspaceRequestIdRef.current) => {
+    const reportRequestId = reportRequestIdRef.current + 1;
+    reportRequestIdRef.current = reportRequestId;
+    const isStale = () =>
+      workspaceRequestIdRef.current !== workspaceRequestId || reportRequestIdRef.current !== reportRequestId;
+
     const report = await historyApi.getDetail(recordId);
+    if (isStale()) {
+      return;
+    }
     setSelectedReport(report);
+
     try {
       const newsResponse = await historyApi.getNews(recordId, 6);
+      if (isStale()) {
+        return;
+      }
       setNews(newsResponse.items);
     } catch {
+      if (isStale()) {
+        return;
+      }
       setNews([]);
     }
   }, []);
@@ -120,12 +137,19 @@ const StockResearchPage: React.FC = () => {
     }
 
     setState({ loading: true, error: null });
+    const workspaceRequestId = workspaceRequestIdRef.current + 1;
+    workspaceRequestIdRef.current = workspaceRequestId;
+    reportRequestIdRef.current += 1;
+
     try {
       const [quoteResult, historyResult, reportsResult] = await Promise.allSettled([
         stocksApi.getQuote(stockCode),
         stocksApi.getHistory(stockCode, { period: 'daily', days: 120 }),
         historyApi.getList({ stockCode, limit: 8 }),
       ]);
+      if (workspaceRequestIdRef.current !== workspaceRequestId) {
+        return;
+      }
 
       setQuote(quoteResult.status === 'fulfilled' ? quoteResult.value : null);
       setHistory(historyResult.status === 'fulfilled' ? historyResult.value : null);
@@ -133,10 +157,13 @@ const StockResearchPage: React.FC = () => {
       setReports(nextReports);
 
       if (nextReports[0]?.id !== undefined) {
-        await loadReportDetail(nextReports[0].id);
+        await loadReportDetail(nextReports[0].id, workspaceRequestId);
       } else {
         setSelectedReport(null);
         setNews([]);
+      }
+      if (workspaceRequestIdRef.current !== workspaceRequestId) {
+        return;
       }
 
       const failed = [quoteResult, historyResult, reportsResult].filter((result) => result.status === 'rejected');
@@ -145,6 +172,9 @@ const StockResearchPage: React.FC = () => {
         error: failed.length === 3 ? getParsedApiError((failed[0] as PromiseRejectedResult).reason) : null,
       });
     } catch (error: unknown) {
+      if (workspaceRequestIdRef.current !== workspaceRequestId) {
+        return;
+      }
       setState({ loading: false, error: getParsedApiError(error) });
     }
   }, [loadReportDetail, stockCode]);
@@ -157,7 +187,11 @@ const StockResearchPage: React.FC = () => {
     const timeout = window.setTimeout(() => {
       void loadWorkspace();
     }, 0);
-    return () => window.clearTimeout(timeout);
+    return () => {
+      window.clearTimeout(timeout);
+      workspaceRequestIdRef.current += 1;
+      reportRequestIdRef.current += 1;
+    };
   }, [loadWorkspace]);
 
   const handleAnalyze = () => {
