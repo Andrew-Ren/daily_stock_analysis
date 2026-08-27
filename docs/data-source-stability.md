@@ -29,6 +29,18 @@
 | 港股 | Futu、Longbridge、YFinance、AkShare、Tushare | 配置 `FUTU_OPEND_HOST` 后 Futu 作为实时与基本面主源，按 `FUTU_HK_REALTIME_SOURCE_PRIORITY` 顺序尝试 | Futu 失败时回退 Longbridge / AkShare / YFinance；Longbridge 冷却或失败时继续回退 YFinance / 其他可用源 |
 | 美股 | Longbridge、YFinance、AkShare、Tushare、Finnhub、AlphaVantage、Stooq | 配置 Longbridge 凭证后参与美股日线/实时兜底；YFinance 保持基础兜底 | Longbridge 冷却或失败时回退 YFinance / 其他可用源 |
 
+## 统一数据能力只读契约
+
+Web/API 提供 `GET /api/v1/data/overview` 和等价别名 `GET /api/v1/data/capabilities`，用于把数据源能力、数据集质量和场景优先级以同一个只读结构暴露给首页看板、数据中心、个股详情、自选和选股页面。
+
+首版契约只读取配置和 `DataFetcherManager` 的 fetcher 快照，不触发外部行情请求，也不返回任何原始密钥。响应分三层：
+
+- `providers`：每个 provider 的 `enabled`、`configured`、`status`、`markets`、`datasets` 和非敏感 warning。
+- `datasets`：`quote.realtime`、`kline.daily`、`index.daily`、`market.overview`、`financial.snapshot`、`news.events`、`strategy.screening`、`alert.monitor`、`portfolio.account` 的 `status/source/fallback_from/stale/warnings`。
+- `priorities`：`cn.realtime`、`hk.realtime`、`daily.generic`、`cn.index.daily`、`market.overview`、`screening.snapshot`、`news.events` 的当前 source order。
+
+其中 `unknown` 表示尚未执行运行态探测，`unconfigured` 表示缺少必要配置，`degraded` 表示前置优先源不可用但后续源仍可消费。后续 Data Center 可以在同一结构上追加 last_success、coverage、cooldown 和运行历史，不需要各页面各自维护数据质量口径。
+
 ## 总体链路图
 
 ```mermaid
