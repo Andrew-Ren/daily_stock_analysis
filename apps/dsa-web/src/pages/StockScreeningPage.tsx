@@ -279,6 +279,60 @@ const getFactorEntries = (item: ScreeningCandidate) =>
     .sort((a, b) => Number(b[1]) - Number(a[1]))
     .slice(0, 6);
 
+const getWhySelected = (item: ScreeningCandidate) => {
+  const reasons: string[] = [];
+  const factors = getFactorEntries(item)
+    .slice(0, 3)
+    .map(([key, value]) => `${FACTOR_LABELS[key] || key} ${Number(value).toFixed(0)}`);
+  const tags = (item.postAnalysisTags || [])
+    .slice(0, 2)
+    .map((tag) => POST_TAG_LABELS[tag] || tag);
+
+  if (item.llmThesis) {
+    reasons.push(item.llmThesis);
+  } else if (item.reason) {
+    reasons.push(item.reason);
+  }
+  if (factors.length > 0) {
+    reasons.push(`核心因子：${factors.join('、')}`);
+  }
+  if (tags.length > 0) {
+    reasons.push(`策略标签：${tags.join('、')}`);
+  }
+  if (item.llmStyleFit) {
+    reasons.push(`风格匹配：${item.llmStyleFit}`);
+  }
+
+  return reasons.slice(0, 3).join('；') || getCandidateReason(item);
+};
+
+const getWhyNow = (item: ScreeningCandidate) => {
+  const reasons: string[] = [];
+  const firstNews = item.dsaNews?.find((newsItem) => newsItem.title || newsItem.snippet);
+  const firstEvent = item.dsaEvents?.find((eventItem) => eventItem.title || eventItem.snippet);
+
+  if (item.llmCatalysts?.length) {
+    reasons.push(`催化：${item.llmCatalysts.slice(0, 2).join('、')}`);
+  }
+  if (firstNews) {
+    reasons.push(`消息：${firstNews.title || firstNews.snippet}`);
+  }
+  if (firstEvent) {
+    reasons.push(`事件：${firstEvent.title || firstEvent.snippet}`);
+  }
+  if (item.changePct != null && !Number.isNaN(Number(item.changePct))) {
+    reasons.push(`涨跌幅：${formatNumber(item.changePct)}%`);
+  }
+  if (item.amount != null && !Number.isNaN(Number(item.amount))) {
+    reasons.push(`成交额：${formatAmount(item.amount)}`);
+  }
+  if (item.llmWatchItems?.length) {
+    reasons.push(`观察：${item.llmWatchItems.slice(0, 2).join('、')}`);
+  }
+
+  return reasons.slice(0, 3).join('；') || '等待新的价格、消息或事件确认。';
+};
+
 const toMessageList = (values: string[] | undefined) =>
   Array.isArray(values) ? values.map((value) => String(value).trim()).filter(Boolean) : [];
 
@@ -1759,6 +1813,16 @@ const StockScreeningPage: React.FC = () => {
                           <td colSpan={10} className="px-4 py-4">
                             <div className="grid gap-4 lg:grid-cols-[1.1fr_1fr]">
                               <div className="space-y-3">
+                                <div className="grid gap-3 md:grid-cols-2">
+                                  <div className="rounded-xl border border-cyan/25 bg-cyan/5 px-3 py-2.5">
+                                    <p className="text-xs font-semibold text-cyan">为什么入选</p>
+                                    <p className="mt-1 text-sm leading-6 text-foreground">{getWhySelected(item)}</p>
+                                  </div>
+                                  <div className="rounded-xl border border-orange-400/25 bg-orange-500/5 px-3 py-2.5">
+                                    <p className="text-xs font-semibold text-orange-500">为什么现在</p>
+                                    <p className="mt-1 text-sm leading-6 text-foreground">{getWhyNow(item)}</p>
+                                  </div>
+                                </div>
                                 <div>
                                   <p className="text-xs font-semibold text-secondary-text">摘要</p>
                                   <p className="mt-1 text-sm leading-6 text-foreground">{getCandidateReason(item)}</p>

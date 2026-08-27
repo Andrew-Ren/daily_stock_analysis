@@ -1316,6 +1316,12 @@ describe('StockScreeningPage', () => {
           name: '贵州茅台',
           score: 91.2,
           reason: 'Screening pick',
+          changePct: 1.2,
+          amount: 1042000000,
+          factorScores: {
+            value: 87.4,
+            liquidity: 92.1,
+          },
           dsaAnalysisSummary: 'DSA行情：现价 1688，涨跌幅 1.2%；DSA新闻：贵州茅台最新公告',
           dsaNews: [{ title: '贵州茅台最新公告', source: '测试源' }],
           dsaContext: {
@@ -1340,6 +1346,10 @@ describe('StockScreeningPage', () => {
 
     expect(await screen.findByText('深度补充：1 / 1')).toBeInTheDocument();
 
+    expect(screen.getByText('为什么入选')).toBeInTheDocument();
+    expect(screen.getByText(/Screening pick；核心因子：流动性 92、估值 87/)).toBeInTheDocument();
+    expect(screen.getByText('为什么现在')).toBeInTheDocument();
+    expect(screen.getByText(/消息：贵州茅台最新公告；涨跌幅：1.20%；成交额：10.42 亿/)).toBeInTheDocument();
     expect(screen.getByText('增强摘要')).toBeInTheDocument();
     expect(screen.getByText(/行情：现价 1688/)).toBeInTheDocument();
     expect(screen.getByText('相关新闻')).toBeInTheDocument();
