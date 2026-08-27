@@ -36,7 +36,7 @@ Web/API 提供 `GET /api/v1/data/overview` 和等价别名 `GET /api/v1/data/cap
 首版契约只读取配置和 `DataFetcherManager` 的 fetcher 快照，不触发外部行情请求，也不返回任何原始密钥。响应分三层：
 
 - `providers`：每个 provider 的 `enabled`、`configured`、`status`、`markets`、`datasets` 和非敏感 warning。
-- `datasets`：`quote.realtime`、`kline.daily`、`index.daily`、`market.overview`、`financial.snapshot`、`news.events`、`strategy.screening`、`alert.monitor`、`portfolio.account` 的 `status/source/fallback_from/stale/warnings`；其中 `quote.realtime` 和 `kline.daily` 会额外聚合 `cn/hk/us` 的市场级 coverage，避免把单市场健康度误报成全局可用。
+- `datasets`：`quote.realtime`、`kline.daily`、`index.daily`、`market.overview`、`financial.snapshot`、`news.events`、`strategy.screening`、`alert.monitor`、`portfolio.account` 的 `status/source/fallback_from/stale/warnings`；其中 `quote.realtime`、`kline.daily` 和 `financial.snapshot` 会额外聚合 `cn/hk/us` 的市场级 coverage，避免把单市场健康度误报成全局可用。
 - `priorities`：`cn.realtime`、`hk.realtime`、`us.realtime`、`daily.generic`、`cn.index.daily`、`market.overview`、`screening.snapshot`、`news.events` 的当前 source order。
 
 其中 `unknown` 表示尚未执行运行态探测，`unconfigured` 表示缺少必要配置，`degraded` 表示前置优先源不可用但后续源仍可消费。后续 Data Center 可以在同一结构上追加 last_success、coverage、cooldown 和运行历史，不需要各页面各自维护数据质量口径。

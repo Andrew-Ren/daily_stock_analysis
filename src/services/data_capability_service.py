@@ -7,7 +7,7 @@ import logging
 import os
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from typing import Any, Dict, Iterable, List, Optional, Sequence
+from typing import Any, Callable, Dict, Iterable, List, Optional, Sequence
 
 from src.config import get_config
 
@@ -454,23 +454,22 @@ class DataCapabilityService:
                 dataset="kline.daily",
                 market_priorities=daily_market_priorities,
                 provider_map=provider_map,
+                status_resolvers=self._daily_status_resolvers(fetchers, provider_map),
             ),
             self._dataset_from_priority(
                 dataset="index.daily",
                 priority=priority_map.get("cn.index.daily", {}),
                 provider_map=provider_map,
+                status_resolver=self._index_daily_status_resolver(fetchers, provider_map),
             ),
             self._dataset_from_priority(
                 dataset="market.overview",
                 priority=priority_map.get("market.overview", {}),
                 provider_map=provider_map,
             ),
-            self._dataset_from_priority(
+            self._aggregate_market_dataset(
                 dataset="financial.snapshot",
-                priority={
-                    "providers": ["akshare", "yfinance", "tushare", "futu", "longbridge"],
-                    "warnings": [],
-                },
+                market_priorities=self._fundamental_market_priorities(),
                 provider_map=provider_map,
                 disabled=not bool(getattr(self.config, "enable_fundamental_pipeline", True)),
                 disabled_warning="fundamental_pipeline_disabled",
@@ -508,6 +507,71 @@ class DataCapabilityService:
             },
         }
 
+    def _daily_status_resolvers(
+        self,
+        fetchers: Sequence[Any],
+        provider_map: Dict[str, Dict[str, Any]],
+    ) -> Dict[str, Callable[[str], str]]:
+        fetcher_map = {
+            str(getattr(fetcher, "name", "")): fetcher
+            for fetcher in fetchers
+            if getattr(fetcher, "name", None)
+        }
+        return {
+            market: self._market_daily_status_resolver(
+                market=market,
+                provider_map=provider_map,
+                fetcher_map=fetcher_map,
+            )
+            for market in ("cn", "hk", "us")
+        }
+
+    def _index_daily_status_resolver(
+        self,
+        fetchers: Sequence[Any],
+        provider_map: Dict[str, Dict[str, Any]],
+    ) -> Callable[[str], str]:
+        fetcher_map = {
+            str(getattr(fetcher, "name", "")): fetcher
+            for fetcher in fetchers
+            if getattr(fetcher, "name", None)
+        }
+        return self._market_daily_status_resolver(
+            market="cn_index",
+            provider_map=provider_map,
+            fetcher_map=fetcher_map,
+        )
+
+    def _market_daily_status_resolver(
+        self,
+        *,
+        market: str,
+        provider_map: Dict[str, Dict[str, Any]],
+        fetcher_map: Dict[str, Any],
+    ) -> Callable[[str], str]:
+        def resolve(token: str) -> str:
+            provider_status = self._source_token_status(token, provider_map)
+            if provider_status != "ok":
+                return provider_status
+            definition = _PROVIDER_DEFINITION_MAP.get(token)
+            fetcher_name = definition.fetcher_name if definition is not None else None
+            fetcher = fetcher_map.get(fetcher_name or "")
+            if fetcher is not None and not self._daily_source_available(fetcher, market):
+                return "cooldown"
+            return provider_status
+
+        return resolve
+
+    @staticmethod
+    def _daily_source_available(fetcher: Any, market: str) -> bool:
+        try:
+            from data_provider.base import DataFetcherManager
+
+            return bool(DataFetcherManager._is_daily_source_available(fetcher, market))
+        except Exception as exc:  # noqa: BLE001 - diagnostics must fail open.
+            logger.debug("Failed to probe daily source health for capability overview: %s", exc)
+            return True
+
     def _filter_market_dataset_priority(
         self,
         *,
@@ -542,6 +606,20 @@ class DataCapabilityService:
             return True
         return dataset in definition.datasets and market in definition.markets
 
+    def _fundamental_market_priorities(self) -> Dict[str, Dict[str, Any]]:
+        hk_providers = (
+            ["futu", "yfinance"]
+            if self._is_provider_configured(
+                next(item for item in _PROVIDER_DEFINITIONS if item.name == "futu")
+            )
+            else ["yfinance"]
+        )
+        return {
+            "cn": {"providers": ["akshare"], "warnings": []},
+            "hk": {"providers": hk_providers, "warnings": []},
+            "us": {"providers": ["yfinance"], "warnings": []},
+        }
+
     def _us_daily_priority(self, fetchers: Sequence[Any]) -> List[str]:
         fetcher_map = {str(getattr(fetcher, "name", "")): fetcher for fetcher in fetchers}
         longbridge = fetcher_map.get("LongbridgeFetcher")
@@ -568,6 +646,7 @@ class DataCapabilityService:
         dataset: str,
         market_priorities: Dict[str, Dict[str, Any]],
         provider_map: Dict[str, Dict[str, Any]],
+        status_resolvers: Optional[Dict[str, Callable[[str], str]]] = None,
         disabled: bool = False,
         disabled_warning: str = "",
     ) -> Dict[str, Any]:
@@ -585,6 +664,7 @@ class DataCapabilityService:
                 dataset=dataset,
                 priority=priority,
                 provider_map=provider_map,
+                status_resolver=(status_resolvers or {}).get(market),
             )
             for market, priority in market_priorities.items()
         }
@@ -644,6 +724,7 @@ class DataCapabilityService:
         dataset: str,
         priority: Dict[str, Any],
         provider_map: Dict[str, Dict[str, Any]],
+        status_resolver: Optional[Callable[[str], str]] = None,
         disabled: bool = False,
         disabled_warning: str = "",
     ) -> Dict[str, Any]:
@@ -669,7 +750,11 @@ class DataCapabilityService:
         fallback_from: List[str] = []
         token_statuses: List[str] = []
         for token in providers:
-            token_status = self._source_token_status(token, provider_map)
+            token_status = (
+                status_resolver(token)
+                if callable(status_resolver)
+                else self._source_token_status(token, provider_map)
+            )
             token_statuses.append(token_status)
             if token_status == "ok":
                 selected = token
@@ -781,17 +866,57 @@ class DataCapabilityService:
                 "warnings": ["screening_disabled"],
             }
         providers = list(priority.get("providers") or [])
-        return {
-            "dataset": "strategy.screening",
-            "status": "ok" if providers else "unknown",
-            "source": providers[0] if providers else None,
-            "stale": None,
-            "last_success": None,
-            "last_error": None,
-            "fallback_from": [],
-            "coverage": None,
-            "warnings": list(priority.get("warnings") or []),
-        }
+        warnings = list(priority.get("warnings") or [])
+        if not providers:
+            return self._unknown_dataset("strategy.screening", warnings=["priority_empty", *warnings])
+
+        screening_available, source_health = self._screening_runtime_health()
+        if not screening_available:
+            return {
+                "dataset": "strategy.screening",
+                "status": "unavailable",
+                "source": None,
+                "stale": None,
+                "last_success": None,
+                "last_error": None,
+                "fallback_from": [],
+                "coverage": None,
+                "warnings": [*warnings, "screening_engine_unavailable"],
+            }
+
+        return self._dataset_from_priority(
+            dataset="strategy.screening",
+            priority={"providers": providers, "warnings": warnings},
+            provider_map={},
+            status_resolver=self._screening_source_status_resolver(source_health),
+        )
+
+    def _screening_runtime_health(self) -> tuple[bool, Dict[str, Any]]:
+        try:
+            from src.services.screening_service import (
+                _get_screening_source_health_snapshot,
+                _get_screening_status_snapshot,
+            )
+
+            _, available, _ = _get_screening_status_snapshot()
+            return bool(available), _get_screening_source_health_snapshot()
+        except Exception as exc:  # noqa: BLE001 - diagnostics must fail open.
+            logger.debug("Failed to read screening runtime health for capability overview: %s", exc)
+            return True, {}
+
+    @staticmethod
+    def _screening_source_status_resolver(source_health: Dict[str, Any]) -> Callable[[str], str]:
+        snapshot_health = source_health.get("snapshot") if isinstance(source_health, dict) else {}
+
+        def resolve(token: str) -> str:
+            if token not in _SCREENING_SOURCES:
+                return "unknown"
+            state = snapshot_health.get(token) if isinstance(snapshot_health, dict) else None
+            if isinstance(state, dict) and bool(state.get("disabled")):
+                return "cooldown"
+            return "ok"
+
+        return resolve
 
     def _build_global_warnings(
         self,

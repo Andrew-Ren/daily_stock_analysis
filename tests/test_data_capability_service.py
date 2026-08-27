@@ -216,6 +216,86 @@ def test_daily_dataset_quality_prefers_longbridge_for_us_when_available() -> Non
     assert "us:finnhub" not in daily_quality["fallback_from"]
 
 
+def test_daily_dataset_quality_honors_market_specific_circuit_breakers() -> None:
+    manager = _FetcherManager([
+        _Fetcher("EfinanceFetcher", 0, available=True),
+        _Fetcher("YfinanceFetcher", 4, available=True),
+    ])
+    service = DataCapabilityService(
+        config=_config(),
+        fetcher_manager=manager,
+    )
+
+    with patch(
+        "data_provider.base.DataFetcherManager._is_daily_source_available",
+        side_effect=lambda fetcher, market: not (
+            getattr(fetcher, "name", "") == "YfinanceFetcher" and market == "hk"
+        ),
+    ):
+        overview = service.get_overview()
+
+    daily_quality = _dataset(overview, "kline.daily")
+
+    assert daily_quality["status"] == "partial"
+    assert daily_quality["coverage"]["markets"]["cn"]["status"] == "ok"
+    assert daily_quality["coverage"]["markets"]["hk"]["status"] == "unavailable"
+    assert daily_quality["coverage"]["markets"]["hk"]["source"] is None
+    assert daily_quality["coverage"]["markets"]["us"]["status"] == "degraded"
+    assert daily_quality["coverage"]["markets"]["us"]["source"] == "yfinance"
+    assert "hk:source_status:yfinance:cooldown" in daily_quality["warnings"]
+
+
+def test_index_daily_quality_honors_cn_index_circuit_breakers() -> None:
+    manager = _FetcherManager([
+        _Fetcher("TencentFetcher", 0, available=True),
+        _Fetcher("AkshareFetcher", 1, available=True),
+    ])
+    service = DataCapabilityService(
+        config=_config(),
+        fetcher_manager=manager,
+    )
+
+    with patch(
+        "data_provider.base.DataFetcherManager._is_daily_source_available",
+        side_effect=lambda fetcher, market: not (
+            getattr(fetcher, "name", "") == "TencentFetcher" and market == "cn_index"
+        ),
+    ):
+        overview = service.get_overview()
+
+    index_quality = _dataset(overview, "index.daily")
+
+    assert index_quality["status"] == "degraded"
+    assert index_quality["source"] == "akshare"
+    assert index_quality["fallback_from"] == ["tencent"]
+    assert index_quality["warnings"] == ["source_status:tencent:cooldown"]
+
+
+def test_fundamental_dataset_quality_is_market_aware() -> None:
+    manager = _FetcherManager([
+        _Fetcher("AkshareFetcher", 1, available=True),
+        _Fetcher("TushareFetcher", 2, available=True),
+        _Fetcher("YfinanceFetcher", 4, available=False),
+    ])
+    service = DataCapabilityService(
+        config=_config(tushare_token="token"),
+        fetcher_manager=manager,
+    )
+
+    overview = service.get_overview()
+    fundamental_quality = _dataset(overview, "financial.snapshot")
+
+    assert fundamental_quality["status"] == "partial"
+    assert fundamental_quality["coverage"]["markets"]["cn"]["status"] == "ok"
+    assert fundamental_quality["coverage"]["markets"]["cn"]["source"] == "akshare"
+    assert fundamental_quality["coverage"]["markets"]["hk"]["status"] == "unavailable"
+    assert fundamental_quality["coverage"]["markets"]["hk"]["source"] is None
+    assert fundamental_quality["coverage"]["markets"]["us"]["status"] == "unavailable"
+    assert fundamental_quality["coverage"]["markets"]["us"]["source"] is None
+    assert "hk:source_status:yfinance:unavailable" in fundamental_quality["warnings"]
+    assert "us:source_status:yfinance:unavailable" in fundamental_quality["warnings"]
+
+
 def test_screening_snapshot_priority_preserves_explicit_env_override() -> None:
     service = DataCapabilityService(
         config=_config(screening_enabled=True),
@@ -233,6 +313,91 @@ def test_screening_snapshot_priority_preserves_explicit_env_override() -> None:
     screening = priorities["screening.snapshot"]
 
     assert screening["providers"] == ["tushare", "em_datacenter"]
+
+
+def test_screening_dataset_reports_engine_unavailable() -> None:
+    service = DataCapabilityService(
+        config=_config(screening_enabled=True),
+        fetcher_manager=_FetcherManager([]),
+    )
+
+    with patch.dict("os.environ", {"SNAPSHOT_SOURCE_PRIORITY": "tushare,em_datacenter"}, clear=False):
+        with patch(
+            "src.services.screening_service._get_screening_status_snapshot",
+            return_value=({}, False, {"error": "screening_unavailable"}),
+        ):
+            with patch(
+                "src.services.screening_service._get_screening_source_health_snapshot",
+                return_value={},
+            ):
+                overview = service.get_overview()
+
+    screening_quality = _dataset(overview, "strategy.screening")
+
+    assert screening_quality["status"] == "unavailable"
+    assert screening_quality["source"] is None
+    assert screening_quality["warnings"] == ["screening_engine_unavailable"]
+
+
+def test_screening_dataset_reports_cooldown_sources_as_unavailable() -> None:
+    service = DataCapabilityService(
+        config=_config(screening_enabled=True),
+        fetcher_manager=_FetcherManager([]),
+    )
+
+    with patch.dict("os.environ", {"SNAPSHOT_SOURCE_PRIORITY": "tushare,em_datacenter"}, clear=False):
+        with patch(
+            "src.services.screening_service._get_screening_status_snapshot",
+            return_value=({"available": True}, True, None),
+        ):
+            with patch(
+                "src.services.screening_service._get_screening_source_health_snapshot",
+                return_value={
+                    "snapshot": {
+                        "tushare": {"disabled": True},
+                        "em_datacenter": {"disabled": True},
+                    }
+                },
+            ):
+                overview = service.get_overview()
+
+    screening_quality = _dataset(overview, "strategy.screening")
+
+    assert screening_quality["status"] == "unavailable"
+    assert screening_quality["source"] is None
+    assert screening_quality["fallback_from"] == ["tushare", "em_datacenter"]
+    assert screening_quality["warnings"] == [
+        "source_status:tushare:cooldown",
+        "source_status:em_datacenter:cooldown",
+    ]
+
+
+def test_screening_dataset_does_not_select_unknown_snapshot_source() -> None:
+    service = DataCapabilityService(
+        config=_config(screening_enabled=True),
+        fetcher_manager=_FetcherManager([]),
+    )
+
+    with patch.dict("os.environ", {"SNAPSHOT_SOURCE_PRIORITY": "mystery_source,em_datacenter"}, clear=False):
+        with patch(
+            "src.services.screening_service._get_screening_status_snapshot",
+            return_value=({"available": True}, True, None),
+        ):
+            with patch(
+                "src.services.screening_service._get_screening_source_health_snapshot",
+                return_value={"snapshot": {}},
+            ):
+                overview = service.get_overview()
+
+    screening_quality = _dataset(overview, "strategy.screening")
+
+    assert screening_quality["status"] == "degraded"
+    assert screening_quality["source"] == "em_datacenter"
+    assert screening_quality["fallback_from"] == ["mystery_source"]
+    assert screening_quality["warnings"] == [
+        "unknown_source:mystery_source",
+        "source_status:mystery_source:unknown",
+    ]
 
 
 def test_daily_capability_contract_includes_market_specific_daily_fetchers() -> None:
