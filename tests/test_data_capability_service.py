@@ -245,6 +245,29 @@ def test_daily_dataset_quality_honors_market_specific_circuit_breakers() -> None
     assert "hk:source_status:yfinance:cooldown" in daily_quality["warnings"]
 
 
+def test_market_overview_dataset_quality_is_market_aware() -> None:
+    manager = _FetcherManager([
+        _Fetcher("EfinanceFetcher", 0, available=True),
+        _Fetcher("YfinanceFetcher", 4, available=True),
+    ])
+    service = DataCapabilityService(
+        config=_config(),
+        fetcher_manager=manager,
+    )
+
+    overview = service.get_overview()
+    market_overview = _dataset(overview, "market.overview")
+
+    assert market_overview["status"] == "ok"
+    assert market_overview["source"] is None
+    assert market_overview["coverage"]["markets"]["cn"]["source"] == "efinance"
+    assert market_overview["coverage"]["markets"]["hk"]["source"] == "yfinance"
+    assert market_overview["coverage"]["markets"]["us"]["source"] == "yfinance"
+    assert market_overview["coverage"]["markets"]["jp"]["source"] == "yfinance"
+    assert market_overview["coverage"]["markets"]["kr"]["source"] == "yfinance"
+    assert market_overview["coverage"]["markets"]["tw"]["source"] == "yfinance"
+
+
 def test_index_daily_quality_honors_cn_index_circuit_breakers() -> None:
     manager = _FetcherManager([
         _Fetcher("TencentFetcher", 0, available=True),
@@ -436,6 +459,7 @@ def test_disabled_runtime_features_surface_dataset_quality_warnings() -> None:
     assert _dataset(overview, "financial.snapshot")["warnings"] == ["fundamental_pipeline_disabled"]
     assert _dataset(overview, "strategy.screening")["status"] == "unconfigured"
     assert _dataset(overview, "strategy.screening")["warnings"] == ["screening_disabled"]
+    assert _dataset(overview, "news.events")["source"] is None
 
 
 def test_data_capability_api_paths_return_valid_contract() -> None:

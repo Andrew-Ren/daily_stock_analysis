@@ -151,6 +151,13 @@ _REALTIME_SOURCE_PROVIDER = {
 }
 
 _SCREENING_SOURCES = {"tushare", "sina", "efinance", "akshare_em", "em_datacenter"}
+_MARKET_OVERVIEW_PROVIDER_MARKETS = {
+    "tickflow": {"cn"},
+    "efinance": {"cn"},
+    "akshare": {"cn"},
+    "tushare": {"cn"},
+    "yfinance": {"cn", "hk", "us", "jp", "kr", "tw"},
+}
 
 
 def _truthy(value: Any) -> bool:
@@ -387,7 +394,7 @@ class DataCapabilityService:
         if _truthy(getattr(self.config, "tickflow_api_key", None)):
             tokens.append("tickflow")
         for token in generic_daily:
-            if token in {"efinance", "akshare", "tushare"} and token not in tokens:
+            if token in _MARKET_OVERVIEW_PROVIDER_MARKETS and token not in tokens:
                 tokens.append(token)
         return tokens
 
@@ -462,9 +469,11 @@ class DataCapabilityService:
                 provider_map=provider_map,
                 status_resolver=self._index_daily_status_resolver(fetchers, provider_map),
             ),
-            self._dataset_from_priority(
+            self._aggregate_market_dataset(
                 dataset="market.overview",
-                priority=priority_map.get("market.overview", {}),
+                market_priorities=self._market_overview_market_priorities(
+                    priority_map.get("market.overview", {}),
+                ),
                 provider_map=provider_map,
             ),
             self._aggregate_market_dataset(
@@ -505,6 +514,22 @@ class DataCapabilityService:
                 "providers": self._us_daily_priority(fetchers),
                 "warnings": [],
             },
+        }
+
+    def _market_overview_market_priorities(
+        self,
+        priority: Dict[str, Any],
+    ) -> Dict[str, Dict[str, Any]]:
+        providers = list(priority.get("providers") or [])
+        warnings = list(priority.get("warnings") or [])
+        return {
+            market: self._filter_market_dataset_priority(
+                providers=providers,
+                dataset="market.overview",
+                market=market,
+                warnings=warnings,
+            )
+            for market in ("cn", "hk", "us", "jp", "kr", "tw")
         }
 
     def _daily_status_resolvers(
@@ -601,6 +626,8 @@ class DataCapabilityService:
         dataset: str,
         market: str,
     ) -> bool:
+        if dataset == "market.overview":
+            return market in _MARKET_OVERVIEW_PROVIDER_MARKETS.get(provider, set())
         definition = _PROVIDER_DEFINITION_MAP.get(provider)
         if definition is None:
             return True
@@ -843,7 +870,7 @@ class DataCapabilityService:
         return {
             "dataset": "news.events",
             "status": "unknown",
-            "source": "intelligence",
+            "source": None,
             "stale": None,
             "last_success": None,
             "last_error": None,
