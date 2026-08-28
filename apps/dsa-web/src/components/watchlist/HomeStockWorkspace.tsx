@@ -24,6 +24,7 @@ import { areStockCodesEquivalent } from '../../utils/stockCode';
 import { truncateStockName } from '../../utils/stockName';
 import { useUiLanguage } from '../../contexts/UiLanguageContext';
 import type { UiTextKey, UiTextParams } from '../../i18n/uiText';
+import { isWatchlistRowPendingAnalysis } from './watchlistRowState';
 
 export type HomeWorkspaceTab = 'watchlist' | 'today' | 'history';
 export type WatchlistAnalyzeMode = 'all' | 'pending';
@@ -388,9 +389,7 @@ export const HomeStockWorkspace: React.FC<HomeStockWorkspaceProps> = ({
   const { t } = useUiLanguage();
   const [draftCode, setDraftCode] = useState('');
   const [workspaceNoticeCode, setWorkspaceNoticeCode] = useState<string | null>(null);
-  const pendingWatchlistCount = watchlistRows
-    .filter((row) => !row.analyzedToday && !row.isTodayStatusLoading && !row.isTodayStatusUnknown)
-    .length;
+  const pendingWatchlistCount = watchlistRows.filter(isWatchlistRowPendingAnalysis).length;
   const isTodayStatusUnavailable = watchlistRows.some((row) => row.isTodayStatusLoading || row.isTodayStatusUnknown);
   const topTodayItem = todayItems[0];
   const tabs: Array<{ key: HomeWorkspaceTab; label: string }> = [
