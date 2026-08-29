@@ -170,6 +170,46 @@ class CalendarEventApiTestCase(unittest.TestCase):
             self.assertEqual(response.status_code, 200, response.text)
             self.assertEqual([item["id"] for item in response.json()["items"]], [expected_id])
 
+    def test_symbol_scope_derives_market_and_rejects_conflicts(self) -> None:
+        hk_event = self._create(symbol="HK00700", market=None)
+
+        self.assertEqual(hk_event["market"], "hk")
+        response = self.client.get(
+            "/api/v1/calendar/events",
+            params={"market": "hk", "symbol": "00700.HK"},
+        )
+        self.assertEqual(response.status_code, 200, response.text)
+        self.assertEqual([item["id"] for item in response.json()["items"]], [hk_event["id"]])
+
+        conflict = self.client.post(
+            "/api/v1/calendar/events",
+            json={
+                "title": "invalid market",
+                "event_type": "earnings",
+                "scope_type": "symbol",
+                "market": "cn",
+                "symbol": "HK00700",
+                "event_date": date.today().isoformat(),
+            },
+        )
+        self.assertEqual(conflict.status_code, 400, conflict.text)
+        self.assertEqual(conflict.json()["error"], "validation_error")
+
+    def test_symbol_scope_rejects_unresolvable_identity(self) -> None:
+        response = self.client.post(
+            "/api/v1/calendar/events",
+            json={
+                "title": "invalid symbol",
+                "event_type": "user",
+                "scope_type": "symbol",
+                "symbol": "X/Y",
+                "event_date": date.today().isoformat(),
+            },
+        )
+
+        self.assertEqual(response.status_code, 400, response.text)
+        self.assertEqual(response.json()["error"], "validation_error")
+
     def test_default_window_clamps_at_date_max(self) -> None:
         response = self.client.get(
             "/api/v1/calendar/events",
