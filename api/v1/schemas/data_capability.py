@@ -37,6 +37,10 @@ class DataProviderCapability(BaseModel):
     priority: Optional[int] = Field(None, description="Runtime fetcher priority when available")
     markets: List[str] = Field(default_factory=list, description="Supported markets")
     datasets: List[str] = Field(default_factory=list, description="Supported dataset identifiers")
+    dataset_markets: Dict[str, List[str]] = Field(
+        default_factory=dict,
+        description="Exact supported markets for each dataset; consumers must not infer a markets × datasets cross-product",
+    )
     warnings: List[str] = Field(default_factory=list, description="Stable warning codes")
     last_error: Optional[str] = Field(None, description="Last known non-sensitive error summary")
     cooldown: Optional[bool] = Field(None, description="Whether the provider is currently in cooldown")

@@ -7,7 +7,7 @@ import logging
 import os
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from typing import Any, Callable, Dict, Iterable, List, Optional, Sequence
+from typing import Any, Callable, Dict, Iterable, List, Mapping, Optional, Sequence
 
 from src.config import get_config
 
@@ -19,9 +19,22 @@ class _ProviderDefinition:
     name: str
     label: str
     fetcher_name: Optional[str]
-    markets: Sequence[str]
-    datasets: Sequence[str]
+    dataset_markets: Mapping[str, Sequence[str]]
     builtin: bool = False
+
+    @property
+    def datasets(self) -> Sequence[str]:
+        return tuple(self.dataset_markets)
+
+    @property
+    def markets(self) -> Sequence[str]:
+        supported = {
+            market
+            for markets in self.dataset_markets.values()
+            for market in markets
+        }
+        preferred_order = ("cn", "hk", "us", "jp", "kr", "tw")
+        return tuple(market for market in preferred_order if market in supported)
 
 
 _PROVIDER_DEFINITIONS: Sequence[_ProviderDefinition] = (
@@ -29,97 +42,124 @@ _PROVIDER_DEFINITIONS: Sequence[_ProviderDefinition] = (
         name="efinance",
         label="Efinance",
         fetcher_name="EfinanceFetcher",
-        markets=("cn",),
-        datasets=("quote.realtime", "kline.daily", "market.overview"),
+        dataset_markets={
+            "quote.realtime": ("cn",),
+            "kline.daily": ("cn",),
+            "market.overview": ("cn",),
+        },
         builtin=True,
     ),
     _ProviderDefinition(
         name="akshare",
         label="AkShare",
         fetcher_name="AkshareFetcher",
-        markets=("cn", "hk"),
-        datasets=(
-            "quote.realtime",
-            "kline.daily",
-            "index.daily",
-            "market.overview",
-            "financial.snapshot",
-        ),
+        dataset_markets={
+            "quote.realtime": ("cn", "hk"),
+            "kline.daily": ("cn", "hk"),
+            "index.daily": ("cn",),
+            "market.overview": ("cn",),
+            "financial.snapshot": ("cn",),
+        },
         builtin=True,
     ),
     _ProviderDefinition(
         name="tencent",
         label="Tencent",
         fetcher_name="TencentFetcher",
-        markets=("cn",),
-        datasets=("kline.daily", "index.daily"),
+        dataset_markets={
+            "kline.daily": ("cn",),
+            "index.daily": ("cn",),
+        },
         builtin=True,
     ),
     _ProviderDefinition(
         name="yfinance",
         label="YFinance",
         fetcher_name="YfinanceFetcher",
-        markets=("cn", "hk", "us", "jp", "kr", "tw"),
-        datasets=("quote.realtime", "kline.daily", "index.daily", "financial.snapshot"),
+        dataset_markets={
+            "quote.realtime": ("cn", "hk", "us", "jp", "kr", "tw"),
+            "kline.daily": ("cn", "hk", "us", "jp", "kr", "tw"),
+            "index.daily": ("cn", "hk", "us", "jp", "kr", "tw"),
+            "market.overview": ("cn", "hk", "us", "jp", "kr", "tw"),
+            "financial.snapshot": ("hk", "us", "jp", "kr", "tw"),
+        },
         builtin=True,
     ),
     _ProviderDefinition(
         name="pytdx",
         label="PyTDX",
         fetcher_name="PytdxFetcher",
-        markets=("cn",),
-        datasets=("quote.realtime", "kline.daily"),
+        dataset_markets={
+            "quote.realtime": ("cn",),
+            "kline.daily": ("cn",),
+        },
         builtin=True,
     ),
     _ProviderDefinition(
         name="baostock",
         label="Baostock",
         fetcher_name="BaostockFetcher",
-        markets=("cn",),
-        datasets=("kline.daily",),
+        dataset_markets={"kline.daily": ("cn",)},
         builtin=True,
     ),
     _ProviderDefinition(
         name="tushare",
         label="Tushare",
         fetcher_name="TushareFetcher",
-        markets=("cn", "hk"),
-        datasets=("quote.realtime", "kline.daily", "index.daily", "market.overview", "financial.snapshot"),
+        dataset_markets={
+            "quote.realtime": ("cn", "hk"),
+            "kline.daily": ("cn", "hk"),
+            "index.daily": ("cn",),
+            "market.overview": ("cn",),
+        },
     ),
     _ProviderDefinition(
         name="tickflow",
         label="TickFlow",
         fetcher_name="TickFlowFetcher",
-        markets=("cn",),
-        datasets=("quote.realtime", "kline.daily", "index.daily", "market.overview"),
+        dataset_markets={
+            "quote.realtime": ("cn",),
+            "kline.daily": ("cn",),
+            "index.daily": ("cn",),
+            "market.overview": ("cn",),
+        },
     ),
     _ProviderDefinition(
         name="longbridge",
         label="Longbridge",
         fetcher_name="LongbridgeFetcher",
-        markets=("hk", "us"),
-        datasets=("quote.realtime", "kline.daily", "financial.snapshot"),
+        dataset_markets={
+            "quote.realtime": ("hk", "us"),
+            "kline.daily": ("hk", "us"),
+        },
     ),
     _ProviderDefinition(
         name="futu",
         label="Futu OpenD",
         fetcher_name="FutuFetcher",
-        markets=("hk",),
-        datasets=("quote.realtime", "kline.daily", "financial.snapshot"),
+        dataset_markets={
+            "quote.realtime": ("hk",),
+            "kline.daily": ("hk",),
+            "financial.snapshot": ("hk",),
+        },
     ),
     _ProviderDefinition(
         name="finnhub",
         label="Finnhub",
         fetcher_name="FinnhubFetcher",
-        markets=("us",),
-        datasets=("quote.realtime", "kline.daily"),
+        dataset_markets={
+            "quote.realtime": ("us",),
+            "kline.daily": ("us",),
+        },
     ),
     _ProviderDefinition(
         name="alphavantage",
         label="Alpha Vantage",
         fetcher_name="AlphaVantageFetcher",
-        markets=("us",),
-        datasets=("quote.realtime", "kline.daily"),
+        dataset_markets={
+            "quote.realtime": ("us",),
+            "kline.daily": ("us",),
+        },
     ),
 )
 
@@ -249,6 +289,10 @@ class DataCapabilityService:
                     "priority": self._provider_priority(definition, fetcher),
                     "markets": list(definition.markets),
                     "datasets": list(definition.datasets),
+                    "dataset_markets": {
+                        dataset: list(markets)
+                        for dataset, markets in definition.dataset_markets.items()
+                    },
                     "warnings": warnings,
                     "last_error": self._safe_last_error(fetcher),
                     "cooldown": None,
@@ -631,7 +675,7 @@ class DataCapabilityService:
         definition = _PROVIDER_DEFINITION_MAP.get(provider)
         if definition is None:
             return True
-        return dataset in definition.datasets and market in definition.markets
+        return market in definition.dataset_markets.get(dataset, ())
 
     def _fundamental_market_priorities(self) -> Dict[str, Dict[str, Any]]:
         hk_providers = (
@@ -939,9 +983,18 @@ class DataCapabilityService:
             if token not in _SCREENING_SOURCES:
                 return "unknown"
             state = snapshot_health.get(token) if isinstance(snapshot_health, dict) else None
-            if isinstance(state, dict) and bool(state.get("disabled")):
+            if not isinstance(state, dict):
+                return "unknown"
+            if bool(state.get("disabled")):
                 return "cooldown"
-            return "ok"
+            if float(state.get("failures") or 0) > 0:
+                return "unavailable"
+            if (
+                float(state.get("successes") or 0) > 0
+                or float(state.get("last_success_at") or 0) > 0
+            ):
+                return "ok"
+            return "unknown"
 
         return resolve
 

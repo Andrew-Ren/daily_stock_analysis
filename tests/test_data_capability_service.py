@@ -151,6 +151,31 @@ def test_provider_runtime_probe_honors_request_time_unavailable_over_cached_avai
     assert _provider(overview, "longbridge")["warnings"] == ["provider_marked_unavailable"]
 
 
+def test_provider_dataset_market_matrix_matches_fundamental_runtime_routes() -> None:
+    service = DataCapabilityService(
+        config=_config(
+            tushare_token="token",
+            longbridge_app_key="key",
+            futu_opend_host="127.0.0.1",
+        ),
+        fetcher_manager=_FetcherManager([]),
+    )
+
+    overview = service.get_overview()
+
+    assert _provider(overview, "akshare")["dataset_markets"]["financial.snapshot"] == ["cn"]
+    assert _provider(overview, "futu")["dataset_markets"]["financial.snapshot"] == ["hk"]
+    assert _provider(overview, "yfinance")["dataset_markets"]["financial.snapshot"] == [
+        "hk",
+        "us",
+        "jp",
+        "kr",
+        "tw",
+    ]
+    assert "financial.snapshot" not in _provider(overview, "tushare")["datasets"]
+    assert "financial.snapshot" not in _provider(overview, "longbridge")["datasets"]
+
+
 def test_realtime_dataset_quality_is_market_aware() -> None:
     manager = _FetcherManager([
         _Fetcher("EfinanceFetcher", 0, available=True),
@@ -395,6 +420,39 @@ def test_screening_dataset_reports_cooldown_sources_as_unavailable() -> None:
     ]
 
 
+def test_screening_dataset_keeps_known_sources_unknown_before_runtime_probe() -> None:
+    service = DataCapabilityService(
+        config=_config(screening_enabled=True),
+        fetcher_manager=_FetcherManager([]),
+    )
+
+    with patch.dict("os.environ", {"SNAPSHOT_SOURCE_PRIORITY": "tushare,em_datacenter"}, clear=False):
+        with patch(
+            "src.services.screening_service._get_screening_status_snapshot",
+            return_value=({"available": True}, True, None),
+        ):
+            with patch(
+                "src.services.screening_service._get_screening_source_health_snapshot",
+                return_value={
+                    "snapshot": {
+                        "tushare": {"successes": 0, "failures": 0, "disabled": False},
+                        "em_datacenter": {"successes": 0, "failures": 0, "disabled": False},
+                    }
+                },
+            ):
+                overview = service.get_overview()
+
+    screening_quality = _dataset(overview, "strategy.screening")
+
+    assert screening_quality["status"] == "unknown"
+    assert screening_quality["source"] is None
+    assert screening_quality["fallback_from"] == ["tushare", "em_datacenter"]
+    assert screening_quality["warnings"] == [
+        "source_status:tushare:unknown",
+        "source_status:em_datacenter:unknown",
+    ]
+
+
 def test_screening_dataset_does_not_select_unknown_snapshot_source() -> None:
     service = DataCapabilityService(
         config=_config(screening_enabled=True),
@@ -408,7 +466,7 @@ def test_screening_dataset_does_not_select_unknown_snapshot_source() -> None:
         ):
             with patch(
                 "src.services.screening_service._get_screening_source_health_snapshot",
-                return_value={"snapshot": {}},
+                return_value={"snapshot": {"em_datacenter": {"successes": 1}}},
             ):
                 overview = service.get_overview()
 
@@ -475,6 +533,7 @@ def test_data_capability_api_paths_return_valid_contract() -> None:
                 "priority": 0,
                 "markets": ["cn"],
                 "datasets": ["quote.realtime"],
+                "dataset_markets": {"quote.realtime": ["cn"]},
                 "warnings": [],
                 "last_error": None,
                 "cooldown": None,
