@@ -257,6 +257,44 @@ def test_cn_realtime_rejects_tokens_without_runtime_handlers() -> None:
     assert "source_status:yfinance:unsupported" in cn_quality["warnings"]
 
 
+def test_hk_realtime_rejects_configured_provider_without_runtime_handler() -> None:
+    service = DataCapabilityService(
+        config=_config(
+            tushare_token="token",
+            futu_hk_realtime_source_priority="tushare,yfinance",
+        ),
+        fetcher_manager=_FetcherManager([
+            _Fetcher("TushareFetcher", 0, available=True),
+            _Fetcher("YfinanceFetcher", 1, available=True),
+        ]),
+    )
+
+    overview = service.get_overview()
+    hk_quality = _dataset(overview, "quote.realtime")["coverage"]["markets"]["hk"]
+
+    assert hk_quality["status"] == "degraded"
+    assert hk_quality["source"] == "yfinance"
+    assert hk_quality["fallback_from"] == ["tushare"]
+    assert "source_status:tushare:unsupported" in hk_quality["warnings"]
+
+
+def test_runtime_ordered_daily_route_stops_at_unprobed_preferred_source() -> None:
+    service = DataCapabilityService(
+        config=_config(),
+        fetcher_manager=_FetcherManager([
+            _Fetcher("EfinanceFetcher", 0),
+            _Fetcher("PytdxFetcher", 1, available=True),
+        ]),
+    )
+
+    cn_quality = _dataset(service.get_overview(), "kline.daily")["coverage"]["markets"]["cn"]
+
+    assert cn_quality["status"] == "unknown"
+    assert cn_quality["source"] is None
+    assert cn_quality["fallback_from"] == []
+    assert cn_quality["warnings"] == ["source_status:efinance:unknown"]
+
+
 def test_daily_dataset_quality_is_market_aware() -> None:
     manager = _FetcherManager([
         _Fetcher("EfinanceFetcher", 0, available=True),

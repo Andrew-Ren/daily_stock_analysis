@@ -520,6 +520,7 @@ class DataCapabilityService:
                 provider_map=provider_map,
                 status_resolvers={
                     "cn": self._cn_realtime_status_resolver(provider_map),
+                    "hk": self._hk_realtime_status_resolver(provider_map),
                 },
                 disabled=not bool(getattr(self.config, "enable_realtime_quote", True)),
                 disabled_warning="realtime_quote_disabled",
@@ -757,6 +758,19 @@ class DataCapabilityService:
 
         return resolve
 
+    @staticmethod
+    def _hk_realtime_status_resolver(
+        provider_map: Dict[str, Dict[str, Any]],
+    ) -> Callable[[str], str]:
+        supported_sources = {"futu", "longbridge", "akshare", "yfinance"}
+
+        def resolve(token: str) -> str:
+            if token not in supported_sources:
+                return "unsupported"
+            return DataCapabilityService._source_token_status(token, provider_map)
+
+        return resolve
+
     def _us_daily_priority(self, fetchers: Sequence[Any]) -> List[str]:
         fetcher_map = {str(getattr(fetcher, "name", "")): fetcher for fetcher in fetchers}
         longbridge = fetcher_map.get("LongbridgeFetcher")
@@ -864,7 +878,7 @@ class DataCapabilityService:
         status_resolver: Optional[Callable[[str], str]] = None,
         disabled: bool = False,
         disabled_warning: str = "",
-        stop_on_unknown: bool = False,
+        stop_on_unknown: bool = True,
     ) -> Dict[str, Any]:
         if disabled:
             return {
