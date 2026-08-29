@@ -63,6 +63,7 @@ def _config(**overrides):
         "realtime_source_priority": "tencent,akshare_sina,efinance,akshare_em",
         "futu_hk_realtime_source_priority": "futu,longbridge,akshare,yfinance",
         "screening_enabled": False,
+        "agent_event_monitor_enabled": False,
     }
     values.update(overrides)
     return SimpleNamespace(**values)
@@ -175,6 +176,13 @@ def test_provider_dataset_market_matrix_matches_fundamental_runtime_routes() -> 
     assert "financial.snapshot" not in _provider(overview, "tushare")["datasets"]
     assert "financial.snapshot" not in _provider(overview, "longbridge")["datasets"]
     assert _provider(overview, "tushare")["dataset_markets"]["quote.realtime"] == ["cn"]
+    assert _provider(overview, "yfinance")["dataset_markets"]["quote.realtime"] == [
+        "hk",
+        "us",
+        "jp",
+        "kr",
+        "tw",
+    ]
 
 
 def test_realtime_dataset_quality_is_market_aware() -> None:
@@ -689,7 +697,23 @@ def test_disabled_runtime_features_surface_dataset_quality_warnings() -> None:
     assert _dataset(overview, "financial.snapshot")["warnings"] == ["fundamental_pipeline_disabled"]
     assert _dataset(overview, "strategy.screening")["status"] == "unconfigured"
     assert _dataset(overview, "strategy.screening")["warnings"] == ["screening_disabled"]
+    assert _dataset(overview, "alert.monitor")["status"] == "unavailable"
+    assert _dataset(overview, "alert.monitor")["source"] is None
+    assert _dataset(overview, "alert.monitor")["warnings"] == ["agent_event_monitor_disabled"]
     assert _dataset(overview, "news.events")["source"] is None
+
+
+def test_enabled_alert_monitor_surfaces_local_dataset_as_available() -> None:
+    service = DataCapabilityService(
+        config=_config(agent_event_monitor_enabled=True),
+        fetcher_manager=_FetcherManager([]),
+    )
+
+    quality = _dataset(service.get_overview(), "alert.monitor")
+
+    assert quality["status"] == "ok"
+    assert quality["source"] == "alerts"
+    assert quality["warnings"] == []
 
 
 def test_data_capability_api_paths_return_valid_contract() -> None:

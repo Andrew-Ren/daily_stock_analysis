@@ -77,7 +77,7 @@ _PROVIDER_DEFINITIONS: Sequence[_ProviderDefinition] = (
         label="YFinance",
         fetcher_name="YfinanceFetcher",
         dataset_markets={
-            "quote.realtime": ("cn", "hk", "us", "jp", "kr", "tw"),
+            "quote.realtime": ("hk", "us", "jp", "kr", "tw"),
             "kline.daily": ("cn", "hk", "us", "jp", "kr", "tw"),
             "index.daily": ("cn", "hk", "us", "jp", "kr", "tw"),
             "market.overview": ("cn", "hk", "us", "jp", "kr", "tw"),
@@ -562,7 +562,12 @@ class DataCapabilityService:
             ),
             self._news_events_dataset(),
             self._screening_dataset(priority_map.get("screening.snapshot", {})),
-            self._local_dataset("alert.monitor", "alerts"),
+            self._local_dataset(
+                "alert.monitor",
+                "alerts",
+                enabled=bool(getattr(self.config, "agent_event_monitor_enabled", False)),
+                disabled_warning="agent_event_monitor_disabled",
+            ),
             self._local_dataset("portfolio.account", "portfolio"),
         ]
         return datasets
@@ -1016,7 +1021,25 @@ class DataCapabilityService:
         }
 
     @staticmethod
-    def _local_dataset(dataset: str, source: str) -> Dict[str, Any]:
+    def _local_dataset(
+        dataset: str,
+        source: str,
+        *,
+        enabled: bool = True,
+        disabled_warning: str = "",
+    ) -> Dict[str, Any]:
+        if not enabled:
+            return {
+                "dataset": dataset,
+                "status": "unavailable",
+                "source": None,
+                "stale": None,
+                "last_success": None,
+                "last_error": None,
+                "fallback_from": [],
+                "coverage": None,
+                "warnings": [disabled_warning] if disabled_warning else [],
+            }
         return {
             "dataset": dataset,
             "status": "ok",
