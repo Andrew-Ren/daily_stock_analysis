@@ -206,6 +206,49 @@ class CalendarEventApiTestCase(unittest.TestCase):
                 self.assertEqual(response.status_code, 400, response.text)
                 self.assertEqual(response.json()["error"], "validation_error")
 
+    def test_non_finite_metadata_is_rejected_before_persistence(self) -> None:
+        event_date = date.today().isoformat()
+        response = self.client.post(
+            "/api/v1/calendar/events",
+            content=(
+                '{"title":"invalid metadata","event_type":"user",'
+                '"scope_type":"symbol","market":"us","symbol":"AAPL",'
+                f'"event_date":"{event_date}","metadata":{{"value":1e400}}}}'
+            ),
+            headers={"Content-Type": "application/json"},
+        )
+
+        self.assertEqual(response.status_code, 400, response.text)
+        self.assertEqual(response.json()["error"], "validation_error")
+        rows, total = self.repo.list_events(
+            start_date=date.today(),
+            end_date=date.today(),
+            page=1,
+            page_size=100,
+        )
+        self.assertEqual(rows, [])
+        self.assertEqual(total, 0)
+
+    def test_legacy_non_finite_metadata_does_not_break_listing(self) -> None:
+        event = self.repo.create_event({
+            "title": "legacy invalid metadata",
+            "event_type": "user",
+            "scope_type": "symbol",
+            "scope_value": "AAPL",
+            "market": "us",
+            "symbol": "AAPL",
+            "event_date": date.today(),
+            "source": "user",
+            "coverage_status": "confirmed",
+            "payload": '{"value":Infinity}',
+        })
+
+        response = self.client.get("/api/v1/calendar/events")
+
+        self.assertEqual(response.status_code, 200, response.text)
+        item = next(item for item in response.json()["items"] if item["id"] == event.id)
+        self.assertEqual(item["metadata"], {})
+
     def test_delete_is_limited_to_user_events(self) -> None:
         created = self._create()
         deleted = self.client.delete(f"/api/v1/calendar/events/{created['id']}")

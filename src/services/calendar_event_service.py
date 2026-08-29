@@ -116,6 +116,17 @@ class CalendarEventService:
             raise CalendarEventServiceError(f"{scope_type} scope requires scope_value")
 
         metadata = payload.get("metadata") or {}
+        if not isinstance(metadata, dict):
+            raise CalendarEventServiceError("metadata must be a JSON object")
+        try:
+            metadata_json = json.dumps(
+                metadata,
+                ensure_ascii=False,
+                separators=(",", ":"),
+                allow_nan=False,
+            )
+        except (TypeError, ValueError) as exc:
+            raise CalendarEventServiceError("metadata must contain finite JSON values") from exc
         return {
             "title": title,
             "event_type": event_type,
@@ -127,7 +138,7 @@ class CalendarEventService:
             "source": "user",
             "coverage_status": "confirmed",
             "description": CalendarEventService._optional_normalized(payload.get("description")),
-            "payload": json.dumps(metadata, ensure_ascii=False, separators=(",", ":")),
+            "payload": metadata_json,
         }
 
     @staticmethod
@@ -151,6 +162,10 @@ class CalendarEventService:
         except (TypeError, ValueError):
             metadata = {}
         if not isinstance(metadata, dict):
+            metadata = {}
+        try:
+            json.dumps(metadata, allow_nan=False)
+        except (TypeError, ValueError):
             metadata = {}
         return {
             "id": int(row.id),
