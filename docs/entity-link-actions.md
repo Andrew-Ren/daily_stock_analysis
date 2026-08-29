@@ -54,7 +54,7 @@
 ## 可用性与 fail-closed 规则
 
 动作出现在 `actions` 中只表示契约认识这个动作，不代表目标页面已能处理它。只有目标页已消费足以定位实体的参数时，动作才可设置 `available=true` 并进入 `links`。
-`EntityAction.available` 默认值为 `false`；任何直接构造 schema 的 producer 都必须在同时提供非空 `href` 与完整上下文后显式 opt in。后端 schema 会拒绝 `available=true` 但没有可导航 route 的动作，避免客户端拿到“声称可用、实际点不了”的入口。
+`EntityAction.available` 默认值为 `false`；任何直接构造 schema 的 producer 都必须在同时提供非空 `href` 与完整上下文后显式 opt in。后端 schema 会拒绝 `available=true` 但没有可导航 route 的动作，并要求顶层 `links` 与所有 available action 的 `href` 完全一致，不能绕过 actions 额外塞可执行链接。显式 `market=hk` 时，Web/后端都兼容 `700` 这类旧短码并统一补零为 `HK00700`。
 
 当前唯一可用动作：
 

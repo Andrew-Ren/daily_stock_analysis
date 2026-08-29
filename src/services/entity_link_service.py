@@ -110,6 +110,8 @@ def stock_entity_id(stock_code: str, *, market: Optional[str] = None) -> str:
         market_hint=explicit_market.lower() if explicit_market else None,
     )
     if identity is None:
+        if explicit_market == "HK" and raw_code.isdigit() and 1 <= len(raw_code) <= 5:
+            return f"HK:HK{raw_code.zfill(5)}"
         us_code = raw_code.upper().removesuffix(".US")
         if (
             explicit_market in {None, "US"}

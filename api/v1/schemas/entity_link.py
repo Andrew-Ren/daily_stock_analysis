@@ -75,4 +75,14 @@ class EntityLink(BaseModel):
         expected_ref = f"{self.entity_type}:{normalized_id}"
         if self.ref != expected_ref:
             raise ValueError("ref must exactly match entity_type and entity_id")
+        action_names = [action.action for action in self.actions]
+        if len(action_names) != len(set(action_names)):
+            raise ValueError("entity actions must be unique by action name")
+        expected_links = {
+            action.action: str(action.href)
+            for action in self.actions
+            if action.available and action.href is not None
+        }
+        if self.links != expected_links:
+            raise ValueError("links must exactly match available action hrefs")
         return self

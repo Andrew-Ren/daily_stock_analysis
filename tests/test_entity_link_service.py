@@ -57,6 +57,27 @@ def test_available_entity_action_requires_a_route() -> None:
     assert action.href == "/stocks/600519"
 
 
+def test_entity_links_must_match_available_actions() -> None:
+    action = EntityAction(action="view", available=True, href="/stocks/600519")
+    valid = EntityLink(
+        entity_type="stock",
+        entity_id="CN:600519",
+        ref="stock:CN:600519",
+        actions=[action],
+        links={"view": "/stocks/600519"},
+    )
+    assert valid.links == {"view": "/stocks/600519"}
+
+    with pytest.raises(ValueError, match="exactly match"):
+        EntityLink(
+            entity_type="stock",
+            entity_id="CN:600519",
+            ref="stock:CN:600519",
+            actions=[action],
+            links={"watch": "/"},
+        )
+
+
 def test_stock_entity_link_metadata_uses_canonical_entity_id_code() -> None:
     hk_link = EntityLink.model_validate(build_stock_entity_link("00700", market="hk"))
     us_link = EntityLink.model_validate(build_stock_entity_link("aapl", market="us"))
@@ -193,6 +214,7 @@ def test_entity_ref_helpers_validate_shape() -> None:
     assert make_entity_ref("signal", "42") == "signal:42"
     assert parse_entity_ref("alert:900") == ("alert", "900")
     assert stock_entity_id("00700", market="hk") == "HK:HK00700"
+    assert stock_entity_id("700", market="hk") == "HK:HK00700"
 
     with pytest.raises(ValueError):
         make_entity_ref("stock", "")
