@@ -25,6 +25,24 @@ def test_real_zero_quote_change_is_preserved_as_observed_evidence() -> None:
     assert result["explanation_quality"]["why_now"] == "ok"
 
 
+def test_stale_or_partial_quote_is_not_presented_as_current_observed_evidence() -> None:
+    for quality_fields in ({"is_stale": True}, {"data_quality": "partial"}):
+        candidate = {
+            "rank": 1,
+            "reason": "local reason",
+            "factor_scores": {},
+            "dsa_context": {"quote": {"change_pct": 3.0, "amount": 100.0, **quality_fields}},
+            "dsa_news": [],
+            "dsa_events": [],
+            "llm_catalysts": [],
+        }
+
+        result = _attach_candidate_explanations(candidate)
+
+        assert [item["code"] for item in result["why_now"]] == ["awaiting_evidence"]
+        assert result["explanation_quality"]["why_now"] == "unknown"
+
+
 def test_top_level_zero_without_quote_provenance_is_not_presented_as_current_evidence() -> None:
     candidate = {
         "rank": 2,
@@ -143,6 +161,22 @@ def test_risk_summary_is_not_promoted_to_selection_reason_when_reason_is_missing
     assert candidate["reason"] == ""
     assert [item["code"] for item in result["why_selected"]] == ["selection_rank"]
     assert all("估值过高" not in item["text"] for item in result["why_selected"])
+
+
+def test_post_analyzer_summary_keeps_inferred_provenance() -> None:
+    candidate = _normalize_candidate({
+        "code": "600519",
+        "post_analysis_summaries": {"dsa": "模型生成的后分析摘要"},
+        "factor_scores": {},
+    }, 1)
+
+    result = _attach_candidate_explanations(candidate)
+
+    reason = result["why_selected"][0]
+    assert reason["code"] == "selection_reason"
+    assert reason["source"] == "post_analyzer:dsa"
+    assert reason["quality"] == "inferred"
+    assert result["why_selected"][1]["code"] == "selection_rank"
 
 
 def test_stale_or_undated_events_are_not_why_now_evidence() -> None:

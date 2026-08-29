@@ -3751,13 +3751,23 @@ def _normalize_candidate(raw: Any, rank: int) -> Dict[str, Any]:
         or source.get("dsa_analysis_summary")
         or _extract_dsa_analysis_summary_from_context(dsa_context)
     )
+    explicit_reason = (
+        item.get("reason")
+        or source.get("reason")
+        or source.get("ranking_reason")
+        or item.get("summary")
+    )
+    fallback_reason, fallback_reason_source, fallback_reason_quality = _build_candidate_reason(source)
+    reason = explicit_reason or fallback_reason
     return {
         "rank": item.get("rank") or source.get("rank") or rank,
         "code": item.get("code") or source.get("code") or item.get("symbol") or source.get("symbol") or item.get("stock_code") or source.get("stock_code") or "",
         "name": item.get("name") or source.get("name") or item.get("stock_name") or source.get("stock_name") or "",
         "score": _first_present(item, source, "score", "final_score"),
         "screen_score": _first_present(item, source, "screen_score"),
-        "reason": item.get("reason") or source.get("reason") or source.get("ranking_reason") or item.get("summary") or _build_candidate_reason(source),
+        "reason": reason,
+        "reason_source": "" if explicit_reason else fallback_reason_source,
+        "reason_quality": "" if explicit_reason else fallback_reason_quality,
         "ranking_reason": item.get("ranking_reason") or source.get("ranking_reason") or "",
         "risk_summary": item.get("risk_summary") or source.get("risk_summary") or "",
         "risk_level": item.get("risk_level") or source.get("risk_level") or "",
@@ -3804,12 +3814,14 @@ def _attach_candidate_explanations(candidate: Dict[str, Any]) -> Dict[str, Any]:
             or (bool(llm_thesis) and reason == llm_thesis)
             or (bool(risk_summary) and reason == risk_summary)
         )
+        provenance_source = str(candidate.get("reason_source") or "").strip()
+        provenance_quality = str(candidate.get("reason_quality") or "").strip()
         why_selected.append(
             _explanation_item(
                 "selection_reason",
                 reason,
-                source="llm" if reason_is_llm else "screening",
-                quality="inferred" if reason_is_llm else "observed",
+                source=provenance_source or ("llm" if reason_is_llm else "screening"),
+                quality=provenance_quality or ("inferred" if reason_is_llm else "observed"),
             )
         )
 
@@ -3888,7 +3900,8 @@ def _attach_candidate_explanations(candidate: Dict[str, Any]) -> Dict[str, Any]:
 
     context = candidate.get("dsa_context")
     quote = context.get("quote") if isinstance(context, dict) and isinstance(context.get("quote"), dict) else {}
-    if "change_pct" in quote and quote.get("change_pct") is not None:
+    quote_is_current = _quote_is_current_explanation_evidence(quote)
+    if quote_is_current and "change_pct" in quote and quote.get("change_pct") is not None:
         change_pct = _safe_float(quote.get("change_pct"))
         if change_pct is not None:
             why_now.append(
@@ -3900,7 +3913,7 @@ def _attach_candidate_explanations(candidate: Dict[str, Any]) -> Dict[str, Any]:
                     value=change_pct,
                 )
             )
-    if "amount" in quote and quote.get("amount") is not None:
+    if quote_is_current and "amount" in quote and quote.get("amount") is not None:
         amount = _safe_float(quote.get("amount"))
         if amount is not None:
             why_now.append(
@@ -3953,6 +3966,22 @@ def _is_recent_explanation_item(item: Dict[str, Any]) -> bool:
         return False
     age_days = (datetime.now().astimezone().date() - published).days
     return -1 <= age_days <= DSA_SCREENING_WHY_NOW_MAX_AGE_DAYS
+
+
+def _quote_is_current_explanation_evidence(quote: Dict[str, Any]) -> bool:
+    if not quote:
+        return False
+    if any(quote.get(key) is True for key in ("is_stale", "price_stale", "quote_stale")):
+        return False
+    if quote.get("available") is False:
+        return False
+    quality = str(
+        quote.get("data_quality")
+        or quote.get("quality_status")
+        or quote.get("quality")
+        or ""
+    ).strip().lower()
+    return quality not in {"unavailable", "partial", "stale", "missing", "fetch_failed"}
 
 
 def _explanation_item(
@@ -4043,12 +4072,12 @@ def _first_present(primary: Dict[str, Any], source: Dict[str, Any], *keys: str) 
     return None
 
 
-def _build_candidate_reason(item: Dict[str, Any]) -> str:
+def _build_candidate_reason(item: Dict[str, Any]) -> Tuple[str, str, str]:
     summaries = item.get("post_analysis_summaries")
     if isinstance(summaries, dict):
-        summary = next((str(value) for value in summaries.values() if value), "")
-        if summary:
-            return summary
+        for analyzer, value in summaries.items():
+            if value:
+                return str(value), f"post_analyzer:{analyzer}", "inferred"
 
     factors = item.get("factor_scores")
     parts: List[str] = []
@@ -4065,7 +4094,8 @@ def _build_candidate_reason(item: Dict[str, Any]) -> str:
         parts.append(f"行业：{item['industry']}")
     if item.get("risk_level"):
         parts.append(f"风险等级：{item['risk_level']}")
-    return "；".join(parts)
+    reason = "；".join(parts)
+    return (reason, "screening", "observed") if reason else ("", "", "")
 
 
 def _to_plain(value: Any) -> Any:
