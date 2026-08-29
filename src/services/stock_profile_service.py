@@ -253,7 +253,7 @@ class StockProfileService:
         } - {""}
         if position_codes & profile_codes:
             return True
-        if position_identity.market == "kr" and not position_identity.refill_code:
+        if position_identity.market in {"kr", "tw"} and not position_identity.refill_code:
             profile_base = str(profile_identity.normalized_code or "").split(".", 1)[0]
             return position_identity.normalized_code == profile_base
         return False
@@ -319,6 +319,10 @@ class StockProfileService:
             *build_daily_code_candidates(code),
             *HistoryService._history_code_filter_candidates(code),
         ]
+        if include_ambiguous_numeric and market == "tw" and "." in code:
+            numeric_base = code.split(".", 1)[0]
+            if numeric_base.isdigit():
+                candidates.append(numeric_base)
         aliases: List[str] = []
         for candidate in candidates or [code]:
             if (

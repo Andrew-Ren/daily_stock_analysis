@@ -236,6 +236,38 @@ def test_short_hk_cached_position_uses_its_market_hint() -> None:
     assert payload["portfolio"]["data"] == {"held": True, "matched_markets": ["hk"]}
 
 
+def test_bare_taiwan_cached_position_uses_its_market_hint() -> None:
+    service, dependencies = _service()
+    dependencies["portfolio_repository"].list_cached_position_identities.return_value = [
+        ("tw", "2330"),
+    ]
+
+    payload = service.get_profile("2330.TW")
+
+    assert payload["portfolio"]["data"] == {"held": True, "matched_markets": ["tw"]}
+
+
+def test_taiwan_intelligence_reads_bare_alias_only_with_market_scope() -> None:
+    service, dependencies = _service()
+
+    def intelligence_by_alias(**kwargs: object) -> dict:
+        if kwargs.get("scope_value") == "2330" and kwargs.get("market") == "tw":
+            return _intelligence("2330", "tw")
+        return {"items": [], "total": 0}
+
+    dependencies["intelligence_service"].list_items.side_effect = intelligence_by_alias
+
+    payload = service.get_profile("2330.TW")
+
+    calls = {
+        (call.kwargs["scope_value"], call.kwargs["market"])
+        for call in dependencies["intelligence_service"].list_items.call_args_list
+    }
+    assert ("2330", "tw") in calls
+    assert ("2330", "global") not in calls
+    assert payload["intelligence"]["items"][0]["scope_value"] == "2330"
+
+
 def test_offshore_research_lookup_excludes_cross_market_bare_numeric_aliases() -> None:
     service, dependencies = _service()
     dependencies["history_service"].get_history_list.return_value = {"items": [], "total": 0}

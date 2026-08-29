@@ -11,7 +11,7 @@
 - A 股：`SH600519`、`600519.SH` 等收敛为 `600519`。
 - 日股：`7203.T` 保留 Yahoo canonical suffix，并返回 `market=jp`。
 - 韩股：`005930.KS`、`035720.KQ` 保留 Yahoo canonical suffix，并返回 `market=kr`；股票索引唯一识别出的旧裸代码也沿用解析后的韩国市场身份。缓存持仓中的旧裸六位韩股在 market 已明确为 `kr` 时按解析身份与档案 suffix 的数字主体比较，不会再次按无 market 的 A 股规则解释。
-- 台股：profile 入口接受 4–6 位 `.TW` / `.TWO` Yahoo suffix（包括六位 ETF），并返回 `market=tw`。
+- 台股：profile 入口接受 4–6 位 `.TW` / `.TWO` Yahoo suffix（包括六位 ETF），并返回 `market=tw`。市场限定的资讯查询兼容旧裸数字 scope，但 `global` 查询继续排除该歧义别名；缓存持仓已明确 `market=tw` 时，旧裸代码按同市场数字主体与档案匹配。
 - 港股：`00700`、`00700.HK`、`HK00700` 收敛为 `HK00700`；缓存持仓已明确 `market=hk` 时，`700` 等旧短格式也会补零后参与身份比较。
 - 美股 ticker 统一为裸大写形式，例如 `aapl`、`AAPL.US` 都收敛为 `AAPL`；持久化读取仍查询裸 ticker 与 `.US` 等价别名。
 
