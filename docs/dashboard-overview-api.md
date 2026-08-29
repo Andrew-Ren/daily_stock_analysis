@@ -18,17 +18,17 @@
 - `market.review_count` 使用 History API repository 返回的 `total`，不使用当前已加载页的数组长度。
 - `personal.watchlist_count` 每次请求读取当前 runtime config；`active_monitor_count` 使用 Alert repository 的 `total`，不受 `page_size=100` 限制。
 - `personal.cached_position_count` 只读取非零缓存仓位 identity，不触发实时估值或写 snapshot，因此块包含 `cached_positions_only`。
-- `activity.recent_reports` 排除 market review；`task_stats` 只读当前 task queue 统计。
+- `activity.recent_reports` 排除 market review，并按 history 分页继续读取直到获得最近 5 条非 market 报告或确认历史已耗尽；`task_stats` 只读当前 task queue 统计。
 - `system.refresh_starts_analysis` 固定为 `false`。该 service 不依赖 analyzer、LLM client、market-review generation 或 task submission 方法。
 
 ## What Changed
 
-首阶段的 `comparison_mode` 固定为 `previous_completed_snapshot`。服务从已经持久化的 market review history 中按完成顺序读取结构化 `context_snapshot.market_light_snapshots`，对每个 region 比较最近两份有效快照：
+首阶段的 `comparison_mode` 固定为 `previous_completed_snapshot`。服务从已经持久化的 market review history 中按完成顺序分页读取结构化 `context_snapshot.market_light_snapshots`，不会把第一页固定窗口当作完整历史，并对每个 region 比较最近两份有效快照：
 
 - score 变化输出 `market.<region>.score`，并给出 before/after 与 increased/decreased。
 - red/yellow/green 状态变化输出 `market.<region>.status`。
 - 快照的 `data_quality` 映射到 change item 的 quality。
-- 没有第二份有效快照时，返回空 items 和 `previous_completed_snapshot_unavailable`；不会临时拉行情或生成一份“当前”快照冒充基线。
+- 没有第二份有效快照时，返回 `previous_completed_snapshot_unavailable`；部分 region 缺基线时整个块标记为 `partial`，并追加 `previous_completed_snapshot_unavailable:<region>`，避免把“缺少基线”误解为“没有变化”。不会临时拉行情或生成一份“当前”快照冒充基线。
 
 后续阶段可以在已有持久化契约上增加 watchlist score、portfolio exposure、ranking 和 thesis invalidation 变化；必须先有可靠的 current/previous snapshot identity，不能从页面当前分页或 target 文本猜测。
 
