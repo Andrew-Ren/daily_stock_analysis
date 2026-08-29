@@ -76,7 +76,7 @@ class DashboardOverviewService:
                     stock_code="MARKET",
                     report_type=_MARKET_REVIEW_TYPE,
                     page=page,
-                    limit=_DASHBOARD_HISTORY_PAGE_SIZE,
+                    limit=_DASHBOARD_MARKET_REVIEW_SCAN_LIMIT,
                     include_context_snapshot=True,
                 )
                 reviews = list(result.get("items") or [])
@@ -340,7 +340,7 @@ class DashboardOverviewService:
                     "source": "persisted_market_review",
                     "quality": quality,
                 })
-        if missing_baseline_regions or comparable_regions == 0:
+        if missing_baseline_regions or not snapshots_by_region:
             limitations.append("previous_completed_snapshot_unavailable")
         limitations.extend(
             f"previous_completed_snapshot_unavailable:{region}"

@@ -178,7 +178,40 @@ def test_one_market_snapshot_keeps_dashboard_but_marks_change_baseline_partial()
     assert "previous_completed_snapshot_unavailable" in payload["what_changed"]["meta"]["limitations"]
 
 
-def test_market_history_paginates_until_an_older_valid_baseline() -> None:
+def test_present_but_unavailable_baseline_is_not_reported_as_missing() -> None:
+    dependencies = _dependencies()
+    reviews = [
+        _review(1, "2026-08-29T09:00:00+08:00"),
+        _review(2, "2026-08-28T09:00:00+08:00"),
+    ]
+    dependencies["history_service"].get_history_list.side_effect = lambda **kwargs: (
+        _history_page(dependencies["history_service"], reviews, kwargs)
+        if kwargs.get("report_type") == "market_review"
+        else {"items": [], "total": 0}
+    )
+    dependencies["history_service"].get_history_detail_by_id.side_effect = lambda record_id: {
+        "context_snapshot": {
+            "market_light_snapshots": {
+                "cn": _snapshot(
+                    "cn",
+                    "2026-08-29" if record_id == 1 else "2026-08-28",
+                    60 if record_id == 1 else 50,
+                    "yellow",
+                    "ok" if record_id == 1 else "unavailable",
+                )
+            }
+        }
+    }
+
+    payload = DashboardOverviewService(**dependencies).get_overview()
+
+    assert payload["what_changed"]["data"]["previous_trade_dates"] == {"cn": "2026-08-28"}
+    assert "comparison_snapshot_unavailable:cn" in payload["what_changed"]["meta"]["limitations"]
+    assert "previous_completed_snapshot_unavailable" not in payload["what_changed"]["meta"]["limitations"]
+    assert "previous_completed_snapshot_unavailable:cn" not in payload["what_changed"]["meta"]["limitations"]
+
+
+def test_market_history_reads_one_bounded_window_for_an_older_valid_baseline() -> None:
     dependencies = _dependencies()
     reviews = [_review(index, f"2026-07-{(index % 28) + 1:02d}T09:00:00+08:00") for index in range(1, 52)]
 
@@ -204,7 +237,12 @@ def test_market_history_paginates_until_an_older_valid_baseline() -> None:
 
     assert payload["what_changed"]["data"]["previous_trade_dates"]["us"] == "2026-08-28"
     assert payload["what_changed"]["meta"]["quality"] == "fresh"
-    assert dependencies["history_service"].get_history_list.call_args_list[1].kwargs["page"] == 2
+    market_calls = [
+        call for call in dependencies["history_service"].get_history_list.call_args_list
+        if call.kwargs.get("report_type") == "market_review"
+    ]
+    assert len(market_calls) == 1
+    assert market_calls[0].kwargs["limit"] == 100
 
 
 def test_change_baseline_is_the_latest_strictly_earlier_trade_date() -> None:
@@ -487,7 +525,8 @@ def test_market_history_scan_is_bounded_and_reports_truncation() -> None:
         call for call in dependencies["history_service"].get_history_list.call_args_list
         if call.kwargs.get("report_type") == "market_review"
     ]
-    assert [call.kwargs["page"] for call in market_calls] == [1, 2]
+    assert [call.kwargs["page"] for call in market_calls] == [1]
+    assert market_calls[0].kwargs["limit"] == 100
     assert all(call.kwargs["stock_code"] == "MARKET" for call in market_calls)
     assert all(call.kwargs["include_context_snapshot"] for call in market_calls)
     assert "market_review_history_scan_incomplete" in payload["market"]["meta"]["limitations"]
