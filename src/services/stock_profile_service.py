@@ -329,7 +329,7 @@ class StockProfileService:
         market = str(market_hint or StockProfileService.market_for_code(code)).strip().lower()
         identity = resolve_daily_stock_identity(code, market_hint=market)
         candidates = list(identity.code_candidates) if identity is not None and identity.market == market else [code]
-        if include_ambiguous_numeric and market == "tw" and "." in code:
+        if include_ambiguous_numeric and market in {"jp", "kr", "tw"} and "." in code:
             numeric_base = code.split(".", 1)[0]
             if numeric_base.isdigit():
                 candidates.append(numeric_base)

@@ -344,6 +344,27 @@ def test_taiwan_intelligence_reads_bare_alias_only_with_market_scope() -> None:
     assert payload["intelligence"]["items"][0]["scope_value"] == "2330"
 
 
+def test_japan_intelligence_reads_bare_alias_only_with_market_scope() -> None:
+    service, dependencies = _service()
+
+    def intelligence_by_alias(**kwargs: object) -> dict:
+        if kwargs.get("scope_value") == "8035" and kwargs.get("market") == "jp":
+            return _intelligence("8035", "jp")
+        return {"items": [], "total": 0}
+
+    dependencies["intelligence_service"].list_items.side_effect = intelligence_by_alias
+
+    payload = service.get_profile("8035.T")
+
+    calls = {
+        (call.kwargs["scope_value"], call.kwargs["market"])
+        for call in dependencies["intelligence_service"].list_items.call_args_list
+    }
+    assert ("8035", "jp") in calls
+    assert ("8035", "global") not in calls
+    assert payload["intelligence"]["items"][0]["scope_value"] == "8035"
+
+
 def test_offshore_research_lookup_excludes_cross_market_bare_numeric_aliases() -> None:
     service, dependencies = _service()
     dependencies["history_service"].get_history_list.return_value = {"items": [], "total": 0}
