@@ -1,6 +1,6 @@
 # 数据中心
 
-Web 数据中心位于 `/data-center`，用于只读查看数据源能力、数据集质量与运行时优先级。页面只消费 `GET /api/v1/data/overview`，不读取系统配置原始值，也不自行拼接 screening、provider 或配置探针。
+Web 数据中心位于 `/data`，用于只读查看数据源能力、数据集质量与运行时优先级。页面只消费 `GET /api/v1/data/overview`，不读取系统配置原始值，也不自行拼接 screening、provider 或配置探针。
 
 ## 页面内容
 

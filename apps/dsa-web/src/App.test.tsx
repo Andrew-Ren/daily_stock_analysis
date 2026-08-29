@@ -156,13 +156,13 @@ describe('App routing behavior', () => {
     expect(screen.queryByTestId('home-page')).not.toBeInTheDocument();
   });
 
-  it('routes /data-center to the data capability page after auth is ready', async () => {
-    window.history.pushState({}, '', '/data-center');
+  it('routes /data to the data capability page after auth is ready', async () => {
+    window.history.pushState({}, '', '/data');
 
     render(<App />);
 
     expect(await screen.findByTestId('data-center-page')).toBeInTheDocument();
-    expect(setCurrentRoute).toHaveBeenCalledWith('/data-center');
+    expect(setCurrentRoute).toHaveBeenCalledWith('/data');
   });
 
   it('redirects authenticated login visits back to the home page', async () => {

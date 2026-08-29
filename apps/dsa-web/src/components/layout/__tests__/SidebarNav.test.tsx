@@ -141,13 +141,13 @@ describe('SidebarNav', () => {
 
   it('renders the data center navigation item and marks it active', () => {
     render(
-      <MemoryRouter initialEntries={['/data-center']}>
+      <MemoryRouter initialEntries={['/data']}>
         <SidebarNav />
       </MemoryRouter>,
     );
 
     const link = screen.getByRole('link', { name: '数据中心' });
-    expect(link).toHaveAttribute('href', '/data-center');
+    expect(link).toHaveAttribute('href', '/data');
     expect(link).toHaveClass('font-medium');
   });
 
