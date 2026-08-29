@@ -3050,7 +3050,7 @@ class DatabaseManager(metaclass=_DatabaseManagerMeta):
             data_query = (
                 select(AnalysisHistory)
                 .where(where_clause)
-                .order_by(desc(AnalysisHistory.created_at))
+                .order_by(desc(AnalysisHistory.created_at), desc(AnalysisHistory.id))
                 .offset(offset)
                 .limit(limit)
             )

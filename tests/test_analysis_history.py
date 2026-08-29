@@ -340,6 +340,23 @@ class AnalysisHistoryTestCase(unittest.TestCase):
             self.assertEqual(row.stop_loss, 110.0)
             self.assertEqual(row.take_profit, 150.0)
 
+    def test_paginated_history_uses_id_to_break_equal_timestamp_ties(self) -> None:
+        older_id = self._save_history("same_timestamp_older")
+        newer_id = self._save_history("same_timestamp_newer")
+        same_timestamp = datetime(2026, 8, 29, 9, 0, 0)
+        with self.db.get_session() as session:
+            rows = session.query(AnalysisHistory).filter(
+                AnalysisHistory.id.in_([older_id, newer_id])
+            ).all()
+            for row in rows:
+                row.created_at = same_timestamp
+            session.commit()
+
+        records, total = self.db.get_analysis_history_paginated(limit=10)
+
+        self.assertEqual(total, 2)
+        self.assertEqual([record.id for record in records], [newer_id, older_id])
+
     def test_history_display_resolves_bare_jp_kr_code_from_stock_pool(self) -> None:
         result = self._build_result()
         result.code = "005930"

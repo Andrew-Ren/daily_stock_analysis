@@ -73,6 +73,7 @@ class DashboardOverviewService:
         try:
             while True:
                 result = self._history().get_history_list(
+                    stock_code="MARKET",
                     report_type=_MARKET_REVIEW_TYPE,
                     page=page,
                     limit=_DASHBOARD_HISTORY_PAGE_SIZE,

@@ -458,6 +458,7 @@ def test_market_history_scan_is_bounded_and_reports_truncation() -> None:
         if call.kwargs.get("report_type") == "market_review"
     ]
     assert [call.kwargs["page"] for call in market_calls] == [1, 2]
+    assert all(call.kwargs["stock_code"] == "MARKET" for call in market_calls)
     assert all(call.kwargs["include_context_snapshot"] for call in market_calls)
     assert "market_review_history_scan_incomplete" in payload["market"]["meta"]["limitations"]
     assert "market_review_history_scan_incomplete" in payload["what_changed"]["meta"]["limitations"]
