@@ -18,6 +18,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pandas as pd
 from fastapi.testclient import TestClient
 from sqlalchemy import event
+from sqlalchemy.exc import OperationalError
 
 try:
     import litellm  # noqa: F401
@@ -987,6 +988,43 @@ class AlertApiTestCase(unittest.TestCase):
             next(row.lifecycle_id for row in loaded_again if row.id == rule_id),
             assigned,
         )
+
+    def test_lifecycle_schema_finalization_uses_retryable_write_transaction(self) -> None:
+        with patch.object(
+            self.db,
+            "_run_sqlite_schema_transaction",
+            wraps=self.db._run_sqlite_schema_transaction,
+        ) as transaction:
+            self.db._ensure_alert_rule_lifecycle_schema()
+
+        self.assertIn(
+            "finalize_alert_rule_lifecycle_schema",
+            [call.args[0] for call in transaction.call_args_list],
+        )
+
+    def test_schema_transaction_retries_sqlite_writer_lock(self) -> None:
+        locked = OperationalError(
+            "BEGIN",
+            {},
+            sqlite3.OperationalError("database is locked"),
+        )
+        successful_context = MagicMock()
+        successful_context.__enter__.return_value = MagicMock()
+        with (
+            patch.object(
+                self.db._engine,
+                "begin",
+                side_effect=[locked, successful_context],
+            ) as begin,
+            patch.object(self.db, "_sqlite_write_retry_base_delay", 0),
+        ):
+            result = self.db._run_sqlite_schema_transaction(
+                "test_schema_retry",
+                lambda _connection: "ok",
+            )
+
+        self.assertEqual(result, "ok")
+        self.assertEqual(begin.call_count, 2)
 
     def test_runtime_loader_reloads_rule_if_lifecycle_less_id_was_reused(self) -> None:
         connection = sqlite3.connect(self.db_path)

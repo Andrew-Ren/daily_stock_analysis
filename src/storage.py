@@ -1512,7 +1512,7 @@ class DatabaseManager(metaclass=_DatabaseManagerMeta):
                         continue
                     raise
 
-        with self._engine.begin() as connection:
+        def finalize_lifecycle_schema(connection) -> None:
             connection.exec_driver_sql(
                 "UPDATE alert_rules SET lifecycle_id = lower(hex(randomblob(16))) "
                 "WHERE lifecycle_id IS NULL OR lifecycle_id = ''"
@@ -1525,6 +1525,11 @@ class DatabaseManager(metaclass=_DatabaseManagerMeta):
                 "CREATE INDEX IF NOT EXISTS ix_alert_trigger_rule_lifecycle "
                 "ON alert_triggers (rule_id, rule_lifecycle_id)"
             )
+
+        self._run_sqlite_schema_transaction(
+            "finalize_alert_rule_lifecycle_schema",
+            finalize_lifecycle_schema,
+        )
 
     def _ensure_decision_signal_profile_indexes(self) -> None:
         """Create profile-aware indexes without dropping legacy indexes."""
@@ -2302,6 +2307,37 @@ class DatabaseManager(metaclass=_DatabaseManagerMeta):
                 raise
             finally:
                 session.close()
+
+    def _run_sqlite_schema_transaction(
+        self,
+        operation_name: str,
+        schema_operation: Callable[[Any], T],
+    ) -> T:
+        """Run startup schema work with the same SQLite lock retry policy."""
+        max_retries = self._sqlite_write_retry_max if self._is_sqlite_engine else 0
+        for attempt in range(max_retries + 1):
+            try:
+                with self._engine.begin() as connection:
+                    return schema_operation(connection)
+            except OperationalError as exc:
+                if (
+                    self._is_sqlite_engine
+                    and self._is_sqlite_locked_error(exc)
+                    and attempt < max_retries
+                ):
+                    delay = self._sqlite_write_retry_base_delay * (2 ** attempt)
+                    logger.warning(
+                        "SQLite schema lock conflict, retrying: %s (%s/%s, %.2fs)",
+                        operation_name,
+                        attempt + 1,
+                        max_retries,
+                        delay,
+                    )
+                    if delay > 0:
+                        time.sleep(delay)
+                    continue
+                raise
+        raise RuntimeError(f"unreachable schema retry state: {operation_name}")
 
     @staticmethod
     def _is_sqlite_locked_error(exc: OperationalError) -> bool:
