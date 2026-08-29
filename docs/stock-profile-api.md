@@ -1,0 +1,37 @@
+# 个股研究聚合 API
+
+本文档说明 Issue #2279 的后端契约阶段。目标是让后续 `/stocks/:code` 工作台通过单一端点消费数据，而不是在浏览器并发拼装行情、历史、报告、资讯、持仓和监控接口。
+
+## 端点
+
+`GET /api/v1/stocks/{stock_code}/profile?history_days=60`
+
+端点先把输入统一为 canonical code，再将同一代码传给所有下游：
+
+- A 股：`SH600519`、`600519.SH` 等收敛为 `600519`。
+- 港股：`00700`、`00700.HK`、`HK00700` 收敛为 `HK00700`。
+- 美股 ticker 统一为大写，例如 `aapl` 收敛为 `AAPL`。
+
+响应包含 `quote`、`history`、`research`、`intelligence`、`portfolio`、`monitors` 六个独立块，以及顶层 `evidence_quality` 汇总。每个块的 `status` 只允许：
+
+| 状态 | 语义 |
+| --- | --- |
+| `fresh` | 本次请求成功取得可用数据；不代表所有外部来源具有同一时区或刷新频率 |
+| `partial` | 核心信息仍可用，但存在明确限制，例如只有报告列表、缺少详情，或持仓关系只来自缓存 |
+| `unavailable` | 本次没有可用数据；原因以稳定的 `limitations` code 返回，不暴露原始异常或密钥 |
+
+任一可选块失败不会让其他块消失。例如 quote 失败时，历史报告、结构化 ResearchArtifact、symbol intelligence 和监控规则仍可返回；最新报告详情失败时，`research.recent_reports` 仍保留，`structured_report` 为 `null` 并标记 `latest_report_detail_unavailable`。
+
+## 数据来源与边界
+
+- quote/history：复用 `StockService`，不新增数据获取器。
+- research：复用 `HistoryService` 和 #2291 的 `ResearchArtifact` builder；本 PR 因此堆叠在 #2291 上。
+- intelligence：复用 `IntelligenceService` 的 symbol scope 查询。
+- portfolio：只读 `PortfolioRepository.list_cached_position_identities()`；不为了打开个股页触发实时估值或写 snapshot，所以状态固定为 `partial` 并包含 `cached_positions_only`。
+- monitors：复用 `AlertService.list_rules()`，只统计 canonical code 的 `single_symbol` 规则。
+
+本阶段不新增 Web 路由/页面、不接线 Home/Watchlist/Screening/Portfolio/Report 入口，也不包含日历事件。后续 Web PR 必须消费本端点并分别渲染块状态；不得重新恢复多请求页面聚合。日历事件在 #2307 契约合入后再作为独立块扩展。
+
+## 回滚
+
+Revert 本 PR 即可移除 profile schema、service、endpoint、测试和文档。没有数据库迁移、配置变更或数据清理步骤。若 #2291 尚未合入，本 PR 需与其一起保持堆叠或在合入后把 base 改回 `main`。
