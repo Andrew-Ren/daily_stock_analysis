@@ -176,6 +176,7 @@ def test_provider_dataset_market_matrix_matches_fundamental_runtime_routes() -> 
     assert "financial.snapshot" not in _provider(overview, "tushare")["datasets"]
     assert "financial.snapshot" not in _provider(overview, "longbridge")["datasets"]
     assert _provider(overview, "tushare")["dataset_markets"]["quote.realtime"] == ["cn"]
+    assert "index.daily" not in _provider(overview, "tushare")["datasets"]
     assert _provider(overview, "yfinance")["dataset_markets"]["quote.realtime"] == [
         "hk",
         "us",

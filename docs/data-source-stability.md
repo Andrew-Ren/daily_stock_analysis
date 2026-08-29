@@ -38,7 +38,7 @@ Web/API 提供 `GET /api/v1/data/overview` 和等价别名 `GET /api/v1/data/cap
 - `providers`：每个 provider 的 `enabled`、`configured`、`status`、`markets`、`datasets`、精确的 `dataset_markets` 和非敏感 warning。`markets` 与 `datasets` 只是聚合索引，不能推断为笛卡尔积；例如 YFinance 可参与 A 股行情，但 A 股基本面固定走 AkShare，因此 `dataset_markets.financial.snapshot` 不包含 `cn`。
 - `datasets`：`quote.realtime`、`kline.daily`、`index.daily`、`market.overview`、`financial.snapshot`、`news.events`、`strategy.screening`、`alert.monitor`、`portfolio.account` 的 `status/source/fallback_from/stale/warnings`；其中 `quote.realtime`、`kline.daily`、`market.overview` 和 `financial.snapshot` 都聚合 `cn/hk/us/jp/kr/tw` 的市场级 coverage，避免把单市场健康度误报成全局可用。A 股实时 coverage 还会读取 AkShare Tencent/Sina/EM 子源级熔断状态；YFinance 的港股实时声明对应其实际 `.HK` 执行路径；任何按运行时顺序尝试的数据集在首个优先源尚未探测时都保持 `unknown`，不会越过它宣称后续源已被选中。`alert.monitor` 只有在 `AGENT_EVENT_MONITOR_ENABLED=true` 时才为 `ok`，默认关闭时返回 `unavailable` 与 `agent_event_monitor_disabled`。
 - `priorities`：`cn.realtime`、`hk.realtime`、`us.realtime`、`daily.generic`、`cn.index.daily`、`market.overview`、`screening.snapshot`、`news.events` 的当前 source order。
-- `index.daily` 额外区分 `cn.exchange`、`cn.csi` 与 `us` coverage：沪深交易所指数使用固定多源链，CSI 指数按运行时契约只认 AkShare，美股指数使用 YFinance → Finnhub；CN/HK realtime 都只接受对应运行时实际有 handler 的 source token，Tushare realtime 能力仅声明 A 股。
+- `index.daily` 额外区分 `cn.exchange`、`cn.csi` 与 `us` coverage：沪深交易所指数使用 Tencent、AkShare、TickFlow、YFinance 固定多源链，CSI 指数按运行时契约只认 AkShare，美股指数使用 YFinance → Finnhub；Tushare 不声明指数日线能力。CN/HK realtime 都只接受对应运行时实际有 handler 的 source token，Tushare realtime 能力仅声明 A 股。
 
 其中 `unknown` 表示尚未执行运行态探测，`unconfigured` 表示缺少必要配置，`degraded` 表示前置优先源不可用但后续源仍可消费。选股 source health 在冷启动、成功数和失败数都为 0 时保持 `unknown`，不会把尚未调用的数据源提前标成 `ok`。后续 Data Center 可以在同一结构上追加 last_success、coverage、cooldown 和运行历史，不需要各页面各自维护数据质量口径。
 

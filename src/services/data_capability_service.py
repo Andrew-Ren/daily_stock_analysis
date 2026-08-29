@@ -109,7 +109,6 @@ _PROVIDER_DEFINITIONS: Sequence[_ProviderDefinition] = (
         dataset_markets={
             "quote.realtime": ("cn",),
             "kline.daily": ("cn", "hk"),
-            "index.daily": ("cn",),
             "market.overview": ("cn",),
         },
     ),
