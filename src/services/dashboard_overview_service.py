@@ -3,7 +3,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import date, datetime
 from typing import Any, Dict, List, Optional, Tuple
 
 from src.config import Config, get_config
@@ -15,6 +15,7 @@ from src.services.task_queue import AnalysisTaskQueue, get_task_queue
 
 _MARKET_REVIEW_TYPE = "market_review"
 _DASHBOARD_HISTORY_PAGE_SIZE = 50
+_DASHBOARD_MARKET_REVIEW_SCAN_LIMIT = 100
 
 
 class DashboardOverviewService:
@@ -89,16 +90,29 @@ class DashboardOverviewService:
                         continue
                     raw_snapshots = self._extract_snapshots(detail.get("context_snapshot"))
                     for region, raw_snapshot in raw_snapshots.items():
-                        if len(snapshots_by_region.get(region, [])) >= 2:
-                            continue
                         try:
                             snapshot = MarketLightSnapshot.model_validate(raw_snapshot).model_dump()
+                            date.fromisoformat(str(snapshot.get("trade_date") or ""))
                         except Exception:
                             invalid_snapshot_count += 1
                             continue
-                        snapshots_by_region.setdefault(region, []).append(snapshot)
+                        region_snapshots = snapshots_by_region.setdefault(region, [])
+                        if any(
+                            existing.get("trade_date") == snapshot.get("trade_date")
+                            for existing in region_snapshots
+                        ):
+                            continue
+                        region_snapshots.append(snapshot)
+                        region_snapshots.sort(
+                            key=lambda item: str(item.get("trade_date") or ""),
+                            reverse=True,
+                        )
+                        del region_snapshots[2:]
                 scanned_count += len(reviews)
                 if scanned_count >= review_count:
+                    break
+                if scanned_count >= _DASHBOARD_MARKET_REVIEW_SCAN_LIMIT:
+                    history_scan_incomplete = True
                     break
                 if not reviews:
                     history_scan_incomplete = True
@@ -144,7 +158,10 @@ class DashboardOverviewService:
                 "latest_snapshots": latest_snapshots,
             },
         }
-        return market, self._build_changes(snapshots_by_region)
+        return market, self._build_changes(
+            snapshots_by_region,
+            source_limitations=limitations,
+        )
 
     def _personal_block(self) -> Dict[str, Any]:
         data = {
@@ -230,13 +247,18 @@ class DashboardOverviewService:
             "data": {"recent_reports": recent_reports, "task_stats": task_stats},
         }
 
-    def _build_changes(self, snapshots_by_region: Dict[str, List[Dict[str, Any]]]) -> Dict[str, Any]:
+    def _build_changes(
+        self,
+        snapshots_by_region: Dict[str, List[Dict[str, Any]]],
+        *,
+        source_limitations: Optional[List[str]] = None,
+    ) -> Dict[str, Any]:
         items: List[Dict[str, Any]] = []
         current_dates: Dict[str, str] = {}
         previous_dates: Dict[str, str] = {}
         comparable_regions = 0
         missing_baseline_regions: List[str] = []
-        limitations: List[str] = []
+        limitations: List[str] = list(source_limitations or [])
         for region, snapshots in snapshots_by_region.items():
             if snapshots:
                 current_dates[region] = str(snapshots[0].get("trade_date") or "")
@@ -245,8 +267,13 @@ class DashboardOverviewService:
                 continue
             current, previous = snapshots[0], snapshots[1]
             previous_dates[region] = str(previous.get("trade_date") or "")
+            quality = self._comparison_quality(current, previous)
+            if quality == "unavailable":
+                limitations.append(f"comparison_snapshot_unavailable:{region}")
+                continue
             comparable_regions += 1
-            quality = self._snapshot_quality(current)
+            if quality == "partial":
+                limitations.append(f"comparison_snapshot_data_partial:{region}")
             current_score = current.get("score")
             previous_score = previous.get("score")
             if current_score != previous_score:
@@ -311,6 +338,19 @@ class DashboardOverviewService:
         if quality == "unavailable":
             return "unavailable"
         return "partial"
+
+    @classmethod
+    def _comparison_quality(
+        cls,
+        current: Dict[str, Any],
+        previous: Dict[str, Any],
+    ) -> str:
+        qualities = {cls._snapshot_quality(current), cls._snapshot_quality(previous)}
+        if "unavailable" in qualities:
+            return "unavailable"
+        if "partial" in qualities:
+            return "partial"
+        return "fresh"
 
     @staticmethod
     def _empty_changes(quality: str, limitation: str) -> Dict[str, Any]:

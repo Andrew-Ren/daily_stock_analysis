@@ -193,6 +193,99 @@ def test_market_history_paginates_until_an_older_valid_baseline() -> None:
     assert dependencies["history_service"].get_history_list.call_args_list[1].kwargs["page"] == 2
 
 
+def test_change_baseline_is_the_latest_strictly_earlier_trade_date() -> None:
+    dependencies = _dependencies()
+    reviews = [_review(index, f"2026-08-{30 - index:02d}T09:00:00+08:00") for index in range(1, 5)]
+    dependencies["history_service"].get_history_list.side_effect = lambda **kwargs: (
+        {"items": reviews, "total": len(reviews)}
+        if kwargs.get("report_type") == "market_review"
+        else {"items": [], "total": 0}
+    )
+    dates = {1: "2026-08-28", 2: "2026-08-29", 3: "2026-08-29", 4: "2026-08-27"}
+    dependencies["history_service"].get_history_detail_by_id.side_effect = lambda record_id: {
+        "context_snapshot": {
+            "market_light_snapshots": {
+                "cn": _snapshot("cn", dates[record_id], record_id * 10, "yellow")
+            }
+        }
+    }
+
+    payload = DashboardOverviewService(**dependencies).get_overview()
+
+    assert payload["what_changed"]["data"]["current_trade_dates"]["cn"] == "2026-08-29"
+    assert payload["what_changed"]["data"]["previous_trade_dates"]["cn"] == "2026-08-28"
+
+
+def test_change_quality_uses_the_worse_snapshot_quality() -> None:
+    dependencies = _dependencies()
+    dependencies["history_service"].get_history_detail_by_id.side_effect = lambda record_id: {
+        "context_snapshot": {
+            "market_light_snapshots": {
+                "cn": _snapshot(
+                    "cn",
+                    "2026-08-29" if record_id == 1 else "2026-08-28",
+                    60 if record_id == 1 else 50,
+                    "yellow" if record_id == 1 else "green",
+                    "ok" if record_id == 1 else "partial",
+                )
+            }
+        }
+    }
+
+    payload = DashboardOverviewService(**dependencies).get_overview()
+
+    assert payload["what_changed"]["meta"]["quality"] == "partial"
+    assert "comparison_snapshot_data_partial:cn" in payload["what_changed"]["meta"]["limitations"]
+    assert {item["quality"] for item in payload["what_changed"]["data"]["items"]} == {"partial"}
+
+
+def test_incomplete_detail_history_keeps_what_changed_partial() -> None:
+    dependencies = _dependencies()
+    original_detail = dependencies["history_service"].get_history_detail_by_id.side_effect
+
+    def detail_with_failure(record_id: int) -> dict | None:
+        if record_id == 1:
+            return None
+        return original_detail(record_id)
+
+    dependencies["history_service"].get_history_detail_by_id.side_effect = detail_with_failure
+
+    payload = DashboardOverviewService(**dependencies).get_overview()
+
+    assert payload["what_changed"]["meta"]["quality"] == "partial"
+    assert "market_review_detail_partial" in payload["what_changed"]["meta"]["limitations"]
+
+
+def test_market_history_scan_is_bounded_and_reports_truncation() -> None:
+    dependencies = _dependencies()
+    reviews = [_review(index, "2026-08-29T09:00:00+08:00") for index in range(1, 251)]
+
+    def list_history(**kwargs: object) -> dict:
+        if kwargs.get("report_type") != "market_review":
+            return {"items": [], "total": 0}
+        page = int(kwargs.get("page") or 1)
+        limit = int(kwargs.get("limit") or 50)
+        start = (page - 1) * limit
+        return {"items": reviews[start:start + limit], "total": len(reviews)}
+
+    dependencies["history_service"].get_history_list.side_effect = list_history
+    dependencies["history_service"].get_history_detail_by_id.return_value = {
+        "context_snapshot": {"market_light_snapshots": {}}
+    }
+    dependencies["history_service"].get_history_detail_by_id.side_effect = None
+
+    payload = DashboardOverviewService(**dependencies).get_overview()
+
+    market_calls = [
+        call for call in dependencies["history_service"].get_history_list.call_args_list
+        if call.kwargs.get("report_type") == "market_review"
+    ]
+    assert [call.kwargs["page"] for call in market_calls] == [1, 2]
+    assert dependencies["history_service"].get_history_detail_by_id.call_count == 100
+    assert "market_review_history_scan_incomplete" in payload["market"]["meta"]["limitations"]
+    assert "market_review_history_scan_incomplete" in payload["what_changed"]["meta"]["limitations"]
+
+
 def test_changes_are_partial_when_only_some_regions_have_a_baseline() -> None:
     dependencies = _dependencies()
     dependencies["history_service"].get_history_list.side_effect = lambda **kwargs: (
