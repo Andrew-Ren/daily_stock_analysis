@@ -146,7 +146,6 @@ _PROVIDER_DEFINITIONS: Sequence[_ProviderDefinition] = (
         label="Finnhub",
         fetcher_name="FinnhubFetcher",
         dataset_markets={
-            "quote.realtime": ("us",),
             "kline.daily": ("us",),
             "index.daily": ("us",),
         },
@@ -156,7 +155,6 @@ _PROVIDER_DEFINITIONS: Sequence[_ProviderDefinition] = (
         label="Alpha Vantage",
         fetcher_name="AlphaVantageFetcher",
         dataset_markets={
-            "quote.realtime": ("us",),
             "kline.daily": ("us",),
         },
     ),

@@ -217,6 +217,8 @@ def test_provider_dataset_market_matrix_matches_fundamental_runtime_routes() -> 
         "us",
     ]
     assert "quote.realtime" not in _provider(overview, "pytdx")["datasets"]
+    assert "quote.realtime" not in _provider(overview, "finnhub")["datasets"]
+    assert "quote.realtime" not in _provider(overview, "alphavantage")["datasets"]
 
 
 def test_hk_realtime_priority_skips_futu_when_opend_is_unconfigured() -> None:
