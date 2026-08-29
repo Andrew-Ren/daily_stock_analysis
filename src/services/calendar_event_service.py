@@ -133,8 +133,11 @@ class CalendarEventService:
         if scope_type == "market":
             if not market:
                 raise CalendarEventServiceError("market scope requires market")
+            if symbol:
+                raise CalendarEventServiceError(
+                    "symbol is only supported for scope_type=symbol"
+                )
             scope_value = market
-            symbol = None
         elif scope_type == "symbol":
             if not symbol:
                 raise CalendarEventServiceError("symbol scope requires symbol")

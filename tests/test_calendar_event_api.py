@@ -309,6 +309,20 @@ class CalendarEventApiTestCase(unittest.TestCase):
                 self.assertEqual(response.status_code, 400, response.text)
                 self.assertEqual(response.json()["error"], "validation_error")
 
+        market_response = self.client.post(
+            "/api/v1/calendar/events",
+            json={
+                "title": "invalid market symbol metadata",
+                "event_type": "macro",
+                "scope_type": "market",
+                "market": "us",
+                "symbol": "AAPL",
+                "event_date": date.today().isoformat(),
+            },
+        )
+        self.assertEqual(market_response.status_code, 400, market_response.text)
+        self.assertEqual(market_response.json()["error"], "validation_error")
+
     def test_non_finite_metadata_is_rejected_before_persistence(self) -> None:
         event_date = date.today().isoformat()
         response = self.client.post(
