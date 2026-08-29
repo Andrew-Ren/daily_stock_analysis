@@ -534,15 +534,25 @@ class DataCapabilityService:
                     "cn.index.csi": {"providers": ["efinance"], "warnings": []},
                     "hk": priority_map.get("hk.realtime", {}),
                     "us": priority_map.get("us.realtime", {}),
+                    "us.index": {"providers": ["yfinance", "longbridge"], "warnings": []},
                     "jp": {"providers": ["yfinance"], "warnings": []},
                     "kr": {"providers": ["yfinance"], "warnings": []},
                     "tw": {"providers": ["yfinance"], "warnings": []},
                 },
                 provider_map=provider_map,
                 status_resolvers={
-                    "cn": self._cn_realtime_status_resolver(provider_map),
-                    "cn.index.exchange": self._cn_realtime_status_resolver(provider_map),
-                    "cn.index.csi": self._cn_realtime_status_resolver(provider_map),
+                    "cn": self._cn_realtime_status_resolver(
+                        provider_map,
+                        efinance_circuit_key="efinance",
+                    ),
+                    "cn.index.exchange": self._cn_realtime_status_resolver(
+                        provider_map,
+                        efinance_circuit_key="efinance_index",
+                    ),
+                    "cn.index.csi": self._cn_realtime_status_resolver(
+                        provider_map,
+                        efinance_circuit_key="efinance_index",
+                    ),
                     "hk": self._hk_realtime_status_resolver(provider_map),
                 },
                 disabled=not bool(getattr(self.config, "enable_realtime_quote", True)),
@@ -775,11 +785,17 @@ class DataCapabilityService:
     def _cn_realtime_status_resolver(
         self,
         provider_map: Dict[str, Dict[str, Any]],
+        *,
+        efinance_circuit_key: str,
     ) -> Callable[[str], str]:
         def resolve(token: str) -> str:
             if token not in _CN_REALTIME_SOURCES:
                 return "unsupported"
-            circuit_key = _AKSHARE_REALTIME_CIRCUIT_KEYS.get(token)
+            circuit_key = (
+                efinance_circuit_key
+                if token == "efinance"
+                else _AKSHARE_REALTIME_CIRCUIT_KEYS.get(token)
+            )
             if circuit_key is not None:
                 try:
                     from data_provider.realtime_types import get_realtime_circuit_breaker
@@ -793,8 +809,8 @@ class DataCapabilityService:
 
         return resolve
 
-    @staticmethod
     def _hk_realtime_status_resolver(
+        self,
         provider_map: Dict[str, Dict[str, Any]],
     ) -> Callable[[str], str]:
         supported_sources = {"futu", "longbridge", "akshare", "yfinance"}
@@ -802,6 +818,18 @@ class DataCapabilityService:
         def resolve(token: str) -> str:
             if token not in supported_sources:
                 return "unsupported"
+            if token == "akshare":
+                try:
+                    from data_provider.realtime_types import get_realtime_circuit_breaker
+
+                    circuit_status = get_realtime_circuit_breaker().get_status()
+                    if all(
+                        circuit_status.get(key) == "open"
+                        for key in ("akshare_hk_em", "akshare_hk_sina")
+                    ):
+                        return "cooldown"
+                except Exception as exc:  # noqa: BLE001 - diagnostics must fail open.
+                    logger.debug("Failed to read HK realtime circuit status: %s", exc)
             return DataCapabilityService._source_token_status(token, provider_map)
 
         return resolve

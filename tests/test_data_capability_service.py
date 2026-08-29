@@ -336,6 +336,77 @@ def test_cn_realtime_reports_fixed_index_route_separately_from_stock_priority() 
     assert quote_quality["status"] == "partial"
 
 
+def test_efinance_realtime_breakers_apply_to_stock_and_index_routes() -> None:
+    from data_provider.realtime_types import get_realtime_circuit_breaker
+
+    breaker = get_realtime_circuit_breaker()
+    try:
+        for key in ("efinance", "efinance_index"):
+            breaker.reset(key)
+            for _ in range(3):
+                breaker.record_failure(key, "test")
+        service = DataCapabilityService(
+            config=_config(realtime_source_priority="efinance,tencent"),
+            fetcher_manager=_FetcherManager([
+                _Fetcher("EfinanceFetcher", 0, available=True),
+                _Fetcher("AkshareFetcher", 1, available=True),
+            ]),
+        )
+
+        markets = _dataset(service.get_overview(), "quote.realtime")["coverage"]["markets"]
+
+        assert markets["cn"]["source"] == "tencent"
+        assert markets["cn"]["fallback_from"] == ["efinance"]
+        assert markets["cn.index.csi"]["status"] == "unavailable"
+        assert markets["cn.index.csi"]["warnings"] == ["source_status:efinance:cooldown"]
+    finally:
+        breaker.reset("efinance")
+        breaker.reset("efinance_index")
+
+
+def test_hk_realtime_falls_back_only_when_both_akshare_routes_are_open() -> None:
+    from data_provider.realtime_types import get_realtime_circuit_breaker
+
+    breaker = get_realtime_circuit_breaker()
+    try:
+        for key in ("akshare_hk_em", "akshare_hk_sina"):
+            breaker.reset(key)
+            for _ in range(3):
+                breaker.record_failure(key, "test")
+        service = DataCapabilityService(
+            config=_config(futu_hk_realtime_source_priority="akshare,yfinance"),
+            fetcher_manager=_FetcherManager([
+                _Fetcher("AkshareFetcher", 1, available=True),
+                _Fetcher("YfinanceFetcher", 4, available=True),
+            ]),
+        )
+
+        hk_quality = _dataset(service.get_overview(), "quote.realtime")["coverage"]["markets"]["hk"]
+
+        assert hk_quality["status"] == "degraded"
+        assert hk_quality["source"] == "yfinance"
+        assert hk_quality["fallback_from"] == ["akshare"]
+    finally:
+        breaker.reset("akshare_hk_em")
+        breaker.reset("akshare_hk_sina")
+
+
+def test_us_index_realtime_keeps_yfinance_ahead_of_healthy_longbridge() -> None:
+    service = DataCapabilityService(
+        config=_config(longbridge_app_key="key"),
+        fetcher_manager=_FetcherManager([
+            _Fetcher("LongbridgeFetcher", 1, available=True, is_available_for_request=True),
+            _Fetcher("YfinanceFetcher", 4, available=True),
+        ]),
+    )
+
+    markets = _dataset(service.get_overview(), "quote.realtime")["coverage"]["markets"]
+
+    assert markets["us"]["source"] == "longbridge"
+    assert markets["us.index"]["source"] == "yfinance"
+    assert markets["us.index"]["fallback_from"] == []
+
+
 def test_cn_realtime_rejects_tokens_without_runtime_handlers() -> None:
     service = DataCapabilityService(
         config=_config(realtime_source_priority="yfinance,efinance"),
