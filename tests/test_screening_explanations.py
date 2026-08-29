@@ -3,7 +3,42 @@
 
 from datetime import datetime, timedelta, timezone
 
-from src.services.screening_service import _attach_candidate_explanations, _normalize_candidate
+import pytest
+
+from src.services.screening.models import ScreeningConfig
+from src.services.screening.scorer import normalized_factor_weights
+from src.services.screening_service import (
+    _attach_candidate_explanations,
+    _normalize_candidate,
+    _strategy_factor_weights,
+)
+
+
+def test_strategy_explanations_use_scorer_defaults_when_weights_are_omitted() -> None:
+    effective = normalized_factor_weights(ScreeningConfig(tech_weight=0.2))
+    weights = _strategy_factor_weights("custom", effective_weights=effective)
+
+    assert weights == pytest.approx({
+        "value": 0.4,
+        "liquidity": 0.2,
+        "stability": 0.2,
+        "momentum": 0.11,
+        "activity": 0.09,
+    })
+
+
+def test_strategy_explanations_use_scorer_fallback_when_all_weights_are_zero() -> None:
+    effective = normalized_factor_weights(
+        ScreeningConfig(factor_weights={"value": 0, "stability": 0})
+    )
+    weights = _strategy_factor_weights("custom", effective_weights=effective)
+
+    assert weights == {
+        "value": 0.4,
+        "liquidity": 0.2,
+        "momentum": 0.2,
+        "activity": 0.2,
+    }
 
 
 def test_real_zero_quote_change_is_preserved_as_observed_evidence() -> None:

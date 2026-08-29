@@ -1254,7 +1254,10 @@ class ScreeningService:
             raw_data = {"candidates": raw_data}
         raw_data = _remove_non_finite_json_values(raw_data)
 
-        strategy_factor_weights = _strategy_factor_weights(strategy)
+        strategy_factor_weights = _strategy_factor_weights(
+            strategy,
+            effective_weights=raw_data.get("effective_factor_weights"),
+        )
         candidates = _normalize_candidates(
             raw_data,
             factor_weights=strategy_factor_weights,
@@ -3823,7 +3826,14 @@ def _normalize_candidate(
     }
 
 
-def _strategy_factor_weights(strategy_name: str) -> Dict[str, float]:
+def _strategy_factor_weights(
+    strategy_name: str,
+    *,
+    effective_weights: Any = None,
+) -> Dict[str, float]:
+    effective = _valid_positive_factor_weights(effective_weights)
+    if effective:
+        return effective
     strategies = _to_plain(load_screening_strategies())
     if not isinstance(strategies, list):
         return {}
@@ -3837,19 +3847,23 @@ def _strategy_factor_weights(strategy_name: str) -> Dict[str, float]:
             or strategy.get("name")
             or ""
         )
-        if name != strategy_name:
-            continue
-        raw_weights = strategy.get("factor_weights") or strategy.get("factorWeights") or {}
-        if not isinstance(raw_weights, dict):
-            return {}
-        return {
-            str(factor): float(weight)
-            for factor, weight in raw_weights.items()
-            if isinstance(weight, (int, float))
-            and math.isfinite(float(weight))
-            and float(weight) > 0
-        }
+        if name == strategy_name:
+            return _valid_positive_factor_weights(
+                strategy.get("factor_weights") or strategy.get("factorWeights")
+            )
     return {}
+
+
+def _valid_positive_factor_weights(value: Any) -> Dict[str, float]:
+    if not isinstance(value, dict):
+        return {}
+    return {
+        str(factor): float(weight)
+        for factor, weight in value.items()
+        if isinstance(weight, (int, float))
+        and math.isfinite(float(weight))
+        and float(weight) > 0
+    }
 
 
 def _attach_candidate_explanations(
