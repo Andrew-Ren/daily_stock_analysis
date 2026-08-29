@@ -485,7 +485,7 @@ def test_daily_dataset_quality_is_market_aware() -> None:
     assert daily_quality["coverage"]["markets"]["us"]["status"] == "unavailable"
     for market in ("jp", "kr", "tw"):
         assert daily_quality["coverage"]["markets"][market]["status"] == "unavailable"
-    assert "hk:source_status:yfinance:unavailable" in daily_quality["warnings"]
+    assert "hk:request_available_priority_empty" in daily_quality["warnings"]
     assert "us:source_status:yfinance:unavailable" in daily_quality["warnings"]
 
 
@@ -505,6 +505,24 @@ def test_daily_dataset_quality_prefers_longbridge_for_us_when_available() -> Non
     assert daily_quality["coverage"]["markets"]["us"]["status"] == "ok"
     assert daily_quality["coverage"]["markets"]["us"]["source"] == "longbridge"
     assert "us:finnhub" not in daily_quality["fallback_from"]
+
+
+def test_daily_priority_excludes_request_unavailable_fetchers() -> None:
+    service = DataCapabilityService(
+        config=_config(),
+        fetcher_manager=_FetcherManager([
+            _Fetcher("EfinanceFetcher", 0, available=True, is_available_for_request=False),
+            _Fetcher("PytdxFetcher", 1, available=True, is_available_for_request=True),
+        ]),
+    )
+
+    overview = service.get_overview()
+    priorities = {item["scenario"]: item for item in overview["priorities"]}
+    cn_daily = _dataset(overview, "kline.daily")["coverage"]["markets"]["cn"]
+
+    assert priorities["daily.generic"]["providers"] == ["pytdx"]
+    assert cn_daily["source"] == "pytdx"
+    assert cn_daily["fallback_from"] == []
 
 
 def test_daily_dataset_quality_honors_market_specific_circuit_breakers() -> None:

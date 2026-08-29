@@ -400,6 +400,7 @@ class DataCapabilityService:
             _FETCHER_TO_PROVIDER.get(str(getattr(fetcher, "name", "")), str(getattr(fetcher, "name", "")).lower())
             for fetcher in sorted(fetchers, key=lambda item: getattr(item, "priority", 99))
             if getattr(fetcher, "name", None)
+            and self._fetcher_available_for_capability(fetcher, capability="daily_data")
         ]
         cn_index_daily = ["tencent", "akshare", "tickflow", "yfinance"]
         market_overview = self._market_overview_priority(generic_daily)
@@ -606,30 +607,27 @@ class DataCapabilityService:
     ) -> Dict[str, Dict[str, Any]]:
         generic_providers = list(generic_priority.get("providers") or [])
         generic_warnings = list(generic_priority.get("warnings") or [])
+
+        def generic_market_priority(market: str) -> Dict[str, Any]:
+            priority = self._filter_market_dataset_priority(
+                providers=generic_providers,
+                dataset="kline.daily",
+                market=market,
+                warnings=generic_warnings,
+            )
+            if not priority["providers"]:
+                priority["empty_status"] = "unavailable"
+            return priority
+
         return {
-            "cn": self._filter_market_dataset_priority(
-                providers=generic_providers,
-                dataset="kline.daily",
-                market="cn",
-                warnings=generic_warnings,
-            ),
-            "hk": self._filter_market_dataset_priority(
-                providers=generic_providers,
-                dataset="kline.daily",
-                market="hk",
-                warnings=generic_warnings,
-            ),
+            "cn": generic_market_priority("cn"),
+            "hk": generic_market_priority("hk"),
             "us": {
                 "providers": self._us_daily_priority(fetchers),
                 "warnings": [],
             },
             **{
-                market: self._filter_market_dataset_priority(
-                    providers=generic_providers,
-                    dataset="kline.daily",
-                    market=market,
-                    warnings=generic_warnings,
-                )
+                market: generic_market_priority(market)
                 for market in ("jp", "kr", "tw")
             },
         }
@@ -959,6 +957,18 @@ class DataCapabilityService:
         providers = list(priority.get("providers") or [])
         warnings = list(priority.get("warnings") or [])
         if not providers:
+            if priority.get("empty_status") == "unavailable":
+                return {
+                    "dataset": dataset,
+                    "status": "unavailable",
+                    "source": None,
+                    "stale": None,
+                    "last_success": None,
+                    "last_error": None,
+                    "fallback_from": [],
+                    "coverage": None,
+                    "warnings": ["request_available_priority_empty", *warnings],
+                }
             return self._unknown_dataset(dataset, warnings=["priority_empty", *warnings])
 
         selected: Optional[str] = None
