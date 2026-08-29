@@ -170,13 +170,6 @@ const FACTOR_LABELS: Record<string, string> = {
   topic_alignment: '题材匹配',
 };
 
-const POST_TAG_LABELS: Record<string, string> = {
-  value_quality: '价值质量',
-  controlled_reversal: '受控反转',
-  momentum: '趋势动量',
-  liquidity: '流动性',
-};
-
 const HOTSPOT_QUALITY_LABELS: Record<string, string> = {
   available: '可用',
   failed: '不可用',
@@ -234,28 +227,9 @@ const getHotspotQualityLabel = (value: unknown) => {
   return HOTSPOT_QUALITY_LABELS[text.toLowerCase()] || '待确认';
 };
 
-const getLocalFactorReason = (item: ScreeningCandidate) => {
-  const factors = Object.entries(item.factorScores || {})
-    .filter(([, value]) => typeof value === 'number')
-    .sort((a, b) => Number(b[1]) - Number(a[1]))
-    .slice(0, 3)
-    .map(([key, value]) => `${FACTOR_LABELS[key] || key} ${Number(value).toFixed(0)}`);
-  const tags = (item.postAnalysisTags || [])
-    .slice(0, 2)
-    .map((tag) => POST_TAG_LABELS[tag] || tag);
-  if (factors.length > 0) {
-    return `主要优势：${factors.join('、')}${tags.length > 0 ? `；标签：${tags.join('、')}` : ''}`;
-  }
-  return '';
-};
-
 const getCandidateReason = (item: ScreeningCandidate) => {
   if (item.llmThesis || item.llmScore != null) {
     return item.reason || item.llmThesis || 'LLM 已完成相对排序。';
-  }
-  const localReason = getLocalFactorReason(item);
-  if (localReason) {
-    return localReason;
   }
   if (item.reason) {
     return item.reason;
