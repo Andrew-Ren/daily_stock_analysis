@@ -83,6 +83,7 @@ class CalendarEventService:
             scope_value=scope_value,
             market=market,
             symbol=symbol,
+            source="user",
             page=page,
             page_size=page_size,
         )

@@ -439,6 +439,11 @@ class CalendarEventApiTestCase(unittest.TestCase):
         self.assertEqual(refused.status_code, 400)
         self.assertEqual(refused.json()["error"], "validation_error")
 
+        listed = self.client.get("/api/v1/calendar/events")
+        self.assertEqual(listed.status_code, 200, listed.text)
+        self.assertNotIn(external.id, {item["id"] for item in listed.json()["items"]})
+        self.assertEqual(listed.json()["coverage"]["status"], "manual_only")
+
     def test_delete_rejects_ids_outside_the_database_integer_range(self) -> None:
         created = self._create()
 

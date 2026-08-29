@@ -48,6 +48,7 @@ class CalendarEventRepository:
         scope_value: Optional[str] = None,
         market: Optional[str] = None,
         symbol: Optional[str] = None,
+        source: Optional[str] = None,
         page: int = 1,
         page_size: int = 100,
     ) -> Tuple[List[CalendarEventRecord], int]:
@@ -68,6 +69,8 @@ class CalendarEventRepository:
                     func.lower(CalendarEventRecord.symbol) == symbol.lower(),
                 ]
             )
+        if source:
+            conditions.append(func.lower(CalendarEventRecord.source) == source.lower())
         where_clause = and_(*conditions)
         safe_page = max(1, int(page))
         safe_size = max(1, min(int(page_size), 100))
