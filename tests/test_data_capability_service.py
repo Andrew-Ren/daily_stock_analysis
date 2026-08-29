@@ -199,6 +199,41 @@ def test_realtime_dataset_quality_is_market_aware() -> None:
     assert quote_quality["coverage"]["markets"]["cn"]["source"] == "efinance"
     assert quote_quality["coverage"]["markets"]["hk"]["status"] == "unavailable"
     assert quote_quality["coverage"]["markets"]["us"]["status"] == "ok"
+    for market in ("jp", "kr", "tw"):
+        assert quote_quality["coverage"]["markets"][market] == {
+            "status": "ok",
+            "source": "yfinance",
+            "fallback_from": [],
+            "warnings": [],
+        }
+
+
+def test_cn_realtime_quality_honors_akshare_subsource_circuit_breaker() -> None:
+    from data_provider.realtime_types import get_realtime_circuit_breaker
+
+    breaker = get_realtime_circuit_breaker()
+    breaker.reset("akshare_tencent")
+    try:
+        for _ in range(3):
+            breaker.record_failure("akshare_tencent", "test failure")
+        service = DataCapabilityService(
+            config=_config(realtime_source_priority="tencent,efinance"),
+            fetcher_manager=_FetcherManager([
+                _Fetcher("AkshareFetcher", 0, available=True),
+                _Fetcher("EfinanceFetcher", 1, available=True),
+                _Fetcher("YfinanceFetcher", 4, available=True),
+            ]),
+        )
+
+        quote_quality = _dataset(service.get_overview(), "quote.realtime")
+        cn_quality = quote_quality["coverage"]["markets"]["cn"]
+
+        assert cn_quality["status"] == "degraded"
+        assert cn_quality["source"] == "efinance"
+        assert cn_quality["fallback_from"] == ["tencent"]
+        assert cn_quality["warnings"] == ["source_status:tencent:cooldown"]
+    finally:
+        breaker.reset("akshare_tencent")
 
 
 def test_daily_dataset_quality_is_market_aware() -> None:
@@ -219,6 +254,8 @@ def test_daily_dataset_quality_is_market_aware() -> None:
     assert daily_quality["coverage"]["markets"]["cn"]["source"] == "efinance"
     assert daily_quality["coverage"]["markets"]["hk"]["status"] == "unavailable"
     assert daily_quality["coverage"]["markets"]["us"]["status"] == "unavailable"
+    for market in ("jp", "kr", "tw"):
+        assert daily_quality["coverage"]["markets"][market]["status"] == "unavailable"
     assert "hk:source_status:yfinance:unavailable" in daily_quality["warnings"]
     assert "us:source_status:yfinance:unavailable" in daily_quality["warnings"]
 
@@ -340,6 +377,9 @@ def test_fundamental_dataset_quality_is_market_aware() -> None:
     assert fundamental_quality["coverage"]["markets"]["hk"]["source"] is None
     assert fundamental_quality["coverage"]["markets"]["us"]["status"] == "unavailable"
     assert fundamental_quality["coverage"]["markets"]["us"]["source"] is None
+    for market in ("jp", "kr", "tw"):
+        assert fundamental_quality["coverage"]["markets"][market]["status"] == "unavailable"
+        assert fundamental_quality["coverage"]["markets"][market]["source"] is None
     assert "hk:source_status:yfinance:unavailable" in fundamental_quality["warnings"]
     assert "us:source_status:yfinance:unavailable" in fundamental_quality["warnings"]
 
@@ -446,11 +486,38 @@ def test_screening_dataset_keeps_known_sources_unknown_before_runtime_probe() ->
 
     assert screening_quality["status"] == "unknown"
     assert screening_quality["source"] is None
-    assert screening_quality["fallback_from"] == ["tushare", "em_datacenter"]
+    assert screening_quality["fallback_from"] == []
     assert screening_quality["warnings"] == [
         "source_status:tushare:unknown",
-        "source_status:em_datacenter:unknown",
     ]
+
+
+def test_screening_dataset_does_not_skip_unprobed_preferred_source() -> None:
+    service = DataCapabilityService(
+        config=_config(screening_enabled=True),
+        fetcher_manager=_FetcherManager([]),
+    )
+
+    with patch.dict("os.environ", {"SNAPSHOT_SOURCE_PRIORITY": "tushare,em_datacenter"}, clear=False):
+        with patch(
+            "src.services.screening_service._get_screening_status_snapshot",
+            return_value=({"available": True}, True, None),
+        ):
+            with patch(
+                "src.services.screening_service._get_screening_source_health_snapshot",
+                return_value={
+                    "snapshot": {
+                        "tushare": {"successes": 0, "failures": 0, "disabled": False},
+                        "em_datacenter": {"successes": 1},
+                    }
+                },
+            ):
+                screening_quality = _dataset(service.get_overview(), "strategy.screening")
+
+    assert screening_quality["status"] == "unknown"
+    assert screening_quality["source"] is None
+    assert screening_quality["fallback_from"] == []
+    assert screening_quality["warnings"] == ["source_status:tushare:unknown"]
 
 
 def test_screening_dataset_does_not_select_unknown_snapshot_source() -> None:
@@ -477,7 +544,7 @@ def test_screening_dataset_does_not_select_unknown_snapshot_source() -> None:
     assert screening_quality["fallback_from"] == ["mystery_source"]
     assert screening_quality["warnings"] == [
         "unknown_source:mystery_source",
-        "source_status:mystery_source:unknown",
+        "source_status:mystery_source:unsupported",
     ]
 
 

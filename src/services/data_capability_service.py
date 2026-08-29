@@ -190,6 +190,13 @@ _REALTIME_SOURCE_PROVIDER = {
     "alphavantage": "alphavantage",
 }
 
+_AKSHARE_REALTIME_CIRCUIT_KEYS = {
+    "tencent": "akshare_tencent",
+    "akshare_qq": "akshare_tencent",
+    "akshare_sina": "akshare_sina",
+    "akshare_em": "akshare_em",
+}
+
 _SCREENING_SOURCES = {"tushare", "sina", "efinance", "akshare_em", "em_datacenter"}
 _MARKET_OVERVIEW_PROVIDER_MARKETS = {
     "tickflow": {"cn"},
@@ -496,8 +503,14 @@ class DataCapabilityService:
                     "cn": priority_map.get("cn.realtime", {}),
                     "hk": priority_map.get("hk.realtime", {}),
                     "us": priority_map.get("us.realtime", {}),
+                    "jp": {"providers": ["yfinance"], "warnings": []},
+                    "kr": {"providers": ["yfinance"], "warnings": []},
+                    "tw": {"providers": ["yfinance"], "warnings": []},
                 },
                 provider_map=provider_map,
+                status_resolvers={
+                    "cn": self._cn_realtime_status_resolver(provider_map),
+                },
                 disabled=not bool(getattr(self.config, "enable_realtime_quote", True)),
                 disabled_warning="realtime_quote_disabled",
             ),
@@ -558,6 +571,15 @@ class DataCapabilityService:
                 "providers": self._us_daily_priority(fetchers),
                 "warnings": [],
             },
+            **{
+                market: self._filter_market_dataset_priority(
+                    providers=generic_providers,
+                    dataset="kline.daily",
+                    market=market,
+                    warnings=generic_warnings,
+                )
+                for market in ("jp", "kr", "tw")
+            },
         }
 
     def _market_overview_market_priorities(
@@ -592,7 +614,7 @@ class DataCapabilityService:
                 provider_map=provider_map,
                 fetcher_map=fetcher_map,
             )
-            for market in ("cn", "hk", "us")
+            for market in ("cn", "hk", "us", "jp", "kr", "tw")
         }
 
     def _index_daily_status_resolver(
@@ -689,7 +711,33 @@ class DataCapabilityService:
             "cn": {"providers": ["akshare"], "warnings": []},
             "hk": {"providers": hk_providers, "warnings": []},
             "us": {"providers": ["yfinance"], "warnings": []},
+            "jp": {"providers": ["yfinance"], "warnings": []},
+            "kr": {"providers": ["yfinance"], "warnings": []},
+            "tw": {"providers": ["yfinance"], "warnings": []},
         }
+
+    def _cn_realtime_status_resolver(
+        self,
+        provider_map: Dict[str, Dict[str, Any]],
+    ) -> Callable[[str], str]:
+        def resolve(token: str) -> str:
+            provider_status = self._source_token_status(token, provider_map)
+            if provider_status != "ok":
+                return provider_status
+            circuit_key = _AKSHARE_REALTIME_CIRCUIT_KEYS.get(token)
+            if circuit_key is None:
+                return provider_status
+            try:
+                from data_provider.realtime_types import get_realtime_circuit_breaker
+
+                circuit_status = get_realtime_circuit_breaker().get_status().get(circuit_key)
+                if circuit_status == "open":
+                    return "cooldown"
+            except Exception as exc:  # noqa: BLE001 - diagnostics must fail open.
+                logger.debug("Failed to read realtime source circuit status: %s", exc)
+            return provider_status
+
+        return resolve
 
     def _us_daily_priority(self, fetchers: Sequence[Any]) -> List[str]:
         fetcher_map = {str(getattr(fetcher, "name", "")): fetcher for fetcher in fetchers}
@@ -798,6 +846,7 @@ class DataCapabilityService:
         status_resolver: Optional[Callable[[str], str]] = None,
         disabled: bool = False,
         disabled_warning: str = "",
+        stop_on_unknown: bool = False,
     ) -> Dict[str, Any]:
         if disabled:
             return {
@@ -830,6 +879,19 @@ class DataCapabilityService:
             if token_status == "ok":
                 selected = token
                 break
+            if token_status == "unknown" and stop_on_unknown:
+                warnings.append(f"source_status:{token}:{token_status}")
+                return {
+                    "dataset": dataset,
+                    "status": "unknown",
+                    "source": None,
+                    "stale": None,
+                    "last_success": None,
+                    "last_error": None,
+                    "fallback_from": fallback_from,
+                    "coverage": None,
+                    "warnings": warnings,
+                }
             fallback_from.append(token)
             warnings.append(f"source_status:{token}:{token_status}")
 
@@ -960,6 +1022,7 @@ class DataCapabilityService:
             priority={"providers": providers, "warnings": warnings},
             provider_map={},
             status_resolver=self._screening_source_status_resolver(source_health),
+            stop_on_unknown=True,
         )
 
     def _screening_runtime_health(self) -> tuple[bool, Dict[str, Any]]:
@@ -981,7 +1044,7 @@ class DataCapabilityService:
 
         def resolve(token: str) -> str:
             if token not in _SCREENING_SOURCES:
-                return "unknown"
+                return "unsupported"
             state = snapshot_health.get(token) if isinstance(snapshot_health, dict) else None
             if not isinstance(state, dict):
                 return "unknown"
