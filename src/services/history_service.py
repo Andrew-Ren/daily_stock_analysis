@@ -127,6 +127,11 @@ class HistoryService:
             if identity is None or identity.market != trusted_market:
                 return []
             for candidate in identity.code_candidates:
+                candidate_text = str(candidate or "").strip()
+                if candidate_text.isdigit():
+                    unhinted_identity = resolve_daily_stock_identity(candidate_text)
+                    if unhinted_identity is None or unhinted_identity.market != trusted_market:
+                        continue
                 add(candidate)
             return candidates
 
