@@ -157,6 +157,41 @@ def test_profile_uses_one_canonical_code_and_returns_structured_research() -> No
     }
 
 
+def test_profile_research_preserves_specialized_report_evidence() -> None:
+    service, dependencies = _service()
+    detail = _report_detail()
+    detail["context_snapshot"] = {
+        "fundamental_context": {
+            "earnings": {
+                "data": {
+                    "financial_report": {"report_date": "2026-06-30"},
+                    "dividend": {"ttm_cash_dividend_per_share": 1.2},
+                }
+            }
+        }
+    }
+    detail["raw_result"] = {
+        "market_structure_context": {
+            "schema_version": "market-structure-v1",
+            "status": "available",
+            "market_theme_context": {"schema_version": "market-theme-v1"},
+            "stock_market_position": {"schema_version": "stock-market-position-v1"},
+        }
+    }
+    dependencies["history_service"].get_history_detail_by_id.return_value = detail
+
+    payload = service.get_profile("AAPL")
+
+    artifact = payload["research"]["data"]["structured_report"]
+    evidence_ids = {item["id"] for item in artifact["evidence"]}
+    assert {
+        "fundamental:financial_report",
+        "fundamental:dividend_metrics",
+        "market:structure",
+    } <= evidence_ids
+    assert artifact["data_quality"]["source_count"] == len(artifact["evidence"])
+
+
 def test_hk_alias_is_canonicalized_before_every_downstream_query() -> None:
     service, dependencies = _service()
     dependencies["stock_service"].get_realtime_quote.return_value = _quote("HK00700")

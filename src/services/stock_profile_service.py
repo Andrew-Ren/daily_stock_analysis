@@ -16,6 +16,10 @@ from src.services.market_symbol_utils import get_suffix_market
 from src.services.research_artifact_service import build_research_artifact
 from src.services.stock_code_utils import resolve_daily_stock_identity
 from src.services.stock_service import StockService
+from src.utils.data_processing import (
+    extract_fundamental_detail_fields,
+    extract_market_structure_detail_field,
+)
 
 _BLOCK_NAMES = ("quote", "history", "research", "intelligence", "portfolio", "monitors")
 
@@ -341,7 +345,22 @@ class StockProfileService:
 
     @staticmethod
     def _artifact_input(detail: Dict[str, Any]) -> Dict[str, Any]:
-        context_overview = extract_analysis_context_pack_overview(detail.get("context_snapshot"))
+        context_snapshot = detail.get("context_snapshot")
+        raw_result = detail.get("raw_result")
+        raw_fundamental = (
+            raw_result.get("fundamental_context") or raw_result
+            if isinstance(raw_result, dict)
+            else None
+        )
+        extracted_fundamental = extract_fundamental_detail_fields(
+            context_snapshot,
+            raw_fundamental,
+        )
+        context_overview = extract_analysis_context_pack_overview(context_snapshot)
+        market_structure = extract_market_structure_detail_field(
+            context_snapshot,
+            raw_result,
+        )
         return {
             "meta": {
                 "id": detail.get("id"),
@@ -368,6 +387,11 @@ class StockProfileService:
                 "news_content": detail.get("news_content"),
                 "empty_news_disclosure": detail.get("empty_news_disclosure"),
                 "analysis_context_pack_overview": context_overview,
+                "financial_report": detail.get("financial_report")
+                or extracted_fundamental.get("financial_report"),
+                "dividend_metrics": detail.get("dividend_metrics")
+                or extracted_fundamental.get("dividend_metrics"),
+                "market_structure": detail.get("market_structure") or market_structure,
             },
         }
 
