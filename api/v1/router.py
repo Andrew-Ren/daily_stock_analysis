@@ -19,6 +19,7 @@ from api.v1.endpoints import (
     auth,
     backtest,
     data,
+    dashboard,
     decision_signals,
     health,
     history,
@@ -67,6 +68,12 @@ router.include_router(
     backtest.router,
     prefix="/backtest",
     tags=["Backtest"]
+)
+
+router.include_router(
+    dashboard.router,
+    prefix="/dashboard",
+    tags=["Dashboard"]
 )
 
 router.include_router(

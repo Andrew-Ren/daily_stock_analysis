@@ -64,6 +64,7 @@ from api.v1.schemas.data_capability import (
     DatasetQualityStatus,
     ProviderCapabilityStatus,
 )
+from api.v1.schemas.dashboard import DashboardOverviewResponse
 from api.v1.schemas.system_config import (
     SystemConfigFieldSchema,
     SystemConfigCategorySchema,
@@ -197,6 +198,8 @@ __all__ = [
     "DataProviderCapability",
     "DatasetQualityStatus",
     "ProviderCapabilityStatus",
+    # dashboard
+    "DashboardOverviewResponse",
     # system config
     "SystemConfigFieldSchema",
     "SystemConfigCategorySchema",
