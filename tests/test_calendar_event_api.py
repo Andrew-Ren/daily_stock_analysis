@@ -192,6 +192,55 @@ class CalendarEventApiTestCase(unittest.TestCase):
         self.assertEqual(conflicting_scope_value.status_code, 400)
         self.assertEqual(conflicting_scope_value.json()["error"], "validation_error")
 
+    def test_registered_index_aliases_round_trip_through_symbol_contract(self) -> None:
+        start = date.today()
+        end = start + timedelta(days=10)
+        broad_market = self._create(
+            title="CSI 300 rebalance",
+            market=None,
+            symbol="000300.SH",
+            event_date=(start + timedelta(days=1)).isoformat(),
+        )
+        csi = self._create(
+            title="CSI thematic rebalance",
+            market=None,
+            symbol="930955.CSI",
+            event_date=(start + timedelta(days=2)).isoformat(),
+        )
+
+        self.assertEqual(broad_market["symbol"], "sh000300")
+        self.assertEqual(broad_market["scope_value"], "sh000300")
+        self.assertEqual(broad_market["market"], "cn")
+        self.assertEqual(csi["symbol"], "csi930955")
+        self.assertEqual(csi["market"], "cn")
+
+        for alias, expected_id in (
+            ("sh000300", broad_market["id"]),
+            ("000300.SH", broad_market["id"]),
+            ("csi930955", csi["id"]),
+            ("930955.CSI", csi["id"]),
+        ):
+            response = self.client.get(
+                "/api/v1/calendar/events",
+                params={
+                    "start_date": start.isoformat(),
+                    "end_date": end.isoformat(),
+                    "symbol": alias,
+                },
+            )
+            self.assertEqual(response.status_code, 200, response.text)
+            self.assertEqual([item["id"] for item in response.json()["items"]], [expected_id])
+
+        shanghai_50 = self._create(market=None, symbol="sh000016")
+        self.assertEqual(shanghai_50["symbol"], "sh000016")
+        self.assertEqual(
+            self.client.get(
+                "/api/v1/calendar/events",
+                params={"symbol": "000016.SH"},
+            ).json()["items"][0]["id"],
+            shanghai_50["id"],
+        )
+
     def test_symbol_scope_derives_market_and_rejects_conflicts(self) -> None:
         hk_event = self._create(symbol="HK00700", market=None)
 

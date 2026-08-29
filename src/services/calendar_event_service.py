@@ -10,6 +10,7 @@ from typing import Any, Dict, Optional
 from data_provider.base import canonical_stock_code
 from src.repositories.calendar_event_repo import CalendarEventRepository
 from src.services.stock_code_utils import resolve_daily_stock_identity
+from src.services.stock_list_parser import ParseStatus, parse_analysis_target
 
 _ALLOWED_EVENT_TYPES = {"earnings", "dividend", "lockup_unlock", "macro", "user", "monitor"}
 _ALLOWED_SCOPE_TYPES = {"market", "symbol", "portfolio", "sector", "custom"}
@@ -200,6 +201,11 @@ class CalendarEventService:
         normalized = CalendarEventService._optional_normalized(value)
         if normalized is None:
             return None, None
+        analysis_target = parse_analysis_target(normalized)
+        if analysis_target.asset_type == ParseStatus.INDEX:
+            if market_hint and market_hint != "cn":
+                raise CalendarEventServiceError("market conflicts with symbol identity")
+            return analysis_target.canonical_id, "cn"
         identity = resolve_daily_stock_identity(normalized, market_hint=market_hint)
         if identity is None or identity.market not in _ALLOWED_MARKETS - {"global"}:
             raise CalendarEventServiceError("unsupported symbol identity")
