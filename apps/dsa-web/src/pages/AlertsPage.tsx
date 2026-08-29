@@ -130,6 +130,7 @@ const AlertsPage: React.FC = () => {
   const [busyRule, setBusyRule] = useState<AlertRuleBusyState | null>(null);
   const [testResult, setTestResult] = useState<AlertRuleTestResponse | null>(null);
   const rulesRequestIdRef = useRef(0);
+  const monitorSummaryRequestIdRef = useRef(0);
 
   const loadRules = useCallback(async (pageOverride?: number) => {
     const requestId = rulesRequestIdRef.current + 1;
@@ -183,14 +184,22 @@ const AlertsPage: React.FC = () => {
   }, []);
 
   const loadMonitorSummary = useCallback(async () => {
+    const requestId = monitorSummaryRequestIdRef.current + 1;
+    monitorSummaryRequestIdRef.current = requestId;
+    const isLatestRequest = () => monitorSummaryRequestIdRef.current === requestId;
     setMonitorSummaryLoading(true);
     try {
-      setMonitorSummary(await alertsApi.getMonitorSummary(20));
+      const response = await alertsApi.getMonitorSummary(20);
+      if (!isLatestRequest()) return;
+      setMonitorSummary(response);
       setMonitorSummaryError(null);
     } catch (error) {
+      if (!isLatestRequest()) return;
       setMonitorSummaryError(getParsedApiError(error));
     } finally {
-      setMonitorSummaryLoading(false);
+      if (isLatestRequest()) {
+        setMonitorSummaryLoading(false);
+      }
     }
   }, []);
 

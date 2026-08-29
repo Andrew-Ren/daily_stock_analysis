@@ -229,6 +229,50 @@ describe('AlertsPage', () => {
     expect(screen.getByLabelText('价格阈值')).toHaveValue(200);
   });
 
+  it('keeps the latest monitor summary when a mutation refresh resolves before the initial request', async () => {
+    const initialSummary = createDeferred<Awaited<ReturnType<typeof getMonitorSummary>>>();
+    const refreshedSummary = createDeferred<Awaited<ReturnType<typeof getMonitorSummary>>>();
+    getMonitorSummary
+      .mockReset()
+      .mockReturnValueOnce(initialSummary.promise)
+      .mockReturnValueOnce(refreshedSummary.promise);
+
+    render(<AlertsPage />);
+
+    await screen.findByText('茅台价格突破');
+    fireEvent.change(screen.getByLabelText('标的代码'), { target: { value: 'aapl' } });
+    fireEvent.change(screen.getByLabelText('价格阈值'), { target: { value: '200' } });
+    fireEvent.click(screen.getByRole('button', { name: '创建规则' }));
+    await waitFor(() => expect(getMonitorSummary).toHaveBeenCalledTimes(2));
+
+    refreshedSummary.resolve({
+      asOf: '2026-08-29T10:01:00',
+      rulesTotal: 26,
+      enabledRulesTotal: 21,
+      triggersTotal: 42,
+      unattributedTriggerCount: 0,
+      orphanedTriggerCount: 0,
+      ruleTypes: [],
+      triggerStatuses: [],
+      rules: [],
+    });
+    expect(await screen.findByText('26')).toBeInTheDocument();
+
+    initialSummary.resolve({
+      asOf: '2026-08-29T10:00:00',
+      rulesTotal: 25,
+      enabledRulesTotal: 20,
+      triggersTotal: 41,
+      unattributedTriggerCount: 0,
+      orphanedTriggerCount: 0,
+      ruleTypes: [],
+      triggerStatuses: [],
+      rules: [],
+    });
+    await waitFor(() => expect(screen.getByText('26')).toBeInTheDocument());
+    expect(screen.queryByText('25')).not.toBeInTheDocument();
+  });
+
   it('clamps rules pagination when a mutation leaves the current page empty', async () => {
     const page2Rule = { ...rule, id: 2, name: '第二页规则', target: 'AAPL' };
     listRules
