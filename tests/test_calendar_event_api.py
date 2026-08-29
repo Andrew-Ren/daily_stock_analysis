@@ -132,6 +132,39 @@ class CalendarEventApiTestCase(unittest.TestCase):
         self.assertEqual(symbol_events["total"], 1)
         self.assertEqual(symbol_events["items"][0]["id"], aapl["id"])
 
+    def test_symbol_aliases_share_one_canonical_calendar_identity(self) -> None:
+        start = date.today()
+        end = start + timedelta(days=10)
+        hk_event = self._create(
+            title="Tencent earnings",
+            market="hk",
+            symbol="00700.HK",
+            event_date=(start + timedelta(days=1)).isoformat(),
+        )
+        cn_event = self._create(
+            title="Moutai earnings",
+            market="cn",
+            symbol="600519.SH",
+            event_date=(start + timedelta(days=2)).isoformat(),
+        )
+
+        self.assertEqual(hk_event["symbol"], "HK00700")
+        self.assertEqual(hk_event["scope_value"], "HK00700")
+        self.assertEqual(cn_event["symbol"], "600519")
+        self.assertEqual(cn_event["scope_value"], "600519")
+
+        for alias, expected_id in (("HK00700", hk_event["id"]), ("600519", cn_event["id"])):
+            response = self.client.get(
+                "/api/v1/calendar/events",
+                params={
+                    "start_date": start.isoformat(),
+                    "end_date": end.isoformat(),
+                    "symbol": alias,
+                },
+            )
+            self.assertEqual(response.status_code, 200, response.text)
+            self.assertEqual([item["id"] for item in response.json()["items"]], [expected_id])
+
     def test_repository_range_and_pagination_do_not_depend_on_ui_state(self) -> None:
         start = date.today()
         for offset in range(3):

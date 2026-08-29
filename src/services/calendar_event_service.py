@@ -7,6 +7,7 @@ import json
 from datetime import date, timedelta
 from typing import Any, Dict, Optional
 
+from data_provider.base import canonical_stock_code, normalize_stock_code
 from src.repositories.calendar_event_repo import CalendarEventRepository
 
 _ALLOWED_EVENT_TYPES = {"earnings", "dividend", "lockup_unlock", "macro", "user", "monitor"}
@@ -37,13 +38,15 @@ class CalendarEventService:
         scope_type = self._optional_normalized(filters.get("scope_type"))
         scope_value = self._optional_normalized(filters.get("scope_value"))
         market = self._optional_normalized(filters.get("market"), lower=True)
-        symbol = self._optional_normalized(filters.get("symbol"))
+        symbol = self._normalize_symbol(filters.get("symbol"))
         if scope_type and scope_type not in _ALLOWED_SCOPE_TYPES:
             raise CalendarEventServiceError(f"unsupported scope_type: {scope_type}")
         if market and market not in _ALLOWED_MARKETS:
             raise CalendarEventServiceError(f"unsupported market: {market}")
         if symbol and scope_type and scope_type != "symbol":
             raise CalendarEventServiceError("symbol filter can only be combined with scope_type=symbol")
+        if scope_type == "symbol" and scope_value:
+            scope_value = self._normalize_symbol(scope_value)
 
         page = max(1, int(filters.get("page") or 1))
         page_size = max(1, min(int(filters.get("page_size") or 100), 100))
@@ -89,7 +92,7 @@ class CalendarEventService:
         scope_type = str(payload.get("scope_type") or "").strip().lower()
         scope_value = CalendarEventService._optional_normalized(payload.get("scope_value"))
         market = CalendarEventService._optional_normalized(payload.get("market"), lower=True)
-        symbol = CalendarEventService._optional_normalized(payload.get("symbol"))
+        symbol = CalendarEventService._normalize_symbol(payload.get("symbol"))
 
         if not title:
             raise CalendarEventServiceError("title is required")
@@ -133,6 +136,13 @@ class CalendarEventService:
         if not normalized:
             return None
         return normalized.lower() if lower else normalized
+
+    @staticmethod
+    def _normalize_symbol(value: Any) -> Optional[str]:
+        normalized = CalendarEventService._optional_normalized(value)
+        if normalized is None:
+            return None
+        return canonical_stock_code(normalize_stock_code(normalized))
 
     @staticmethod
     def _event_to_dict(row: Any) -> Dict[str, Any]:

@@ -23,7 +23,7 @@
 - `GET /api/v1/calendar/events`：按日期范围、scope、market 或 symbol 查询事件。
 - `DELETE /api/v1/calendar/events/{event_id}`：删除手工事件；外部来源事件不允许通过该入口删除。
 
-列表查询的日期范围首尾均包含。未传日期时，默认返回从服务器当天开始的 7 个自然日（当天到 `today + 6 days`）。Dashboard 可以不传 scope 获取混合事件；股票详情传 `symbol`，同一 API 会严格返回该 symbol 的 `scope_type=symbol` 事件，不在客户端重新拼装或猜测归属。
+列表查询的日期范围首尾均包含。未传日期时，默认返回从服务器当天开始的 7 个自然日（当天到 `today + 6 days`）。Dashboard 可以不传 scope 获取混合事件；股票详情传 `symbol`，同一 API 会严格返回该 symbol 的 `scope_type=symbol` 事件，不在客户端重新拼装或猜测归属。写入与查询都会复用仓库统一股票代码规范化，例如 `00700.HK` / `HK00700` 统一为 `HK00700`，`600519.SH` / `600519` 统一为 `600519`。
 
 ## 覆盖状态
 
