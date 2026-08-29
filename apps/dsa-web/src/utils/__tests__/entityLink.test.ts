@@ -70,6 +70,14 @@ describe('entityLink helpers', () => {
     expect(link.ref).toBe('stock:CN:600519');
   });
 
+  it.each([
+    ['６００５１９', 'cn', 'stock:CN:600519'],
+    ['７００', 'hk', 'stock:HK:HK00700'],
+    ['ＡＡＰＬ', 'us', 'stock:US:AAPL'],
+  ])('normalizes full-width stock code %s before Web identity validation', (code, market, ref) => {
+    expect(buildStockEntityLink(code, market).ref).toBe(ref);
+  });
+
   it('accepts longer canonical US symbols from the checked-in stock index', () => {
     const link = buildStockEntityLink('AAICPRC', 'us');
 

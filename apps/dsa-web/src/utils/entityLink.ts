@@ -178,7 +178,7 @@ const splitMarketEntityId = (entityId: string): [string, string] => {
 const normalizeEntityId = (entityType: EntityType, entityId: string): string => {
   const normalizedId = String(entityId).trim();
   if (entityType !== 'stock') return normalizedId;
-  return normalizeStockEntityId(normalizedId);
+  return normalizeStockEntityId(normalizedId.normalize('NFKC'));
 };
 
 const normalizeStockEntityId = (entityId: string): string => {
