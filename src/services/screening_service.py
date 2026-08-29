@@ -3806,12 +3806,27 @@ def _normalize_candidate(raw: Any, rank: int) -> Dict[str, Any]:
 
 
 def _strategy_factor_weights(strategy_name: str) -> Dict[str, float]:
-    for strategy in load_screening_strategies():
-        if strategy.name != strategy_name:
+    strategies = _to_plain(load_screening_strategies())
+    if not isinstance(strategies, list):
+        return {}
+    for strategy in strategies:
+        if not isinstance(strategy, dict):
             continue
+        name = str(
+            strategy.get("id")
+            or strategy.get("strategy")
+            or strategy.get("strategy_id")
+            or strategy.get("name")
+            or ""
+        )
+        if name != strategy_name:
+            continue
+        raw_weights = strategy.get("factor_weights") or strategy.get("factorWeights") or {}
+        if not isinstance(raw_weights, dict):
+            return {}
         return {
             str(factor): float(weight)
-            for factor, weight in strategy.factor_weights.items()
+            for factor, weight in raw_weights.items()
             if isinstance(weight, (int, float))
             and math.isfinite(float(weight))
             and float(weight) > 0
