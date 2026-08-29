@@ -84,10 +84,11 @@ class DashboardOverviewService:
                 if len(latest_reviews) < 5:
                     latest_reviews.extend(reviews[: 5 - len(latest_reviews)])
                 for review in reviews:
-                    if "context_snapshot" not in review:
+                    context_snapshot = review.get("context_snapshot")
+                    if not isinstance(context_snapshot, dict):
                         detail_failure_count += 1
                         continue
-                    raw_snapshots = self._extract_snapshots(review.get("context_snapshot"))
+                    raw_snapshots = self._extract_snapshots(context_snapshot)
                     for region, raw_snapshot in raw_snapshots.items():
                         raw_trade_date = str(raw_snapshot.get("trade_date") or "").strip()
                         try:
