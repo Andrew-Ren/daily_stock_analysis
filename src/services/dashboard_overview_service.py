@@ -4,7 +4,7 @@
 from __future__ import annotations
 
 from datetime import date, datetime
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Set, Tuple
 
 from src.config import Config, get_config
 from src.repositories.portfolio_repo import PortfolioRepository
@@ -58,7 +58,11 @@ class DashboardOverviewService:
         }
 
     def _market_and_changes(self) -> Tuple[Dict[str, Any], Dict[str, Any]]:
-        snapshots_by_region: Dict[str, List[Dict[str, Any]]] = {}
+        snapshot_candidates_by_region: Dict[
+            str,
+            Dict[str, Optional[Dict[str, Any]]],
+        ] = {}
+        regions_with_unknown_trade_date: Set[str] = set()
         latest_reviews: List[Dict[str, Any]] = []
         invalid_snapshot_count = 0
         detail_failure_count = 0
@@ -91,24 +95,22 @@ class DashboardOverviewService:
                         continue
                     raw_snapshots = self._extract_snapshots(detail.get("context_snapshot"))
                     for region, raw_snapshot in raw_snapshots.items():
+                        raw_trade_date = str(raw_snapshot.get("trade_date") or "").strip()
                         try:
-                            snapshot = MarketLightSnapshot.model_validate(raw_snapshot).model_dump()
-                            date.fromisoformat(str(snapshot.get("trade_date") or ""))
+                            date.fromisoformat(raw_trade_date)
                         except Exception:
                             invalid_snapshot_count += 1
+                            regions_with_unknown_trade_date.add(region)
                             continue
-                        region_snapshots = snapshots_by_region.setdefault(region, [])
-                        if any(
-                            existing.get("trade_date") == snapshot.get("trade_date")
-                            for existing in region_snapshots
-                        ):
+                        region_candidates = snapshot_candidates_by_region.setdefault(region, {})
+                        try:
+                            snapshot = MarketLightSnapshot.model_validate(raw_snapshot).model_dump()
+                        except Exception:
+                            invalid_snapshot_count += 1
+                            region_candidates.setdefault(raw_trade_date, None)
                             continue
-                        region_snapshots.append(snapshot)
-                        region_snapshots.sort(
-                            key=lambda item: str(item.get("trade_date") or ""),
-                            reverse=True,
-                        )
-                        del region_snapshots[2:]
+                        if region_candidates.get(raw_trade_date) is None:
+                            region_candidates[raw_trade_date] = snapshot
                 scanned_count += len(reviews)
                 if scanned_count >= review_count:
                     break
@@ -128,6 +130,24 @@ class DashboardOverviewService:
                 return market, self._empty_changes("unavailable", "market_review_query_failed")
             history_scan_incomplete = True
 
+        snapshots_by_region: Dict[str, List[Dict[str, Any]]] = {}
+        unavailable_current_regions: List[str] = []
+        for region, candidates in snapshot_candidates_by_region.items():
+            ordered_dates = sorted(candidates, reverse=True)
+            if detail_failure_count or region in regions_with_unknown_trade_date:
+                unavailable_current_regions.append(region)
+                continue
+            current = candidates[ordered_dates[0]] if ordered_dates else None
+            if current is None:
+                unavailable_current_regions.append(region)
+                continue
+            selected = [current]
+            if len(ordered_dates) > 1:
+                previous = candidates[ordered_dates[1]]
+                if previous is not None:
+                    selected.append(previous)
+            snapshots_by_region[region] = selected
+
         latest_snapshots = {
             region: snapshots[0]
             for region, snapshots in snapshots_by_region.items()
@@ -142,6 +162,12 @@ class DashboardOverviewService:
             limitations.append("market_review_detail_partial")
         if invalid_snapshot_count:
             limitations.append("invalid_market_light_snapshot_skipped")
+        if unavailable_current_regions:
+            limitations.append("latest_completed_snapshot_unavailable")
+            limitations.extend(
+                f"latest_completed_snapshot_unavailable:{region}"
+                for region in sorted(unavailable_current_regions)
+            )
         if history_scan_incomplete:
             limitations.append("market_review_history_scan_incomplete")
         if any(snapshot.get("data_quality") != "ok" for snapshot in latest_snapshots.values()):
