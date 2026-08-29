@@ -59,7 +59,7 @@
 
 | 实体 | 动作 | 路由 | 上下文约束 |
 | --- | --- | --- | --- |
-| report | track_outcome | `/decision-signals?sourceReportId={entity_id}` | `entity_id` 必须是 ASCII 正整数（`[1-9][0-9]*`）；目标页按 `sourceReportId` 过滤 |
+| report | track_outcome | `/decision-signals?sourceReportId={entity_id}` | `entity_id` 必须是 JavaScript 可精确表示的 ASCII 正整数（`[1-9][0-9]*` 且不大于 `Number.MAX_SAFE_INTEGER`）；目标页按 `sourceReportId` 过滤 |
 
 其余动作均保持 `available=false`，不会出现在 `links` 中：
 

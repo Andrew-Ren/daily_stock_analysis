@@ -174,7 +174,7 @@ function parseSourceReportId(value: string): number | undefined {
   const trimmed = value.trim();
   if (!trimmed) return undefined;
   const parsed = Number(trimmed);
-  return Number.isInteger(parsed) && parsed > 0 ? parsed : undefined;
+  return Number.isSafeInteger(parsed) && parsed > 0 ? parsed : undefined;
 }
 
 function getInitialFilters(search = typeof window === 'undefined' ? '' : window.location.search): ListFilters {

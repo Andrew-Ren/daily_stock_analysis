@@ -22,6 +22,7 @@ _ACTION_LABELS: Dict[str, str] = {
     "compare": "Compare",
     "track_outcome": "Track Outcome",
 }
+_MAX_SAFE_REPORT_ID = "9007199254740991"
 
 
 @dataclass(frozen=True)
@@ -99,11 +100,15 @@ def parse_entity_ref(ref: str) -> Tuple[str, str]:
 def stock_entity_id(stock_code: str, *, market: Optional[str] = None) -> str:
     """Build a stable stock entity id as '<MARKET>:<canonical_code>'."""
     raw_code = str(stock_code or "").strip()
+    if not raw_code:
+        raise ValueError("stock_code is required")
     explicit_market = str(market).strip().upper() if market is not None else None
     identity = resolve_daily_stock_identity(
         raw_code,
         market_hint=explicit_market.lower() if explicit_market else None,
     )
+    if explicit_market and identity is None:
+        raise ValueError("market is incompatible with stock_code identity")
     inferred_market = identity.market.upper() if identity is not None else None
     normalized_market = explicit_market or inferred_market or "CN"
     if inferred_market and market is not None and normalized_market != inferred_market:
@@ -219,7 +224,12 @@ def _split_market_entity_id(entity_id: str) -> Tuple[str, str]:
 
 def _has_consumable_context(entity_type: str, entity_id: str, action: str) -> bool:
     if (entity_type, action) == ("report", "track_outcome"):
-        return re.fullmatch(r"[1-9][0-9]*", entity_id) is not None
+        if re.fullmatch(r"[1-9][0-9]*", entity_id) is None:
+            return False
+        return len(entity_id) < len(_MAX_SAFE_REPORT_ID) or (
+            len(entity_id) == len(_MAX_SAFE_REPORT_ID)
+            and entity_id <= _MAX_SAFE_REPORT_ID
+        )
     return True
 
 

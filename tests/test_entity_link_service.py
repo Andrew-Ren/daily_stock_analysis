@@ -65,6 +65,18 @@ def test_explicit_market_canonicalizes_legacy_bare_foreign_code() -> None:
     assert stock_entity_id("8035", market="jp") == stock_entity_id("8035.T")
 
 
+@pytest.mark.parametrize(
+    ("stock_code", "market"),
+    [("600519", "us"), ("000001", "hk")],
+)
+def test_explicit_market_rejected_by_shared_identity_parser_fails_closed(
+    stock_code: str,
+    market: str,
+) -> None:
+    with pytest.raises(ValueError, match="incompatible"):
+        stock_entity_id(stock_code, market=market)
+
+
 def test_report_entity_link_can_track_outcome_through_decision_signals() -> None:
     link = EntityLink.model_validate(build_entity_link("report", "123", label="AAPL report"))
 
@@ -96,7 +108,10 @@ def test_actions_without_a_consumed_target_context_fail_closed(
     assert all(item.disabled_reason for item in link.actions)
 
 
-@pytest.mark.parametrize("report_id", ["report/123", "0", "²", "١٢٣", "１２３"])
+@pytest.mark.parametrize(
+    "report_id",
+    ["report/123", "0", "²", "١٢٣", "１２３", "9007199254740992", "9007199254740993"],
+)
 def test_report_tracking_requires_an_ascii_positive_source_report_id(report_id: str) -> None:
     link = EntityLink.model_validate(build_entity_link("report", report_id))
 

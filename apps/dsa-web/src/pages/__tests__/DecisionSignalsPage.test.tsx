@@ -499,6 +499,25 @@ describe('DecisionSignalsPage', () => {
     expect(screen.getByLabelText('来源报告 ID')).toHaveValue(3001);
   });
 
+  it('ignores a source report id query that exceeds JavaScript safe integer range', async () => {
+    window.history.pushState({}, '', '/decision-signals?sourceReportId=9007199254740993');
+
+    renderPage();
+
+    expect(await screen.findByRole('heading', { name: 'AI 建议' })).toBeInTheDocument();
+    await waitFor(() => {
+      expect(decisionSignalsApi.list).toHaveBeenCalledWith(expect.objectContaining({
+        status: 'active',
+        page: 1,
+        pageSize: 20,
+      }));
+    });
+    expect(screen.getByLabelText('来源报告 ID')).toHaveValue(null);
+    expect(decisionSignalsApi.list).not.toHaveBeenCalledWith(expect.objectContaining({
+      sourceReportId: expect.any(Number),
+    }));
+  });
+
   it('renders decision signal enum filter labels in Chinese', async () => {
     renderPage();
     await screen.findByText('贵州茅台');

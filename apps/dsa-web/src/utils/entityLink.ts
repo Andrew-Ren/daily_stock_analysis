@@ -162,7 +162,8 @@ const splitMarketEntityId = (entityId: string): [string, string] => {
 
 const hasConsumableContext = (entityType: EntityType, entityId: string, action: EntityActionType): boolean => {
   if (entityType === 'report' && action === 'track_outcome') {
-    return /^[1-9]\d*$/.test(entityId);
+    if (!/^[1-9]\d*$/.test(entityId)) return false;
+    return Number.isSafeInteger(Number(entityId));
   }
   return true;
 };

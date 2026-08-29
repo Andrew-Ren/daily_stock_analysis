@@ -62,6 +62,18 @@ describe('entityLink helpers', () => {
     expect(action?.disabledReason).toBe('invalid_entity_context');
   });
 
+  it.each(['9007199254740992', '9007199254740993'])(
+    'rejects report id %s outside JavaScript safe integer range',
+    (reportId) => {
+      const link = buildEntityLink('report', reportId);
+      const action = link.actions.find((item) => item.action === 'track_outcome');
+
+      expect(link.links).toEqual({});
+      expect(action?.available).toBe(false);
+      expect(action?.disabledReason).toBe('invalid_entity_context');
+    },
+  );
+
   it('validates refs and builds unavailable unsupported actions', () => {
     expect(makeEntityRef('signal', '42')).toBe('signal:42');
     expect(parseEntityRef('alert:900')).toEqual(['alert', '900']);
