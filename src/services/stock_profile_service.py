@@ -343,8 +343,7 @@ class StockProfileService:
                     aliases.append(alias)
         return aliases
 
-    @staticmethod
-    def _artifact_input(detail: Dict[str, Any]) -> Dict[str, Any]:
+    def _artifact_input(self, detail: Dict[str, Any]) -> Dict[str, Any]:
         context_snapshot = detail.get("context_snapshot")
         raw_result = detail.get("raw_result")
         raw_fundamental = (
@@ -355,6 +354,19 @@ class StockProfileService:
         extracted_fundamental = extract_fundamental_detail_fields(
             context_snapshot,
             raw_fundamental,
+        )
+        try:
+            persisted_fundamental = self._history_service().get_latest_fundamental_snapshot(
+                query_id=str(detail.get("query_id") or "").strip(),
+                stock_code=str(
+                    detail.get("storage_stock_code") or detail.get("stock_code") or ""
+                ).strip(),
+            )
+        except Exception:
+            persisted_fundamental = None
+        persisted_fields = extract_fundamental_detail_fields(
+            None,
+            persisted_fundamental,
         )
         context_overview = extract_analysis_context_pack_overview(context_snapshot)
         market_structure = extract_market_structure_detail_field(
@@ -388,9 +400,11 @@ class StockProfileService:
                 "empty_news_disclosure": detail.get("empty_news_disclosure"),
                 "analysis_context_pack_overview": context_overview,
                 "financial_report": detail.get("financial_report")
-                or extracted_fundamental.get("financial_report"),
+                or extracted_fundamental.get("financial_report")
+                or persisted_fields.get("financial_report"),
                 "dividend_metrics": detail.get("dividend_metrics")
-                or extracted_fundamental.get("dividend_metrics"),
+                or extracted_fundamental.get("dividend_metrics")
+                or persisted_fields.get("dividend_metrics"),
                 "market_structure": detail.get("market_structure") or market_structure,
             },
         }

@@ -111,6 +111,19 @@ class TestHistoryCsiCandidateConvergence(unittest.TestCase):
         self.assertIn("000660.SZ", queried_codes)
         self.assertNotIn("000660.KS", queried_codes)
 
+    def test_empty_market_qualified_candidate_set_fails_closed(self):
+        db = MagicMock()
+
+        result = HistoryService(db).get_history_list(
+            stock_code="AAPL",
+            page=1,
+            limit=5,
+            market_hint="cn",
+        )
+
+        self.assertEqual(result, {"total": 0, "items": []})
+        db.get_analysis_history_paginated.assert_not_called()
+
 
 def _analysis_context_pack_overview() -> dict:
     return {

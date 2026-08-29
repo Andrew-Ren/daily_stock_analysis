@@ -263,6 +263,8 @@ class HistoryService:
                 )
                 if not include_ambiguous_numeric_aliases:
                     stock_code = [candidate for candidate in stock_code if not candidate.isdigit()]
+                if not stock_code:
+                    return {"total": 0, "items": []}
 
             # Parse date parameters
             start_dt = None
@@ -597,6 +599,18 @@ class HistoryService:
         except Exception as e:
             logger.error(f"根据 ID 查询历史详情失败: {e}", exc_info=True)
             return None
+
+    def get_latest_fundamental_snapshot(
+        self,
+        *,
+        query_id: str,
+        stock_code: str,
+    ) -> Optional[Dict[str, Any]]:
+        """Read the same persisted fundamental fallback used by history detail APIs."""
+        return self.db.get_latest_fundamental_snapshot(
+            query_id=query_id,
+            code=stock_code,
+        )
 
     @staticmethod
     def _normalize_display_sniper_value(value: Any) -> Optional[str]:

@@ -109,6 +109,7 @@ def _service(**overrides: object) -> tuple[StockProfileService, dict[str, MagicM
     dependencies["stock_service"].get_history_data.return_value = _history()
     dependencies["history_service"].get_history_list.return_value = _report_list()
     dependencies["history_service"].get_history_detail_by_id.return_value = _report_detail()
+    dependencies["history_service"].get_latest_fundamental_snapshot.return_value = None
     dependencies["intelligence_service"].list_items.return_value = _intelligence()
     dependencies["portfolio_repository"].list_cached_position_identities.return_value = [("us", "aapl")]
     dependencies["alert_service"].list_rules.return_value = {
@@ -190,6 +191,34 @@ def test_profile_research_preserves_specialized_report_evidence() -> None:
         "market:structure",
     } <= evidence_ids
     assert artifact["data_quality"]["source_count"] == len(artifact["evidence"])
+
+
+def test_profile_research_reads_independent_fundamental_snapshot() -> None:
+    service, dependencies = _service()
+    detail = _report_detail()
+    detail["storage_stock_code"] = "AAPL.US"
+    dependencies["history_service"].get_history_detail_by_id.return_value = detail
+    dependencies["history_service"].get_latest_fundamental_snapshot.return_value = {
+        "earnings": {
+            "data": {
+                "financial_report": {"report_date": "2026-06-30"},
+                "dividend": {"ttm_cash_dividend_per_share": 1.2},
+            }
+        }
+    }
+
+    payload = service.get_profile("AAPL")
+
+    artifact = payload["research"]["data"]["structured_report"]
+    evidence_ids = {item["id"] for item in artifact["evidence"]}
+    assert {
+        "fundamental:financial_report",
+        "fundamental:dividend_metrics",
+    } <= evidence_ids
+    dependencies["history_service"].get_latest_fundamental_snapshot.assert_called_once_with(
+        query_id="query-12",
+        stock_code="AAPL.US",
+    )
 
 
 def test_hk_alias_is_canonicalized_before_every_downstream_query() -> None:
