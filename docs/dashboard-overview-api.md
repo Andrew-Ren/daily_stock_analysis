@@ -29,7 +29,7 @@
 - red/yellow/green 状态变化输出 `market.<region>.status`。
 - change item 的 quality 取 current/previous 两份快照中较差的一侧；任一侧 partial 会降低整个 what_changed 块，任一侧 unavailable 不生成可靠变化项。
 - 没有第二份有效快照时，返回 `previous_completed_snapshot_unavailable`；部分 region 缺基线时整个块标记为 `partial`，并追加 `previous_completed_snapshot_unavailable:<region>`，避免把“缺少基线”误解为“没有变化”。不会临时拉行情或生成一份“当前”快照冒充基线。
-- 历史详情读取失败，或投影出的 `context_snapshot` 不是 JSON object（例如损坏的 JSON 字符串）时，不再把其余更旧记录提升为 current/latest；对应快照和变化对比保持不可用并返回 limitation。
+- 历史详情读取失败、投影出的 `context_snapshot` 不是 JSON object，或其中已存在的 `market_light_snapshots` 不是 object（例如损坏的 JSON 字符串/数组）时，不再把其余更旧记录提升为 current/latest；对应快照和变化对比保持不可用并返回 limitation。
 - 快照校验失败时仍保留其 `trade_date` 的目标位置：最新日期无有效快照时不回退到更旧 current，最近更早日期无有效快照时不越过它继续寻找更旧 previous。同一目标日期存在其他有效重跑快照时，仍可使用该日期的有效版本。
 - 外层市场键必须与快照内部 `region` 一致；例如 `cn` 键下的 `region=us` 快照会按无效快照处理，不能进入 A 股的 current/previous 或变化项。
 - 历史扫描被截断等 market limitations 会同步进入 what_changed；剩余快照不能在来源历史不完整时被标记为 fresh。

@@ -88,6 +88,10 @@ class DashboardOverviewService:
                     if not isinstance(context_snapshot, dict):
                         detail_failure_count += 1
                         continue
+                    snapshot_container = context_snapshot.get("market_light_snapshots")
+                    if snapshot_container is not None and not isinstance(snapshot_container, dict):
+                        detail_failure_count += 1
+                        continue
                     raw_snapshots = self._extract_snapshots(context_snapshot)
                     for region, raw_snapshot in raw_snapshots.items():
                         raw_trade_date = str(raw_snapshot.get("trade_date") or "").strip()
