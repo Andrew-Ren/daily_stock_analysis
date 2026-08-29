@@ -26,7 +26,7 @@
 
 - quote/history：复用 `StockService`，不新增数据获取器。
 - research：复用 `HistoryService` 和 #2291 的 `ResearchArtifact` builder；本 PR 因此堆叠在 #2291 上。
-- intelligence：复用 `IntelligenceService` 的 symbol scope 查询，并兼容 canonical、交易所前后缀、港股前后缀及大小写历史别名。
+- intelligence：复用 `IntelligenceService` 的 symbol scope 查询，并兼容 canonical、交易所前后缀、港股前后缀及大小写历史别名；同时读取具体市场与 `global` 的 symbol 资讯。任一别名/市场查询失败时块保持 partial limitation，即使其余查询成功但为空，也不误报为已确认无资讯。
 - portfolio：只读 `PortfolioRepository.list_cached_position_identities()`；不为了打开个股页触发实时估值或写 snapshot，所以状态固定为 `partial` 并包含 `cached_positions_only`。
 - monitors：复用 `AlertService.list_rules()`，分页汇总并去重 canonical code 及等价历史别名下的 `single_symbol` 规则。
 

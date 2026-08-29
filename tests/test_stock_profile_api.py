@@ -228,6 +228,41 @@ def test_us_suffix_converges_to_bare_ticker_and_queries_legacy_aliases() -> None
     }
 
 
+def test_profile_includes_global_symbol_intelligence() -> None:
+    service, dependencies = _service()
+
+    def intelligence_by_market(**kwargs: object) -> dict:
+        if kwargs.get("scope_value") == "AAPL" and kwargs.get("market") == "global":
+            return _intelligence("AAPL", "global")
+        return {"items": [], "total": 0}
+
+    dependencies["intelligence_service"].list_items.side_effect = intelligence_by_market
+
+    payload = service.get_profile("AAPL")
+
+    assert payload["intelligence"]["status"] == "fresh"
+    assert payload["intelligence"]["items"][0]["market"] == "global"
+
+
+def test_empty_intelligence_keeps_partial_status_when_any_alias_query_fails() -> None:
+    service, dependencies = _service()
+
+    def partially_failing_query(**kwargs: object) -> dict:
+        if kwargs.get("scope_value") == "AAPL.US" and kwargs.get("market") == "us":
+            raise RuntimeError("transient query failure")
+        return {"items": [], "total": 0}
+
+    dependencies["intelligence_service"].list_items.side_effect = partially_failing_query
+
+    payload = service.get_profile("AAPL")
+
+    assert payload["intelligence"] == {
+        "status": "partial",
+        "items": [],
+        "limitations": ["intelligence_alias_query_partial"],
+    }
+
+
 def test_optional_block_failures_remain_partial_and_do_not_hide_monitor_data() -> None:
     service, dependencies = _service()
     dependencies["stock_service"].get_realtime_quote.side_effect = RuntimeError("quote failed")

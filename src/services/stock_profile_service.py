@@ -155,24 +155,26 @@ class StockProfileService:
         items_by_id: Dict[Any, Dict[str, Any]] = {}
         successful_queries = 0
         failed_queries = 0
+        markets = [market] if market == "global" else [market, "global"]
         for alias in self._code_aliases(code):
-            try:
-                result = self._intelligence_service().list_items(
-                    scope_type="symbol",
-                    scope_value=alias,
-                    market=market,
-                    page=1,
-                    page_size=10,
-                )
-                successful_queries += 1
-            except Exception:
-                failed_queries += 1
-                continue
-            for item in result.get("items") or []:
-                key = item.get("id")
-                if key is None:
-                    key = (item.get("source_type"), item.get("url"), item.get("title"))
-                items_by_id.setdefault(key, item)
+            for query_market in markets:
+                try:
+                    result = self._intelligence_service().list_items(
+                        scope_type="symbol",
+                        scope_value=alias,
+                        market=query_market,
+                        page=1,
+                        page_size=10,
+                    )
+                    successful_queries += 1
+                except Exception:
+                    failed_queries += 1
+                    continue
+                for item in result.get("items") or []:
+                    key = item.get("id")
+                    if key is None:
+                        key = (item.get("source_type"), item.get("url"), item.get("title"))
+                    items_by_id.setdefault(key, item)
         if successful_queries == 0:
             return self._unavailable("intelligence_query_failed", items=[])
         items = sorted(
@@ -184,6 +186,12 @@ class StockProfileService:
             reverse=True,
         )[:10]
         if not items:
+            if failed_queries:
+                return {
+                    "status": "partial",
+                    "items": [],
+                    "limitations": ["intelligence_alias_query_partial"],
+                }
             return self._unavailable("no_symbol_intelligence", items=[])
         return {
             "status": "partial" if failed_queries else "fresh",
