@@ -279,6 +279,12 @@ const getFactorEntries = (item: ScreeningCandidate) =>
     .sort((a, b) => Number(b[1]) - Number(a[1]))
     .slice(0, 6);
 
+const getExplanationText = (items: ScreeningCandidate['whySelected']) =>
+  (items || []).map((item) => item.text).filter(Boolean).join('；');
+
+const getExplanationSourceText = (items: ScreeningCandidate['whySelected']) =>
+  Array.from(new Set((items || []).map((item) => item.source).filter(Boolean))).join('、');
+
 const toMessageList = (values: string[] | undefined) =>
   Array.isArray(values) ? values.map((value) => String(value).trim()).filter(Boolean) : [];
 
@@ -1759,6 +1765,30 @@ const StockScreeningPage: React.FC = () => {
                           <td colSpan={10} className="px-4 py-4">
                             <div className="grid gap-4 lg:grid-cols-[1.1fr_1fr]">
                               <div className="space-y-3">
+                                <div className="grid gap-3 md:grid-cols-2">
+                                  <div className="rounded-xl border border-cyan/25 bg-cyan/5 px-3 py-2.5">
+                                    <p className="text-xs font-semibold text-cyan">为什么入选</p>
+                                    <p className="mt-1 text-sm leading-6 text-foreground">
+                                      {getExplanationText(item.whySelected) || '暂无可验证的入选解释'}
+                                    </p>
+                                    {getExplanationSourceText(item.whySelected) ? (
+                                      <p className="mt-1 text-xs text-secondary-text">
+                                        来源：{getExplanationSourceText(item.whySelected)} · 质量：{item.explanationQuality?.whySelected || 'unknown'}
+                                      </p>
+                                    ) : null}
+                                  </div>
+                                  <div className="rounded-xl border border-orange-400/25 bg-orange-500/5 px-3 py-2.5">
+                                    <p className="text-xs font-semibold text-orange-500">为什么现在</p>
+                                    <p className="mt-1 text-sm leading-6 text-foreground">
+                                      {getExplanationText(item.whyNow) || '暂无带来源的价格、消息或事件证据'}
+                                    </p>
+                                    {getExplanationSourceText(item.whyNow) ? (
+                                      <p className="mt-1 text-xs text-secondary-text">
+                                        来源：{getExplanationSourceText(item.whyNow)} · 质量：{item.explanationQuality?.whyNow || 'unknown'}
+                                      </p>
+                                    ) : null}
+                                  </div>
+                                </div>
                                 <div>
                                   <p className="text-xs font-semibold text-secondary-text">摘要</p>
                                   <p className="mt-1 text-sm leading-6 text-foreground">{getCandidateReason(item)}</p>

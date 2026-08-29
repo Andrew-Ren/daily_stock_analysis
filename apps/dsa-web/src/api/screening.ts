@@ -49,6 +49,12 @@ export type ScreeningCandidate = {
   factorScores?: Record<string, number>;
   postAnalysisSummaries?: Record<string, string>;
   postAnalysisTags?: string[];
+  whySelected?: ScreeningExplanationItem[];
+  whyNow?: ScreeningExplanationItem[];
+  explanationQuality?: {
+    whySelected?: 'ok' | 'partial' | 'unknown' | string;
+    whyNow?: 'ok' | 'partial' | 'unknown' | string;
+  };
   dsaContext?: {
     enriched?: boolean;
     quote?: Record<string, unknown>;
@@ -85,6 +91,14 @@ export type ScreeningCandidate = {
   }>;
   dsaAnalysisSummary?: string;
   raw: Record<string, unknown>;
+};
+
+export type ScreeningExplanationItem = {
+  code: string;
+  text: string;
+  source: string;
+  quality: 'observed' | 'inferred' | 'unknown' | string;
+  value?: number | null;
 };
 
 export type ScreeningStrategy = {

@@ -1316,6 +1316,15 @@ describe('StockScreeningPage', () => {
           name: '贵州茅台',
           score: 91.2,
           reason: 'Screening pick',
+          whySelected: [
+            { code: 'selection_reason', text: 'Screening pick', source: 'screening', quality: 'observed' },
+            { code: 'top_factors', text: '核心因子：liquidity 92.1、value 87.4', source: 'screening', quality: 'observed' },
+          ],
+          whyNow: [
+            { code: 'news', text: '消息：贵州茅台最新公告', source: '测试源', quality: 'observed' },
+            { code: 'quote_change_pct', text: '涨跌幅：+1.20%', source: 'realtime_quote', quality: 'observed', value: 1.2 },
+          ],
+          explanationQuality: { whySelected: 'ok', whyNow: 'ok' },
           dsaAnalysisSummary: 'DSA行情：现价 1688，涨跌幅 1.2%；DSA新闻：贵州茅台最新公告',
           dsaNews: [{ title: '贵州茅台最新公告', source: '测试源' }],
           dsaContext: {
@@ -1340,11 +1349,51 @@ describe('StockScreeningPage', () => {
 
     expect(await screen.findByText('深度补充：1 / 1')).toBeInTheDocument();
 
+    expect(screen.getByText('为什么入选')).toBeInTheDocument();
+    expect(screen.getByText(/Screening pick；核心因子：liquidity 92.1、value 87.4/)).toBeInTheDocument();
+    expect(screen.getByText('为什么现在')).toBeInTheDocument();
+    expect(screen.getByText(/消息：贵州茅台最新公告；涨跌幅：\+1.20%/)).toBeInTheDocument();
+    expect(screen.getByText(/来源：测试源、realtime_quote · 质量：ok/)).toBeInTheDocument();
     expect(screen.getByText('增强摘要')).toBeInTheDocument();
     expect(screen.getByText(/行情：现价 1688/)).toBeInTheDocument();
     expect(screen.getByText('相关新闻')).toBeInTheDocument();
     expect(screen.getByText('贵州茅台最新公告')).toBeInTheDocument();
     expect(screen.getByText('数据补充提示')).toBeInTheDocument();
     expect(screen.getByText('stock_news_unavailable')).toBeInTheDocument();
+  });
+
+  it('shows an unknown why-now explanation instead of treating a placeholder zero as observed', async () => {
+    getScreeningStatus.mockResolvedValueOnce({ enabled: true, available: true });
+    screenStocks.mockResolvedValueOnce({
+      enabled: true,
+      candidates: [
+        {
+          rank: 1,
+          code: '000001',
+          name: '平安银行',
+          score: 80,
+          reason: '本地因子入选',
+          changePct: 0,
+          amount: 0,
+          whySelected: [
+            { code: 'selection_reason', text: '本地因子入选', source: 'screening', quality: 'observed' },
+          ],
+          whyNow: [
+            { code: 'awaiting_evidence', text: '暂无带来源的价格、消息或事件证据', source: 'screening', quality: 'unknown' },
+          ],
+          explanationQuality: { whySelected: 'ok', whyNow: 'unknown' },
+          raw: {},
+        },
+      ],
+      candidateCount: 1,
+    });
+
+    render(<StockScreeningPage />);
+    expect(await screen.findByText('选股已开启')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: /运行选股/ }));
+
+    expect(await screen.findByText('暂无带来源的价格、消息或事件证据')).toBeInTheDocument();
+    expect(screen.getByText(/来源：screening · 质量：unknown/)).toBeInTheDocument();
+    expect(screen.queryByText('涨跌幅：+0.00%')).not.toBeInTheDocument();
   });
 });

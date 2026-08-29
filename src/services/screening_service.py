@@ -1261,6 +1261,7 @@ class ScreeningService:
             "正在补充入选股票的新闻与事件",
         )
         selected, dsa_enrichment = _enrich_candidates_with_dsa(selected)
+        selected = [_attach_candidate_explanations(candidate) for candidate in selected]
         warnings = _collect_screening_warning_messages(raw_data)
         response = {
             "enabled": True,
@@ -3782,6 +3783,179 @@ def _normalize_candidate(raw: Any, rank: int) -> Dict[str, Any]:
         "post_analysis_tags": item.get("post_analysis_tags") or source.get("post_analysis_tags") or [],
         "raw": source,
     }
+
+
+def _attach_candidate_explanations(candidate: Dict[str, Any]) -> Dict[str, Any]:
+    """Attach deterministic, provenance-aware candidate explanations."""
+    normalized = dict(candidate)
+    why_selected: List[Dict[str, Any]] = []
+    why_now: List[Dict[str, Any]] = []
+
+    reason = str(candidate.get("reason") or "").strip()
+    if reason:
+        reason_is_llm = bool(candidate.get("llm_thesis")) and reason == str(candidate.get("llm_thesis")).strip()
+        why_selected.append(
+            _explanation_item(
+                "selection_reason",
+                reason,
+                source="llm" if reason_is_llm else "screening",
+                quality="inferred" if reason_is_llm else "observed",
+            )
+        )
+
+    factors = candidate.get("factor_scores")
+    if isinstance(factors, dict):
+        top_factors = sorted(
+            (
+                (str(key), float(value))
+                for key, value in factors.items()
+                if isinstance(value, (int, float)) and math.isfinite(float(value))
+            ),
+            key=lambda pair: pair[1],
+            reverse=True,
+        )[:3]
+        if top_factors:
+            text = "、".join(f"{key} {value:.1f}" for key, value in top_factors)
+            why_selected.append(
+                _explanation_item("top_factors", f"核心因子：{text}", source="screening", quality="observed")
+            )
+
+    if not any(item.get("quality") == "observed" for item in why_selected):
+        rank = candidate.get("rank")
+        why_selected.append(
+            _explanation_item(
+                "selection_rank",
+                f"通过确定性筛选并排在第 {rank} 位" if rank is not None else "通过确定性筛选",
+                source="screening",
+                quality="observed",
+            )
+        )
+
+    news_items = candidate.get("dsa_news")
+    if isinstance(news_items, list):
+        news = next(
+            (
+                item
+                for item in news_items
+                if isinstance(item, dict) and str(item.get("title") or item.get("snippet") or "").strip()
+            ),
+            None,
+        )
+        if news:
+            why_now.append(
+                _explanation_item(
+                    "news",
+                    f"消息：{str(news.get('title') or news.get('snippet')).strip()}",
+                    source=str(news.get("source") or "news"),
+                    quality="observed",
+                )
+            )
+
+    event_items = candidate.get("dsa_events")
+    if isinstance(event_items, list):
+        event = next(
+            (
+                item
+                for item in event_items
+                if isinstance(item, dict) and str(item.get("title") or item.get("snippet") or "").strip()
+            ),
+            None,
+        )
+        if event:
+            why_now.append(
+                _explanation_item(
+                    "event",
+                    f"事件：{str(event.get('title') or event.get('snippet')).strip()}",
+                    source=str(event.get("source") or "events"),
+                    quality="observed",
+                )
+            )
+
+    context = candidate.get("dsa_context")
+    quote = context.get("quote") if isinstance(context, dict) and isinstance(context.get("quote"), dict) else {}
+    if "change_pct" in quote and quote.get("change_pct") is not None:
+        change_pct = _safe_float(quote.get("change_pct"))
+        if change_pct is not None:
+            why_now.append(
+                _explanation_item(
+                    "quote_change_pct",
+                    f"涨跌幅：{change_pct:+.2f}%",
+                    source="realtime_quote",
+                    quality="observed",
+                    value=change_pct,
+                )
+            )
+    if "amount" in quote and quote.get("amount") is not None:
+        amount = _safe_float(quote.get("amount"))
+        if amount is not None:
+            why_now.append(
+                _explanation_item(
+                    "quote_amount",
+                    f"成交额：{amount:.2f}",
+                    source="realtime_quote",
+                    quality="observed",
+                    value=amount,
+                )
+            )
+
+    catalysts = candidate.get("llm_catalysts")
+    if isinstance(catalysts, list):
+        catalyst_text = [str(value).strip() for value in catalysts[:2] if str(value).strip()]
+        if catalyst_text:
+            why_now.append(
+                _explanation_item(
+                    "llm_catalyst",
+                    f"模型催化判断：{'、'.join(catalyst_text)}",
+                    source="llm",
+                    quality="inferred",
+                )
+            )
+
+    if not why_now:
+        why_now.append(
+            _explanation_item(
+                "awaiting_evidence",
+                "暂无带来源的价格、消息或事件证据",
+                source="screening",
+                quality="unknown",
+            )
+        )
+
+    normalized["why_selected"] = why_selected
+    normalized["why_now"] = why_now
+    normalized["explanation_quality"] = {
+        "why_selected": _explanation_quality(why_selected),
+        "why_now": _explanation_quality(why_now),
+    }
+    return normalized
+
+
+def _explanation_item(
+    code: str,
+    text: str,
+    *,
+    source: str,
+    quality: str,
+    value: Optional[float] = None,
+) -> Dict[str, Any]:
+    item: Dict[str, Any] = {
+        "code": code,
+        "text": text,
+        "source": source,
+        "quality": quality,
+    }
+    if value is not None:
+        item["value"] = value
+    return item
+
+
+def _explanation_quality(items: List[Dict[str, Any]]) -> str:
+    qualities = {str(item.get("quality") or "unknown") for item in items}
+    if qualities == {"observed"}:
+        return "ok"
+    if "observed" in qualities or "inferred" in qualities:
+        return "partial"
+    return "unknown"
 
 
 def _extract_dsa_news_from_context(context: Any) -> List[Dict[str, Any]]:
