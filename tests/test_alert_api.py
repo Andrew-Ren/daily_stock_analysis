@@ -977,11 +977,75 @@ class AlertApiTestCase(unittest.TestCase):
         repo = AlertRepository(self.db)
         self.assertIsNone(repo.get_rule(rule_id).lifecycle_id)
 
-        assigned = repo.ensure_rule_lifecycle(rule_id)
+        loaded = repo.list_enabled_rules_for_runtime()
+        assigned = next(row.lifecycle_id for row in loaded if row.id == rule_id)
 
         self.assertIsNotNone(assigned)
         self.assertEqual(repo.get_rule(rule_id).lifecycle_id, assigned)
-        self.assertEqual(repo.ensure_rule_lifecycle(rule_id), assigned)
+        loaded_again = repo.list_enabled_rules_for_runtime()
+        self.assertEqual(
+            next(row.lifecycle_id for row in loaded_again if row.id == rule_id),
+            assigned,
+        )
+
+    def test_runtime_loader_reloads_rule_if_lifecycle_less_id_was_reused(self) -> None:
+        connection = sqlite3.connect(self.db_path)
+        try:
+            cursor = connection.execute(
+                "INSERT INTO alert_rules "
+                "(name, target_scope, target, alert_type, parameters, severity, enabled, source) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                (
+                    "deleted-rule",
+                    "single_symbol",
+                    "600519",
+                    "price_cross",
+                    '{"direction":"above","price":1800}',
+                    "warning",
+                    True,
+                    "api",
+                ),
+            )
+            rule_id = int(cursor.lastrowid)
+            connection.commit()
+        finally:
+            connection.close()
+
+        repo = AlertRepository(self.db)
+        stale_rows = repo.list_enabled_rules()
+        self.assertIsNone(stale_rows[0].lifecycle_id)
+
+        connection = sqlite3.connect(self.db_path)
+        try:
+            connection.execute("DELETE FROM alert_rules WHERE id = ?", (rule_id,))
+            connection.execute(
+                "INSERT INTO alert_rules "
+                "(id, lifecycle_id, name, target_scope, target, alert_type, parameters, "
+                "severity, enabled, source) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                (
+                    rule_id,
+                    "replacement-lifecycle",
+                    "replacement-rule",
+                    "single_symbol",
+                    "AAPL",
+                    "price_cross",
+                    '{"direction":"above","price":250}',
+                    "warning",
+                    True,
+                    "api",
+                ),
+            )
+            connection.commit()
+        finally:
+            connection.close()
+
+        with patch.object(repo, "list_enabled_rules", return_value=stale_rows):
+            runtime_rows = repo.list_enabled_rules_for_runtime()
+
+        self.assertEqual(len(runtime_rows), 1)
+        self.assertEqual(runtime_rows[0].name, "replacement-rule")
+        self.assertEqual(runtime_rows[0].target, "AAPL")
+        self.assertEqual(runtime_rows[0].lifecycle_id, "replacement-lifecycle")
 
     def test_monitor_summary_uses_one_read_snapshot_during_concurrent_trigger_write(self) -> None:
         rule = self._create_rule({"name": "snapshot", "target": "600519"})

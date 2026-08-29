@@ -10,7 +10,7 @@ from datetime import datetime
 from typing import Any, Dict, List, Optional, Tuple
 import uuid
 
-from sqlalchemy import and_, case, delete, desc, func, or_, select, update
+from sqlalchemy import and_, case, delete, desc, func, select
 
 from src.storage import (
     AlertCooldownRecord,
@@ -40,30 +40,6 @@ class AlertRepository:
             return session.execute(
                 select(AlertRuleRecord).where(AlertRuleRecord.id == rule_id).limit(1)
             ).scalar_one_or_none()
-
-    def ensure_rule_lifecycle(self, rule_id: int) -> Optional[str]:
-        """Atomically assign a lifecycle to a rule created by an older process."""
-        lifecycle_id = str(uuid.uuid4())
-
-        def assign(session) -> Optional[str]:
-            session.execute(
-                update(AlertRuleRecord)
-                .where(
-                    AlertRuleRecord.id == rule_id,
-                    or_(
-                        AlertRuleRecord.lifecycle_id.is_(None),
-                        AlertRuleRecord.lifecycle_id == "",
-                    ),
-                )
-                .values(lifecycle_id=lifecycle_id)
-            )
-            return session.execute(
-                select(AlertRuleRecord.lifecycle_id)
-                .where(AlertRuleRecord.id == rule_id)
-                .limit(1)
-            ).scalar_one_or_none()
-
-        return self.db._run_write_transaction("ensure_alert_rule_lifecycle", assign)
 
     def update_rule(self, rule_id: int, fields: Dict[str, Any]) -> Optional[AlertRuleRecord]:
         with self.db.get_session() as session:
@@ -133,6 +109,33 @@ class AlertRepository:
                 .limit(safe_limit)
             ).scalars().all()
             return list(rows)
+
+    def list_enabled_rules_for_runtime(self, *, limit: int = 1000) -> List[AlertRuleRecord]:
+        """Load rules with immutable lifecycle identities for worker evaluation."""
+        safe_limit = max(1, min(int(limit), 1000))
+        rows = self.list_enabled_rules(limit=safe_limit)
+        if all(getattr(row, "lifecycle_id", None) for row in rows):
+            return rows
+
+        def load_and_assign(session) -> List[AlertRuleRecord]:
+            current_rows = session.execute(
+                select(AlertRuleRecord)
+                .where(AlertRuleRecord.enabled.is_(True))
+                .order_by(desc(AlertRuleRecord.updated_at), desc(AlertRuleRecord.id))
+                .limit(safe_limit)
+            ).scalars().all()
+            for row in current_rows:
+                if not row.lifecycle_id:
+                    row.lifecycle_id = str(uuid.uuid4())
+            session.flush()
+            for row in current_rows:
+                session.expunge(row)
+            return list(current_rows)
+
+        return self.db._run_write_transaction(
+            "load_alert_rules_for_runtime",
+            load_and_assign,
+        )
 
     def create_trigger(self, fields: Dict[str, Any]) -> AlertTriggerRecord:
         self._validate_trigger_fields(fields)
