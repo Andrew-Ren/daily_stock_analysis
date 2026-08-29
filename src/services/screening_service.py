@@ -4077,7 +4077,8 @@ def _build_candidate_reason(item: Dict[str, Any]) -> Tuple[str, str, str]:
     if isinstance(summaries, dict):
         for analyzer, value in summaries.items():
             if value:
-                return str(value), f"post_analyzer:{analyzer}", "inferred"
+                quality = "observed" if str(analyzer).strip().lower() == "scorecard" else "inferred"
+                return str(value), f"post_analyzer:{analyzer}", quality
 
     factors = item.get("factor_scores")
     parts: List[str] = []

@@ -179,6 +179,21 @@ def test_post_analyzer_summary_keeps_inferred_provenance() -> None:
     assert result["why_selected"][1]["code"] == "selection_rank"
 
 
+def test_local_scorecard_summary_keeps_observed_provenance() -> None:
+    candidate = _normalize_candidate({
+        "code": "600519",
+        "post_analysis_summaries": {"scorecard": "本地因子计分摘要"},
+        "factor_scores": {},
+    }, 1)
+
+    result = _attach_candidate_explanations(candidate)
+
+    reason = result["why_selected"][0]
+    assert reason["source"] == "post_analyzer:scorecard"
+    assert reason["quality"] == "observed"
+    assert result["explanation_quality"]["why_selected"] == "ok"
+
+
 def test_stale_or_undated_events_are_not_why_now_evidence() -> None:
     stale_date = (datetime.now(timezone.utc) - timedelta(days=31)).isoformat()
     candidate = {
