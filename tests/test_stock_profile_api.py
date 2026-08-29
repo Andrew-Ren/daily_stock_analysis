@@ -141,7 +141,7 @@ def test_profile_uses_one_canonical_code_and_returns_structured_research() -> No
         "AAPL", period="daily", days=45
     )
     dependencies["history_service"].get_history_list.assert_called_once_with(
-        stock_code="AAPL", page=1, limit=5
+        stock_code="AAPL", page=1, limit=5, market_hint="us"
     )
     assert {call.kwargs["scope_value"] for call in dependencies["intelligence_service"].list_items.call_args_list} == {
         "AAPL",
@@ -169,7 +169,7 @@ def test_hk_alias_is_canonicalized_before_every_downstream_query() -> None:
     assert payload["market"] == "hk"
     dependencies["stock_service"].get_realtime_quote.assert_called_once_with("HK00700")
     dependencies["history_service"].get_history_list.assert_called_once_with(
-        stock_code="HK00700", page=1, limit=5
+        stock_code="HK00700", page=1, limit=5, market_hint="hk"
     )
     assert "00700.HK" in {
         call.kwargs["scope_value"]
@@ -279,6 +279,7 @@ def test_offshore_research_lookup_excludes_cross_market_bare_numeric_aliases() -
         stock_code="8035.T",
         page=1,
         limit=5,
+        market_hint="jp",
         include_ambiguous_numeric_aliases=False,
     )
 
@@ -339,9 +340,10 @@ def test_explicit_cn_identity_never_reexpands_through_a_colliding_kr_alias() -> 
     assert payload["canonical_code"] == "000660"
     assert payload["market"] == "cn"
     dependencies["history_service"].get_history_list.assert_called_once_with(
-        stock_code="SZ000660",
+        stock_code="000660",
         page=1,
         limit=5,
+        market_hint="cn",
     )
     intelligence_aliases = {
         call.kwargs["scope_value"]
@@ -366,7 +368,7 @@ def test_us_suffix_converges_to_bare_ticker_and_queries_legacy_aliases() -> None
     assert payload["portfolio"]["data"]["held"] is True
     dependencies["stock_service"].get_realtime_quote.assert_called_once_with("AAPL")
     dependencies["history_service"].get_history_list.assert_called_once_with(
-        stock_code="AAPL", page=1, limit=5
+        stock_code="AAPL", page=1, limit=5, market_hint="us"
     )
     assert {"AAPL", "AAPL.US"} <= {
         call.kwargs["scope_value"]

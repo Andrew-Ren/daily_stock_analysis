@@ -28,7 +28,7 @@
 ## 数据来源与边界
 
 - quote/history：复用 `StockService`，不新增数据获取器。
-- research：复用 `HistoryService` 和 #2291 的 `ResearchArtifact` builder；本 PR 因此堆叠在 #2291 上。报告查询使用档案入口已经解析出的市场身份：A 股裸 canonical code 会重新限定为对应 `SH` / `SZ` / `BJ` 代码，日韩台查询保留交易所后缀及其他无歧义别名，但不展开可能命中其他市场历史记录的裸数字代码，避免把跨市场报告构造成当前档案的 artifact。
+- research：复用 `HistoryService` 和 #2291 的 `ResearchArtifact` builder；本 PR 因此堆叠在 #2291 上。报告查询把档案入口已经解析出的 market hint 传到 `HistoryService` 的候选生成层：A 股裸 canonical code 只展开对应 `SH` / `SZ` / `BJ` 代码，日韩台查询保留交易所后缀及其他无歧义别名，但不展开可能命中其他市场历史记录的裸数字代码，避免二次索引解析把跨市场报告构造成当前档案的 artifact。
 - intelligence：复用 `IntelligenceService` 的 symbol scope 查询，并兼容 canonical、交易所前后缀、港股前后缀及大小写历史别名；同时读取具体市场与 `global` 的 symbol 资讯。任一别名/市场查询失败时块保持 partial limitation，即使其余查询成功但为空，也不误报为已确认无资讯。
 - portfolio：只读 `PortfolioRepository.list_cached_position_identities()`，并使用每条缓存持仓自己的 market 解析旧裸代码；只有 market 与档案身份一致时才算持有。不为了打开个股页触发实时估值或写 snapshot，所以状态固定为 `partial` 并包含 `cached_positions_only`。
 - monitors：复用 `AlertService.list_rules()`，分页汇总并去重 canonical code 及等价历史别名下的 `single_symbol` 规则。由于现有告警目标没有独立 market 字段，日韩台档案不会查询可能与 A/HK 同形的裸数字别名，避免跨市场规则误归属。

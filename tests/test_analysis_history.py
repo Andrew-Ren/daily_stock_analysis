@@ -95,6 +95,22 @@ class TestHistoryCsiCandidateConvergence(unittest.TestCase):
         self.assertIn("8035.T", queried_codes)
         self.assertNotIn("8035", queried_codes)
 
+    def test_market_hint_blocks_indexed_cross_market_reexpansion(self):
+        db = MagicMock()
+        db.get_analysis_history_paginated.return_value = ([], 0)
+
+        HistoryService(db).get_history_list(
+            stock_code="000660",
+            page=1,
+            limit=5,
+            market_hint="cn",
+        )
+
+        queried_codes = db.get_analysis_history_paginated.call_args.kwargs["code"]
+        self.assertIn("SZ000660", queried_codes)
+        self.assertIn("000660.SZ", queried_codes)
+        self.assertNotIn("000660.KS", queried_codes)
+
 
 def _analysis_context_pack_overview() -> dict:
     return {

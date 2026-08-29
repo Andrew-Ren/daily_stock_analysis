@@ -19,6 +19,7 @@ from typing import Optional, Dict, Any, List, Tuple, TYPE_CHECKING
 from src.config import get_config, resolve_news_window_days
 from src.formatters import markdown_to_plain_text
 from src.data.stock_index_loader import resolve_index_stock_code
+from src.services.stock_code_utils import resolve_daily_stock_identity
 from src.report_language import (
     get_bias_status_emoji,
     get_localized_stock_name,
@@ -104,7 +105,11 @@ class HistoryService:
         return value.astimezone().isoformat()
 
     @staticmethod
-    def _history_code_filter_candidates(stock_code: str) -> List[str]:
+    def _history_code_filter_candidates(
+        stock_code: str,
+        *,
+        market_hint: Optional[str] = None,
+    ) -> List[str]:
         raw_code = str(stock_code or "").strip()
         if not raw_code:
             return []
@@ -115,6 +120,15 @@ class HistoryService:
             candidate = str(candidate or "").strip().upper()
             if candidate and candidate not in candidates:
                 candidates.append(candidate)
+
+        trusted_market = str(market_hint or "").strip().lower()
+        if trusted_market:
+            identity = resolve_daily_stock_identity(raw_code, market_hint=trusted_market)
+            if identity is None or identity.market != trusted_market:
+                return []
+            for candidate in identity.code_candidates:
+                add(candidate)
+            return candidates
 
         try:
             from data_provider.base import (
@@ -221,6 +235,7 @@ class HistoryService:
         page: int = 1,
         limit: int = 20,
         include_ambiguous_numeric_aliases: bool = True,
+        market_hint: Optional[str] = None,
     ) -> Dict[str, Any]:
         """
         Get history analysis list.
@@ -234,13 +249,18 @@ class HistoryService:
             limit: Items per page
             include_ambiguous_numeric_aliases: Whether to include bare numeric
                 aliases that may collide across offshore markets.
+            market_hint: Trusted market identity for candidate expansion. When
+                present, candidates from other indexed markets are excluded.
             
         Returns:
             Dictionary containing total count and items
         """
         try:
             if stock_code:
-                stock_code = self._history_code_filter_candidates(stock_code)
+                stock_code = self._history_code_filter_candidates(
+                    stock_code,
+                    market_hint=market_hint,
+                )
                 if not include_ambiguous_numeric_aliases:
                     stock_code = [candidate for candidate in stock_code if not candidate.isdigit()]
 

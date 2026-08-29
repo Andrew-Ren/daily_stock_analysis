@@ -109,9 +109,10 @@ class StockProfileService:
         empty_data = {"latest_report": None, "recent_reports": [], "structured_report": None}
         try:
             query_options: Dict[str, Any] = {
-                "stock_code": self._market_qualified_history_code(code, market=market),
+                "stock_code": code,
                 "page": 1,
                 "limit": 5,
+                "market_hint": market,
             }
             if market in {"jp", "kr", "tw"}:
                 query_options["include_ambiguous_numeric_aliases"] = False
@@ -337,19 +338,6 @@ class StockProfileService:
                 if alias and alias not in aliases:
                     aliases.append(alias)
         return aliases
-
-    @staticmethod
-    def _market_qualified_history_code(code: str, *, market: str) -> str:
-        """Keep the profile's known market when a bare code is cross-market ambiguous."""
-        identity = resolve_daily_stock_identity(code, market_hint=market)
-        if identity is None or identity.market != market:
-            return code
-        if not str(code).strip().isdigit():
-            return code
-        return next(
-            (candidate for candidate in identity.code_candidates if not candidate.isdigit()),
-            code,
-        )
 
     @staticmethod
     def _artifact_input(detail: Dict[str, Any]) -> Dict[str, Any]:
