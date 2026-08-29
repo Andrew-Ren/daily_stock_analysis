@@ -4,7 +4,7 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional
 
 from data_provider.base import canonical_stock_code, normalize_stock_code
 from src.analysis_context_pack_overview import extract_analysis_context_pack_overview
@@ -146,20 +146,44 @@ class StockProfileService:
         }
 
     def _intelligence_block(self, code: str, *, market: str) -> Dict[str, Any]:
-        try:
-            result = self._intelligence_service().list_items(
-                scope_type="symbol",
-                scope_value=code,
-                market=market,
-                page=1,
-                page_size=10,
-            )
-            items = list(result.get("items") or [])
-        except Exception:
+        items_by_id: Dict[Any, Dict[str, Any]] = {}
+        successful_queries = 0
+        failed_queries = 0
+        for alias in self._code_aliases(code):
+            try:
+                result = self._intelligence_service().list_items(
+                    scope_type="symbol",
+                    scope_value=alias,
+                    market=market,
+                    page=1,
+                    page_size=10,
+                )
+                successful_queries += 1
+            except Exception:
+                failed_queries += 1
+                continue
+            for item in result.get("items") or []:
+                key = item.get("id")
+                if key is None:
+                    key = (item.get("source_type"), item.get("url"), item.get("title"))
+                items_by_id.setdefault(key, item)
+        if successful_queries == 0:
             return self._unavailable("intelligence_query_failed", items=[])
+        items = sorted(
+            items_by_id.values(),
+            key=lambda item: (
+                str(item.get("published_at") or item.get("fetched_at") or item.get("created_at") or ""),
+                int(item.get("id") or 0),
+            ),
+            reverse=True,
+        )[:10]
         if not items:
             return self._unavailable("no_symbol_intelligence", items=[])
-        return {"status": "fresh", "items": items, "limitations": []}
+        return {
+            "status": "partial" if failed_queries else "fresh",
+            "items": items,
+            "limitations": ["intelligence_alias_query_partial"] if failed_queries else [],
+        }
 
     def _portfolio_block(self, code: str) -> Dict[str, Any]:
         try:
@@ -177,28 +201,59 @@ class StockProfileService:
         }
 
     def _monitor_block(self, code: str) -> Dict[str, Any]:
-        try:
-            result = self._alert_service().list_rules(
-                target_scope="single_symbol",
-                target=code,
-                page=1,
-                page_size=100,
-            )
-            rules = list(result.get("items") or [])
-        except Exception:
+        rules_by_id: Dict[Any, Dict[str, Any]] = {}
+        successful_queries = 0
+        failed_queries = 0
+        for alias in self._code_aliases(code):
+            page = 1
+            scanned = 0
+            try:
+                while True:
+                    result = self._alert_service().list_rules(
+                        target_scope="single_symbol",
+                        target=alias,
+                        page=page,
+                        page_size=100,
+                    )
+                    successful_queries += 1
+                    rules = list(result.get("items") or [])
+                    for rule in rules:
+                        key = rule.get("id")
+                        if key is None:
+                            key = (alias, rule.get("name"), rule.get("alert_type"))
+                        rules_by_id.setdefault(key, rule)
+                    scanned += len(rules)
+                    total = int(result.get("total") or 0)
+                    if scanned >= total or not rules:
+                        break
+                    page += 1
+            except Exception:
+                failed_queries += 1
+        if successful_queries == 0:
             return self._unavailable(
                 "monitor_query_failed",
                 data={"total_rule_count": 0, "enabled_rule_count": 0, "rule_ids": []},
             )
+        rules = list(rules_by_id.values())
         return {
-            "status": "fresh",
+            "status": "partial" if failed_queries else "fresh",
             "data": {
                 "total_rule_count": len(rules),
                 "enabled_rule_count": sum(1 for rule in rules if rule.get("enabled")),
                 "rule_ids": [int(rule["id"]) for rule in rules if rule.get("id") is not None],
             },
-            "limitations": [],
+            "limitations": ["monitor_alias_query_partial"] if failed_queries else [],
         }
+
+    @staticmethod
+    def _code_aliases(code: str) -> List[str]:
+        candidates = HistoryService._history_code_filter_candidates(code)
+        aliases: List[str] = []
+        for candidate in candidates or [code]:
+            for alias in (str(candidate).strip(), str(candidate).strip().lower()):
+                if alias and alias not in aliases:
+                    aliases.append(alias)
+        return aliases
 
     @staticmethod
     def _artifact_input(detail: Dict[str, Any]) -> Dict[str, Any]:

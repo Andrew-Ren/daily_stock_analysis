@@ -143,16 +143,14 @@ def test_profile_uses_one_canonical_code_and_returns_structured_research() -> No
     dependencies["history_service"].get_history_list.assert_called_once_with(
         stock_code="AAPL", page=1, limit=5
     )
-    dependencies["intelligence_service"].list_items.assert_called_once_with(
-        scope_type="symbol",
-        scope_value="AAPL",
-        market="us",
-        page=1,
-        page_size=10,
-    )
-    dependencies["alert_service"].list_rules.assert_called_once_with(
-        target_scope="single_symbol", target="AAPL", page=1, page_size=100
-    )
+    assert {call.kwargs["scope_value"] for call in dependencies["intelligence_service"].list_items.call_args_list} == {
+        "AAPL",
+        "aapl",
+    }
+    assert {call.kwargs["target"] for call in dependencies["alert_service"].list_rules.call_args_list} == {
+        "AAPL",
+        "aapl",
+    }
 
 
 def test_hk_alias_is_canonicalized_before_every_downstream_query() -> None:
@@ -169,8 +167,40 @@ def test_hk_alias_is_canonicalized_before_every_downstream_query() -> None:
     dependencies["history_service"].get_history_list.assert_called_once_with(
         stock_code="HK00700", page=1, limit=5
     )
-    assert dependencies["intelligence_service"].list_items.call_args.kwargs["scope_value"] == "HK00700"
-    assert dependencies["alert_service"].list_rules.call_args.kwargs["target"] == "HK00700"
+    assert "00700.HK" in {
+        call.kwargs["scope_value"]
+        for call in dependencies["intelligence_service"].list_items.call_args_list
+    }
+    assert "00700.HK" in {
+        call.kwargs["target"] for call in dependencies["alert_service"].list_rules.call_args_list
+    }
+
+
+def test_profile_collects_intelligence_and_monitors_saved_under_legacy_aliases() -> None:
+    service, dependencies = _service()
+
+    def intelligence_by_alias(**kwargs: object) -> dict:
+        if kwargs.get("scope_value") == "600519.SH":
+            return _intelligence("600519.SH", "cn")
+        return {"items": [], "total": 0}
+
+    def rules_by_alias(**kwargs: object) -> dict:
+        if kwargs.get("target") == "SH600519":
+            return {"items": [{"id": 88, "enabled": True}], "total": 1}
+        return {"items": [], "total": 0}
+
+    dependencies["intelligence_service"].list_items.side_effect = intelligence_by_alias
+    dependencies["alert_service"].list_rules.side_effect = rules_by_alias
+
+    payload = service.get_profile("600519")
+
+    assert payload["intelligence"]["status"] == "fresh"
+    assert payload["intelligence"]["items"][0]["scope_value"] == "600519.SH"
+    assert payload["monitors"]["data"] == {
+        "total_rule_count": 1,
+        "enabled_rule_count": 1,
+        "rule_ids": [88],
+    }
 
 
 def test_optional_block_failures_remain_partial_and_do_not_hide_monitor_data() -> None:

@@ -6,7 +6,7 @@
 
 `GET /api/v1/stocks/{stock_code}/profile?history_days=60`
 
-端点先把输入统一为 canonical code，再将同一代码传给所有下游：
+端点先把输入统一为 canonical code。实时行情、历史和报告链使用 canonical code；对可能由旧入口按别名持久化的 intelligence 与 monitor 记录，读取时会展开仓库既有等价代码集合并按 ID 去重：
 
 - A 股：`SH600519`、`600519.SH` 等收敛为 `600519`。
 - 港股：`00700`、`00700.HK`、`HK00700` 收敛为 `HK00700`。
@@ -26,9 +26,9 @@
 
 - quote/history：复用 `StockService`，不新增数据获取器。
 - research：复用 `HistoryService` 和 #2291 的 `ResearchArtifact` builder；本 PR 因此堆叠在 #2291 上。
-- intelligence：复用 `IntelligenceService` 的 symbol scope 查询。
+- intelligence：复用 `IntelligenceService` 的 symbol scope 查询，并兼容 canonical、交易所前后缀、港股前后缀及大小写历史别名。
 - portfolio：只读 `PortfolioRepository.list_cached_position_identities()`；不为了打开个股页触发实时估值或写 snapshot，所以状态固定为 `partial` 并包含 `cached_positions_only`。
-- monitors：复用 `AlertService.list_rules()`，只统计 canonical code 的 `single_symbol` 规则。
+- monitors：复用 `AlertService.list_rules()`，分页汇总并去重 canonical code 及等价历史别名下的 `single_symbol` 规则。
 
 本阶段不新增 Web 路由/页面、不接线 Home/Watchlist/Screening/Portfolio/Report 入口，也不包含日历事件。后续 Web PR 必须消费本端点并分别渲染块状态；不得重新恢复多请求页面聚合。日历事件在 #2307 契约合入后再作为独立块扩展。
 
