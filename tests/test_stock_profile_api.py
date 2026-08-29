@@ -404,7 +404,7 @@ def test_offshore_research_lookup_excludes_cross_market_bare_numeric_aliases() -
     )
 
 
-def test_offshore_monitor_lookup_excludes_ambiguous_bare_numeric_alias() -> None:
+def test_offshore_monitor_lookup_keeps_market_unique_bare_numeric_alias() -> None:
     service, dependencies = _service()
 
     def rules_by_alias(**kwargs: object) -> dict:
@@ -419,9 +419,28 @@ def test_offshore_monitor_lookup_excludes_ambiguous_bare_numeric_alias() -> None
     queried_targets = {
         call.kwargs["target"] for call in dependencies["alert_service"].list_rules.call_args_list
     }
-    assert "005930" not in queried_targets
+    assert "005930" in queried_targets
     assert "005930.KS" in queried_targets
-    assert payload["monitors"]["data"]["total_rule_count"] == 0
+    assert payload["monitors"]["data"]["total_rule_count"] == 1
+
+
+def test_hk_monitor_lookup_keeps_unpadded_legacy_target() -> None:
+    service, dependencies = _service()
+
+    def rules_by_alias(**kwargs: object) -> dict:
+        if kwargs.get("target") == "700":
+            return {"items": [{"id": 77, "enabled": True}], "total": 1}
+        return {"items": [], "total": 0}
+
+    dependencies["alert_service"].list_rules.side_effect = rules_by_alias
+
+    payload = service.get_profile("HK00700")
+
+    queried_targets = {
+        call.kwargs["target"] for call in dependencies["alert_service"].list_rules.call_args_list
+    }
+    assert "700" in queried_targets
+    assert payload["monitors"]["data"]["rule_ids"] == [77]
 
 
 def test_profile_collects_intelligence_and_monitors_saved_under_legacy_aliases() -> None:

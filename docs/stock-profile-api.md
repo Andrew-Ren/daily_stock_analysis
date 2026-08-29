@@ -28,7 +28,7 @@
 ## 数据来源与边界
 
 - quote/history：复用 `StockService`，不新增数据获取器。
-- research：复用 `HistoryService` 和 #2291 的 `ResearchArtifact` builder。报告查询把档案入口已经解析出的 market hint 传到 `HistoryService` 的候选生成层：A 股 canonical code 只保留能在无提示解析时仍确认属于 A 股的裸数字别名；例如 `600519` 可继续兼容旧记录，而与韩股同形的 `SZ000660` 不会查询裸 `000660`。日韩台查询保留交易所后缀及其他无歧义别名，但不展开可能命中其他市场历史记录的裸数字代码；市场限定后候选为空时直接返回空分页，不会退化成无过滤查询。artifact 同时复用历史详情的上下文、raw result 和独立基本面快照 fallback，保留财报、分红与市场结构专项证据及其 source count。
+- research：复用 `HistoryService` 和 #2291 的 `ResearchArtifact` builder。报告查询把档案入口已经解析出的 market hint 传到 `HistoryService` 的候选生成层：只保留能在无提示解析时仍确认属于当前市场的裸数字别名；例如 `600519` 可继续兼容 A 股旧记录，`005930` 可兼容已唯一登记为韩股的旧报告，而与韩股同形的显式 A 股 `SZ000660` 不会查询裸 `000660`。日韩台查询保留交易所后缀及其他已确认同市场的旧裸数字代码，但不展开可能命中其他市场历史记录的别名；市场限定后候选为空时直接返回空分页，不会退化成无过滤查询。artifact 同时复用历史详情的上下文、raw result 和独立基本面快照 fallback，保留财报、分红与市场结构专项证据及其 source count。
 - service 导入边界：`api.v1` 的 router 改为延迟导出，因此 `StockProfileService -> ResearchArtifact schema` 不会反向触发全部 API endpoints。CLI、独立脚本和单元测试可在没有预先导入 `api.app` 的情况下直接导入 profile service。
 - intelligence：复用 `IntelligenceService` 的 symbol scope 查询，并兼容 canonical、交易所前后缀、港股前后缀、混合大小写及日韩台市场限定的裸数字历史别名；无法无提示解析回当前市场的歧义裸码不会进入 `global` 查询。查询别名按 casefold identity 去重，由 repository 的 symbol-only 不区分大小写过滤兼容历史大小写，避免重复 count/select。任一别名/市场查询失败时块保持 partial limitation，即使其余查询成功但为空，也不误报为已确认无资讯。
 - portfolio：只读 `PortfolioRepository.list_cached_position_identities()`，并使用每条缓存持仓自己的 market 解析旧裸代码；只有 market 与档案身份一致时才算持有。不为了打开个股页触发实时估值或写 snapshot，所以状态固定为 `partial` 并包含 `cached_positions_only`。

@@ -266,7 +266,7 @@ class HistoryService:
                     stock_code,
                     market_hint=market_hint,
                 )
-                if not include_ambiguous_numeric_aliases:
+                if not include_ambiguous_numeric_aliases and not market_hint:
                     stock_code = [candidate for candidate in stock_code if not candidate.isdigit()]
                 if not stock_code:
                     return {"total": 0, "items": []}

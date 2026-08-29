@@ -80,20 +80,21 @@ class TestHistoryCsiCandidateConvergence(unittest.TestCase):
         candidates = HistoryService._history_code_filter_candidates("csi930956")
         self.assertNotIn("csi930956", candidates)
 
-    def test_strict_offshore_lookup_excludes_cross_market_bare_numeric_alias(self):
+    def test_market_aware_offshore_lookup_keeps_same_market_bare_numeric_alias(self):
         db = MagicMock()
         db.get_analysis_history_paginated.return_value = ([], 0)
 
         HistoryService(db).get_history_list(
-            stock_code="8035.T",
+            stock_code="005930.KS",
             page=1,
             limit=5,
             include_ambiguous_numeric_aliases=False,
+            market_hint="kr",
         )
 
         queried_codes = db.get_analysis_history_paginated.call_args.kwargs["code"]
-        self.assertIn("8035.T", queried_codes)
-        self.assertNotIn("8035", queried_codes)
+        self.assertIn("005930.KS", queried_codes)
+        self.assertIn("005930", queried_codes)
 
     def test_market_hint_blocks_indexed_cross_market_reexpansion(self):
         db = MagicMock()

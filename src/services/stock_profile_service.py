@@ -338,10 +338,20 @@ class StockProfileService:
         for candidate in candidates or [code]:
             candidate_text = str(candidate).strip()
             if not include_ambiguous_numeric and candidate_text.isdigit():
-                if market in {"jp", "kr", "tw"}:
-                    continue
                 unhinted_identity = resolve_daily_stock_identity(candidate_text)
-                if unhinted_identity is None or unhinted_identity.market != market:
+                same_market = unhinted_identity is not None and unhinted_identity.market == market
+                legacy_short_hk = (
+                    market == "hk"
+                    and len(candidate_text) <= 3
+                    and (
+                        hinted_identity := resolve_daily_stock_identity(
+                            candidate_text,
+                            market_hint="hk",
+                        )
+                    ) is not None
+                    and hinted_identity.market == "hk"
+                )
+                if not same_market and not legacy_short_hk:
                     continue
             alias_key = candidate_text.casefold()
             if candidate_text and alias_key not in seen_aliases:
