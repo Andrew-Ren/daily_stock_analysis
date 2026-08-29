@@ -180,6 +180,23 @@ def test_hk_alias_is_canonicalized_before_every_downstream_query() -> None:
     }
 
 
+def test_jp_and_kr_codes_preserve_shared_market_identity() -> None:
+    jp_service, _ = _service()
+    kr_service, kr_dependencies = _service()
+
+    jp_payload = jp_service.get_profile("7203.T")
+    kr_payload = kr_service.get_profile("005930")
+
+    assert jp_payload["canonical_code"] == "7203.T"
+    assert jp_payload["market"] == "jp"
+    assert kr_payload["canonical_code"] == "005930.KS"
+    assert kr_payload["market"] == "kr"
+    assert {call.kwargs["market"] for call in kr_dependencies["intelligence_service"].list_items.call_args_list} == {
+        "kr",
+        "global",
+    }
+
+
 def test_profile_collects_intelligence_and_monitors_saved_under_legacy_aliases() -> None:
     service, dependencies = _service()
 
@@ -331,12 +348,25 @@ def test_profile_endpoint_validates_code_and_exposes_contract() -> None:
                 return_value=_endpoint_payload(),
             ) as get_profile:
                 response = client.get("/api/v1/stocks/AAPL/profile", params={"history_days": 90})
+                jp = client.get("/api/v1/stocks/7203.T/profile")
+                kr = client.get("/api/v1/stocks/005930.KS/profile")
             invalid = client.get("/api/v1/stocks/invalid-code/profile")
 
             assert response.status_code == 200, response.text
             assert response.json()["canonical_code"] == "AAPL"
-            get_profile.assert_called_once_with("AAPL", history_days=90)
+            assert [item.args for item in get_profile.call_args_list] == [
+                ("AAPL",),
+                ("7203.T",),
+                ("005930.KS",),
+            ]
+            assert [item.kwargs for item in get_profile.call_args_list] == [
+                {"history_days": 90},
+                {"history_days": 60},
+                {"history_days": 60},
+            ]
             assert invalid.status_code == 400
+            assert jp.status_code == 200
+            assert kr.status_code == 200
         finally:
             DatabaseManager.reset_instance()
             Config.reset_instance()

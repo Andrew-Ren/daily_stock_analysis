@@ -9,6 +9,8 @@
 端点先把输入统一为 canonical code。实时行情、历史和报告链使用 canonical code；对可能由旧入口按别名持久化的 intelligence 与 monitor 记录，读取时会展开仓库既有等价代码集合并按 ID 去重：
 
 - A 股：`SH600519`、`600519.SH` 等收敛为 `600519`。
+- 日股：`7203.T` 保留 Yahoo canonical suffix，并返回 `market=jp`。
+- 韩股：`005930.KS`、`035720.KQ` 保留 Yahoo canonical suffix，并返回 `market=kr`；股票索引唯一识别出的旧裸代码也沿用解析后的韩国市场身份。
 - 港股：`00700`、`00700.HK`、`HK00700` 收敛为 `HK00700`。
 - 美股 ticker 统一为裸大写形式，例如 `aapl`、`AAPL.US` 都收敛为 `AAPL`；持久化读取仍查询裸 ticker 与 `.US` 等价别名。
 

@@ -12,6 +12,7 @@ from src.repositories.portfolio_repo import PortfolioRepository
 from src.services.alert_service import AlertService
 from src.services.history_service import HistoryService
 from src.services.intelligence_service import IntelligenceService
+from src.services.market_symbol_utils import get_suffix_market
 from src.services.research_artifact_service import build_research_artifact
 from src.services.stock_code_utils import build_daily_code_candidates, resolve_daily_stock_identity
 from src.services.stock_service import StockService
@@ -73,6 +74,9 @@ class StockProfileService:
     def market_for_code(canonical_code: str) -> str:
         if canonical_code.startswith("HK"):
             return "hk"
+        suffix_market = get_suffix_market(canonical_code)
+        if suffix_market:
+            return suffix_market
         if canonical_code.isdigit() and len(canonical_code) == 6:
             return "cn"
         return "us"
