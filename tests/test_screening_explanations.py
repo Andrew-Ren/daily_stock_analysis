@@ -75,3 +75,37 @@ def test_llm_reason_does_not_replace_the_observed_local_selection_fallback() -> 
     assert [item["quality"] for item in result["why_selected"]] == ["inferred", "observed"]
     assert result["why_selected"][1]["code"] == "selection_rank"
     assert result["explanation_quality"]["why_selected"] == "partial"
+
+
+def test_distinct_llm_ranking_reason_stays_inferred_and_keeps_rank_fallback() -> None:
+    candidate = {
+        "rank": 5,
+        "reason": "LLM ranking reason",
+        "ranking_reason": "LLM ranking reason",
+        "llm_thesis": "A different, longer thesis",
+        "factor_scores": {},
+        "dsa_context": {},
+        "dsa_news": [],
+        "dsa_events": [],
+    }
+
+    result = _attach_candidate_explanations(candidate)
+
+    assert [item["quality"] for item in result["why_selected"]] == ["inferred", "observed"]
+    assert result["why_selected"][1]["code"] == "selection_rank"
+
+
+def test_news_and_events_without_provenance_are_not_observed() -> None:
+    candidate = {
+        "rank": 6,
+        "reason": "local reason",
+        "factor_scores": {},
+        "dsa_context": {},
+        "dsa_news": [{"title": "Unattributed headline", "url": "https://example.test/news"}],
+        "dsa_events": [{"title": "Unattributed event"}],
+    }
+
+    result = _attach_candidate_explanations(candidate)
+
+    assert [item["code"] for item in result["why_now"]] == ["awaiting_evidence"]
+    assert result["explanation_quality"]["why_now"] == "unknown"

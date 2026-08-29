@@ -3757,6 +3757,7 @@ def _normalize_candidate(raw: Any, rank: int) -> Dict[str, Any]:
         "score": _first_present(item, source, "score", "final_score"),
         "screen_score": _first_present(item, source, "screen_score"),
         "reason": item.get("reason") or source.get("reason") or source.get("ranking_reason") or source.get("risk_summary") or item.get("summary") or _build_candidate_reason(source),
+        "ranking_reason": item.get("ranking_reason") or source.get("ranking_reason") or "",
         "risk_level": item.get("risk_level") or source.get("risk_level") or "",
         "risk_flags": item.get("risk_flags") or source.get("risk_flags") or [],
         "llm_score": _first_present(item, source, "llm_score"),
@@ -3793,7 +3794,9 @@ def _attach_candidate_explanations(candidate: Dict[str, Any]) -> Dict[str, Any]:
 
     reason = str(candidate.get("reason") or "").strip()
     if reason:
-        reason_is_llm = bool(candidate.get("llm_thesis")) and reason == str(candidate.get("llm_thesis")).strip()
+        ranking_reason = str(candidate.get("ranking_reason") or "").strip()
+        llm_thesis = str(candidate.get("llm_thesis") or "").strip()
+        reason_is_llm = reason == ranking_reason or (bool(llm_thesis) and reason == llm_thesis)
         why_selected.append(
             _explanation_item(
                 "selection_reason",
@@ -3837,7 +3840,9 @@ def _attach_candidate_explanations(candidate: Dict[str, Any]) -> Dict[str, Any]:
             (
                 item
                 for item in news_items
-                if isinstance(item, dict) and str(item.get("title") or item.get("snippet") or "").strip()
+                if isinstance(item, dict)
+                and str(item.get("source") or "").strip()
+                and str(item.get("title") or item.get("snippet") or "").strip()
             ),
             None,
         )
@@ -3846,7 +3851,7 @@ def _attach_candidate_explanations(candidate: Dict[str, Any]) -> Dict[str, Any]:
                 _explanation_item(
                     "news",
                     f"消息：{str(news.get('title') or news.get('snippet')).strip()}",
-                    source=str(news.get("source") or "news"),
+                    source=str(news.get("source")).strip(),
                     quality="observed",
                 )
             )
@@ -3857,7 +3862,9 @@ def _attach_candidate_explanations(candidate: Dict[str, Any]) -> Dict[str, Any]:
             (
                 item
                 for item in event_items
-                if isinstance(item, dict) and str(item.get("title") or item.get("snippet") or "").strip()
+                if isinstance(item, dict)
+                and str(item.get("source") or "").strip()
+                and str(item.get("title") or item.get("snippet") or "").strip()
             ),
             None,
         )
@@ -3866,7 +3873,7 @@ def _attach_candidate_explanations(candidate: Dict[str, Any]) -> Dict[str, Any]:
                 _explanation_item(
                     "event",
                     f"事件：{str(event.get('title') or event.get('snippet')).strip()}",
-                    source=str(event.get("source") or "events"),
+                    source=str(event.get("source")).strip(),
                     quality="observed",
                 )
             )
