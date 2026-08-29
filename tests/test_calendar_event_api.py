@@ -285,6 +285,9 @@ class CalendarEventApiTestCase(unittest.TestCase):
         )
 
         self.assertEqual(response.status_code, 422, response.text)
+        self.assertEqual(response.json()["error"], "validation_error")
+        self.assertIn("message", response.json())
+        self.assertIsInstance(response.json()["detail"], list)
 
     def test_repository_rejects_offsets_beyond_database_integer_range(self) -> None:
         with self.assertRaisesRegex(ValueError, "database integer range"):
@@ -433,6 +436,16 @@ class CalendarEventApiTestCase(unittest.TestCase):
         runtime_spec = self.app.openapi()
         for api_path in ("/api/v1/calendar/events", "/api/v1/calendar/events/{event_id}"):
             self.assertEqual(static_spec["paths"][api_path], runtime_spec["paths"][api_path])
+            for operation in runtime_spec["paths"][api_path].values():
+                if not isinstance(operation, dict) or "responses" not in operation:
+                    continue
+                validation_schema = operation["responses"]["422"]["content"][
+                    "application/json"
+                ]["schema"]
+                self.assertEqual(
+                    validation_schema,
+                    {"$ref": "#/components/schemas/ErrorResponse"},
+                )
         for schema_name in (
             "CalendarCoverageSummary",
             "CalendarEventCreateRequest",

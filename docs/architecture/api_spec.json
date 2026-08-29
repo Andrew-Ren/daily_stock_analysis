@@ -2775,6 +2775,16 @@
             },
             "description": "Bad Request"
           },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
           "500": {
             "content": {
               "application/json": {
@@ -2784,16 +2794,6 @@
               }
             },
             "description": "Internal Server Error"
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
           }
         }
       },
@@ -2967,6 +2967,16 @@
             },
             "description": "Bad Request"
           },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
           "500": {
             "content": {
               "application/json": {
@@ -2976,16 +2986,6 @@
               }
             },
             "description": "Internal Server Error"
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
           }
         }
       }
@@ -3041,6 +3041,16 @@
             },
             "description": "Not Found"
           },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
           "500": {
             "content": {
               "application/json": {
@@ -3050,16 +3060,6 @@
               }
             },
             "description": "Internal Server Error"
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
           }
         }
       }

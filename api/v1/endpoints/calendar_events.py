@@ -53,7 +53,11 @@ def _internal_error(message: str, exc: Exception) -> HTTPException:
 @router.post(
     "/events",
     response_model=CalendarEventItem,
-    responses={400: {"model": ErrorResponse}, 500: {"model": ErrorResponse}},
+    responses={
+        400: {"model": ErrorResponse},
+        422: {"model": ErrorResponse},
+        500: {"model": ErrorResponse},
+    },
     summary="Create a user calendar event",
 )
 def create_event(request: CalendarEventCreateRequest) -> CalendarEventItem:
@@ -70,7 +74,11 @@ def create_event(request: CalendarEventCreateRequest) -> CalendarEventItem:
 @router.get(
     "/events",
     response_model=CalendarEventListResponse,
-    responses={400: {"model": ErrorResponse}, 500: {"model": ErrorResponse}},
+    responses={
+        400: {"model": ErrorResponse},
+        422: {"model": ErrorResponse},
+        500: {"model": ErrorResponse},
+    },
     summary="List upcoming calendar events",
     description=(
         "Shared inclusive date-range query for Dashboard and symbol consumers. "
@@ -109,7 +117,12 @@ def list_events(
 @router.delete(
     "/events/{event_id}",
     response_model=CalendarEventDeleteResponse,
-    responses={400: {"model": ErrorResponse}, 404: {"model": ErrorResponse}, 500: {"model": ErrorResponse}},
+    responses={
+        400: {"model": ErrorResponse},
+        404: {"model": ErrorResponse},
+        422: {"model": ErrorResponse},
+        500: {"model": ErrorResponse},
+    },
     summary="Delete a user calendar event",
 )
 def delete_event(
