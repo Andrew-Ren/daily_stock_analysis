@@ -5,6 +5,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from typing import Any, Dict, Iterable, Optional, Tuple
+from urllib.parse import quote
 
 from api.v1.schemas.entity_link import EntityActionType, EntityType
 from data_provider.base import normalize_stock_code
@@ -38,21 +39,21 @@ _ACTION_ROUTES: Dict[Tuple[str, str], _RouteTemplate] = {
     ("index", "view"): _RouteTemplate("/market", available=False, disabled_reason="market_detail_route_pending"),
     ("sector", "view"): _RouteTemplate("/market", available=False, disabled_reason="market_detail_route_pending"),
     ("concept", "view"): _RouteTemplate("/market", available=False, disabled_reason="market_detail_route_pending"),
-    ("strategy", "view"): _RouteTemplate("/screening"),
-    ("strategy", "monitor"): _RouteTemplate("/alerts"),
+    ("strategy", "view"): _RouteTemplate("/screening", available=False, disabled_reason="entity_action_context_pending"),
+    ("strategy", "monitor"): _RouteTemplate("/alerts", available=False, disabled_reason="entity_action_context_pending"),
     ("report", "view"): _RouteTemplate("/", available=False, disabled_reason="report_detail_route_pending"),
-    ("report", "monitor"): _RouteTemplate("/alerts"),
-    ("report", "track_outcome"): _RouteTemplate("/decision-signals"),
-    ("signal", "view"): _RouteTemplate("/decision-signals"),
-    ("signal", "track_outcome"): _RouteTemplate("/decision-signals"),
-    ("alert", "view"): _RouteTemplate("/alerts"),
-    ("alert", "monitor"): _RouteTemplate("/alerts"),
-    ("portfolio_position", "view"): _RouteTemplate("/portfolio"),
-    ("portfolio_position", "analyze"): _RouteTemplate("/"),
-    ("portfolio_position", "monitor"): _RouteTemplate("/alerts"),
-    ("portfolio_position", "ask_ai"): _RouteTemplate("/chat"),
+    ("report", "monitor"): _RouteTemplate("/alerts", available=False, disabled_reason="entity_action_context_pending"),
+    ("report", "track_outcome"): _RouteTemplate("/decision-signals?sourceReportId={entity_id}"),
+    ("signal", "view"): _RouteTemplate("/decision-signals", available=False, disabled_reason="entity_action_context_pending"),
+    ("signal", "track_outcome"): _RouteTemplate("/decision-signals", available=False, disabled_reason="entity_action_context_pending"),
+    ("alert", "view"): _RouteTemplate("/alerts", available=False, disabled_reason="entity_action_context_pending"),
+    ("alert", "monitor"): _RouteTemplate("/alerts", available=False, disabled_reason="entity_action_context_pending"),
+    ("portfolio_position", "view"): _RouteTemplate("/portfolio", available=False, disabled_reason="entity_action_context_pending"),
+    ("portfolio_position", "analyze"): _RouteTemplate("/", available=False, disabled_reason="entity_action_context_pending"),
+    ("portfolio_position", "monitor"): _RouteTemplate("/alerts", available=False, disabled_reason="entity_action_context_pending"),
+    ("portfolio_position", "ask_ai"): _RouteTemplate("/chat", available=False, disabled_reason="entity_action_context_pending"),
     ("calendar_event", "view"): _RouteTemplate("/calendar", available=False, disabled_reason="calendar_route_pending"),
-    ("calendar_event", "monitor"): _RouteTemplate("/alerts"),
+    ("calendar_event", "monitor"): _RouteTemplate("/alerts", available=False, disabled_reason="entity_action_context_pending"),
 }
 
 _DEFAULT_ACTIONS: Dict[str, Tuple[str, ...]] = {
@@ -165,12 +166,14 @@ def build_entity_action(entity_type: str, entity_id: str, action: str) -> Dict[s
     )
     params = _action_params(entity_type, entity_id, action)
     href = _format_href(route.href, params) if route.href else None
+    has_context = _has_consumable_context(entity_type, entity_id, action)
+    available = route.available and has_context
     return {
         "action": action,
         "label": _ACTION_LABELS.get(action, action.replace("_", " ").title()),
         "href": href,
-        "available": route.available,
-        "disabled_reason": route.disabled_reason,
+        "available": available,
+        "disabled_reason": route.disabled_reason or (None if available else "invalid_entity_context"),
         "params": params,
     }
 
@@ -199,8 +202,14 @@ def _split_market_entity_id(entity_id: str) -> Tuple[str, str]:
     return market or "CN", code
 
 
+def _has_consumable_context(entity_type: str, entity_id: str, action: str) -> bool:
+    if (entity_type, action) == ("report", "track_outcome"):
+        return entity_id.isdigit() and int(entity_id) > 0
+    return True
+
+
 def _format_href(template: str, params: Dict[str, Any]) -> str:
     return template.format(
-        code=params.get("code", ""),
-        entity_id=str(params.get("entity_id", "")),
+        code=quote(str(params.get("code", "")), safe=""),
+        entity_id=quote(str(params.get("entity_id", "")), safe=""),
     )

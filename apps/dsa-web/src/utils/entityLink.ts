@@ -26,21 +26,21 @@ const ACTION_ROUTES: Partial<Record<`${EntityType}:${EntityActionType}`, RouteTe
   'index:view': { href: '/market', available: false, disabledReason: 'market_detail_route_pending' },
   'sector:view': { href: '/market', available: false, disabledReason: 'market_detail_route_pending' },
   'concept:view': { href: '/market', available: false, disabledReason: 'market_detail_route_pending' },
-  'strategy:view': { href: '/screening' },
-  'strategy:monitor': { href: '/alerts' },
+  'strategy:view': { href: '/screening', available: false, disabledReason: 'entity_action_context_pending' },
+  'strategy:monitor': { href: '/alerts', available: false, disabledReason: 'entity_action_context_pending' },
   'report:view': { href: '/', available: false, disabledReason: 'report_detail_route_pending' },
-  'report:monitor': { href: '/alerts' },
-  'report:track_outcome': { href: '/decision-signals' },
-  'signal:view': { href: '/decision-signals' },
-  'signal:track_outcome': { href: '/decision-signals' },
-  'alert:view': { href: '/alerts' },
-  'alert:monitor': { href: '/alerts' },
-  'portfolio_position:view': { href: '/portfolio' },
-  'portfolio_position:analyze': { href: '/' },
-  'portfolio_position:monitor': { href: '/alerts' },
-  'portfolio_position:ask_ai': { href: '/chat' },
+  'report:monitor': { href: '/alerts', available: false, disabledReason: 'entity_action_context_pending' },
+  'report:track_outcome': { href: '/decision-signals?sourceReportId={entity_id}' },
+  'signal:view': { href: '/decision-signals', available: false, disabledReason: 'entity_action_context_pending' },
+  'signal:track_outcome': { href: '/decision-signals', available: false, disabledReason: 'entity_action_context_pending' },
+  'alert:view': { href: '/alerts', available: false, disabledReason: 'entity_action_context_pending' },
+  'alert:monitor': { href: '/alerts', available: false, disabledReason: 'entity_action_context_pending' },
+  'portfolio_position:view': { href: '/portfolio', available: false, disabledReason: 'entity_action_context_pending' },
+  'portfolio_position:analyze': { href: '/', available: false, disabledReason: 'entity_action_context_pending' },
+  'portfolio_position:monitor': { href: '/alerts', available: false, disabledReason: 'entity_action_context_pending' },
+  'portfolio_position:ask_ai': { href: '/chat', available: false, disabledReason: 'entity_action_context_pending' },
   'calendar_event:view': { href: '/calendar', available: false, disabledReason: 'calendar_route_pending' },
-  'calendar_event:monitor': { href: '/alerts' },
+  'calendar_event:monitor': { href: '/alerts', available: false, disabledReason: 'entity_action_context_pending' },
 };
 
 const DEFAULT_ACTIONS: Record<EntityType, EntityActionType[]> = {
@@ -114,12 +114,14 @@ export const buildEntityAction = (
   };
   const params = buildActionParams(entityType, entityId, action);
   const href = route.href ? formatHref(route.href, params) : null;
+  const hasContext = hasConsumableContext(entityType, entityId, action);
+  const available = (route.available ?? true) && hasContext;
   return {
     action,
     label: ACTION_LABELS[action],
     href,
-    available: route.available ?? true,
-    disabledReason: route.disabledReason ?? null,
+    available,
+    disabledReason: route.disabledReason ?? (available ? null : 'invalid_entity_context'),
     params,
   };
 };
@@ -158,5 +160,14 @@ const splitMarketEntityId = (entityId: string): [string, string] => {
   return [entityId.slice(0, separatorIndex) || 'CN', entityId.slice(separatorIndex + 1)];
 };
 
+const hasConsumableContext = (entityType: EntityType, entityId: string, action: EntityActionType): boolean => {
+  if (entityType === 'report' && action === 'track_outcome') {
+    return /^[1-9]\d*$/.test(entityId);
+  }
+  return true;
+};
+
 const formatHref = (template: string, params: Record<string, unknown>): string =>
-  template.replace('{code}', String(params.code ?? '')).replace('{entity_id}', String(params.entity_id ?? ''));
+  template
+    .replace('{code}', encodeURIComponent(String(params.code ?? '')))
+    .replace('{entity_id}', encodeURIComponent(String(params.entity_id ?? '')));

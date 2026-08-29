@@ -58,8 +58,38 @@ def test_report_entity_link_can_track_outcome_through_decision_signals() -> None
     assert link.ref == "report:123"
     actions = {item.action: item for item in link.actions}
     assert actions["track_outcome"].available is True
-    assert actions["track_outcome"].href == "/decision-signals"
+    assert actions["track_outcome"].href == "/decision-signals?sourceReportId=123"
     assert actions["view"].available is False
+
+
+@pytest.mark.parametrize(
+    ("entity_type", "entity_id"),
+    [
+        ("strategy", "value:quality"),
+        ("signal", "42"),
+        ("alert", "900"),
+        ("portfolio_position", "default:AAPL"),
+        ("calendar_event", "earnings:AAPL:2026-09-01"),
+    ],
+)
+def test_actions_without_a_consumed_target_context_fail_closed(
+    entity_type: str,
+    entity_id: str,
+) -> None:
+    link = EntityLink.model_validate(build_entity_link(entity_type, entity_id))
+
+    assert link.links == {}
+    assert all(item.available is False for item in link.actions)
+    assert all(item.disabled_reason for item in link.actions)
+
+
+def test_report_tracking_requires_a_positive_numeric_source_report_id() -> None:
+    link = EntityLink.model_validate(build_entity_link("report", "report/123"))
+
+    assert link.links == {}
+    action = next(item for item in link.actions if item.action == "track_outcome")
+    assert action.available is False
+    assert action.disabled_reason == "invalid_entity_context"
 
 
 def test_entity_ref_helpers_validate_shape() -> None:

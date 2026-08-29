@@ -34,9 +34,32 @@ describe('entityLink helpers', () => {
     const actions = Object.fromEntries(link.actions.map((item) => [item.action, item]));
 
     expect(link.ref).toBe('report:123');
-    expect(actions.track_outcome.href).toBe('/decision-signals');
+    expect(actions.track_outcome.href).toBe('/decision-signals?sourceReportId=123');
     expect(actions.track_outcome.available).toBe(true);
     expect(actions.view.available).toBe(false);
+  });
+
+  it.each([
+    ['strategy', 'value:quality'],
+    ['signal', '42'],
+    ['alert', '900'],
+    ['portfolio_position', 'default:AAPL'],
+    ['calendar_event', 'earnings:AAPL:2026-09-01'],
+  ] as const)('fails closed when %s target pages do not consume entity context', (entityType, entityId) => {
+    const link = buildEntityLink(entityType, entityId);
+
+    expect(link.links).toEqual({});
+    expect(link.actions.every((action) => !action.available)).toBe(true);
+    expect(link.actions.every((action) => Boolean(action.disabledReason))).toBe(true);
+  });
+
+  it('requires a positive numeric report id for decision-signal filtering', () => {
+    const link = buildEntityLink('report', 'report/123');
+    const action = link.actions.find((item) => item.action === 'track_outcome');
+
+    expect(link.links).toEqual({});
+    expect(action?.available).toBe(false);
+    expect(action?.disabledReason).toBe('invalid_entity_context');
   });
 
   it('validates refs and builds unavailable unsupported actions', () => {
