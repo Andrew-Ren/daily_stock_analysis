@@ -71,6 +71,9 @@ class CalendarEventRepository:
         where_clause = and_(*conditions)
         safe_page = max(1, int(page))
         safe_size = max(1, min(int(page_size), 100))
+        offset = (safe_page - 1) * safe_size
+        if offset > 2**63 - 1:
+            raise ValueError("calendar event page offset exceeds database integer range")
 
         with self.db.get_session() as session:
             total = session.execute(
@@ -82,7 +85,7 @@ class CalendarEventRepository:
                 select(CalendarEventRecord)
                 .where(where_clause)
                 .order_by(CalendarEventRecord.event_date, CalendarEventRecord.id)
-                .offset((safe_page - 1) * safe_size)
+                .offset(offset)
                 .limit(safe_size)
             ).scalars().all()
             return list(rows), int(total)

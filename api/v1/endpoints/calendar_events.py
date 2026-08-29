@@ -18,7 +18,11 @@ from api.v1.schemas.calendar_events import (
     CalendarScopeType,
 )
 from api.v1.schemas.common import ErrorResponse
-from src.services.calendar_event_service import CalendarEventService, CalendarEventServiceError
+from src.services.calendar_event_service import (
+    CALENDAR_EVENT_MAX_PAGE,
+    CalendarEventService,
+    CalendarEventServiceError,
+)
 from src.services.run_diagnostics import sanitize_diagnostic_text
 
 logger = logging.getLogger(__name__)
@@ -79,7 +83,7 @@ def list_events(
     scope_value: Optional[str] = Query(None, max_length=128),
     market: Optional[CalendarMarket] = Query(None),
     symbol: Optional[str] = Query(None, max_length=32),
-    page: int = Query(1, ge=1),
+    page: int = Query(1, ge=1, le=CALENDAR_EVENT_MAX_PAGE),
     page_size: int = Query(100, ge=1, le=100),
 ) -> CalendarEventListResponse:
     try:

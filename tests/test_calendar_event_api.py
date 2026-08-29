@@ -257,6 +257,23 @@ class CalendarEventApiTestCase(unittest.TestCase):
         self.assertEqual([row.title for row in first_page], ["event-0", "event-1"])
         self.assertEqual([row.title for row in second_page], ["event-2"])
 
+    def test_list_rejects_page_that_exceeds_the_bounded_api_contract(self) -> None:
+        response = self.client.get(
+            "/api/v1/calendar/events",
+            params={"page": 100000000000000000000},
+        )
+
+        self.assertEqual(response.status_code, 422, response.text)
+
+    def test_repository_rejects_offsets_beyond_database_integer_range(self) -> None:
+        with self.assertRaisesRegex(ValueError, "database integer range"):
+            self.repo.list_events(
+                start_date=date.today(),
+                end_date=date.today(),
+                page=100000000000000000000,
+                page_size=100,
+            )
+
     def test_scope_validation_rejects_incomplete_contracts(self) -> None:
         invalid_payloads = [
             {"scope_type": "market", "market": None, "symbol": None, "scope_value": None},

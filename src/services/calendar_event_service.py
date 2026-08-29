@@ -14,6 +14,7 @@ from src.services.stock_code_utils import resolve_daily_stock_identity
 _ALLOWED_EVENT_TYPES = {"earnings", "dividend", "lockup_unlock", "macro", "user", "monitor"}
 _ALLOWED_SCOPE_TYPES = {"market", "symbol", "portfolio", "sector", "custom"}
 _ALLOWED_MARKETS = {"cn", "hk", "us", "jp", "kr", "tw", "global"}
+CALENDAR_EVENT_MAX_PAGE = 1_000_000
 
 
 class CalendarEventServiceError(ValueError):
@@ -65,6 +66,10 @@ class CalendarEventService:
                 raise CalendarEventServiceError("scope_value conflicts with symbol identity")
 
         page = max(1, int(filters.get("page") or 1))
+        if page > CALENDAR_EVENT_MAX_PAGE:
+            raise CalendarEventServiceError(
+                f"page must be less than or equal to {CALENDAR_EVENT_MAX_PAGE}"
+            )
         page_size = max(1, min(int(filters.get("page_size") or 100), 100))
         rows, total = self.repo.list_events(
             start_date=start_date,
