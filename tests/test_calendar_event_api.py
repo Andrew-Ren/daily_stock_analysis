@@ -170,6 +170,28 @@ class CalendarEventApiTestCase(unittest.TestCase):
             self.assertEqual(response.status_code, 200, response.text)
             self.assertEqual([item["id"] for item in response.json()["items"]], [expected_id])
 
+        combined_aliases = self.client.get(
+            "/api/v1/calendar/events",
+            params={
+                "start_date": start.isoformat(),
+                "end_date": end.isoformat(),
+                "symbol": "00700.HK",
+                "scope_value": "00700.HK",
+            },
+        )
+        self.assertEqual(combined_aliases.status_code, 200, combined_aliases.text)
+        self.assertEqual(
+            [item["id"] for item in combined_aliases.json()["items"]],
+            [hk_event["id"]],
+        )
+
+        conflicting_scope_value = self.client.get(
+            "/api/v1/calendar/events",
+            params={"symbol": "00700.HK", "scope_value": "600519"},
+        )
+        self.assertEqual(conflicting_scope_value.status_code, 400)
+        self.assertEqual(conflicting_scope_value.json()["error"], "validation_error")
+
     def test_symbol_scope_derives_market_and_rejects_conflicts(self) -> None:
         hk_event = self._create(symbol="HK00700", market=None)
 

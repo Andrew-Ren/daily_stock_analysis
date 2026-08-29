@@ -54,8 +54,12 @@ class CalendarEventService:
             raise CalendarEventServiceError(f"unsupported market: {market}")
         if market and symbol_market and market != symbol_market:
             raise CalendarEventServiceError("market conflicts with symbol identity")
-        if symbol and scope_type and scope_type != "symbol":
-            raise CalendarEventServiceError("symbol filter can only be combined with scope_type=symbol")
+        if symbol:
+            if scope_type and scope_type != "symbol":
+                raise CalendarEventServiceError(
+                    "symbol filter can only be combined with scope_type=symbol"
+                )
+            scope_type = "symbol"
         if scope_type == "symbol" and scope_value:
             scope_value, scope_market = self._resolve_symbol_identity(
                 scope_value,

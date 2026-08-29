@@ -23,7 +23,7 @@
 - `GET /api/v1/calendar/events`：按日期范围、scope、market 或 symbol 查询事件。
 - `DELETE /api/v1/calendar/events/{event_id}`：删除手工事件；外部来源事件不允许通过该入口删除。
 
-列表查询的日期范围首尾均包含。未传日期时，默认返回从服务器当天开始的 7 个自然日（当天到 `today + 6 days`）；若起始日接近 `9999-12-31`，结束日钳制到 `date.max`，不会因默认窗口溢出而返回 500。`page` 范围为 1 到 1,000,000，超出范围在进入数据库前返回 4xx；repository 也拒绝超过数据库整数范围的 offset。Dashboard 可以不传 scope 获取混合事件；股票详情传 `symbol`，同一 API 会严格返回该 symbol 的 `scope_type=symbol` 事件，不在客户端重新拼装或猜测归属。写入与查询都会复用仓库统一股票身份规范化，例如裸五位港股 `00700`、`00700.HK` 与 `HK00700` 统一为 `HK00700`，`600519.SH` / `600519` 统一为 `600519`。symbol scope 的 market 由解析身份自动回填；显式 market 会作为裸数字身份的消歧义 hint，解析后若仍冲突或 symbol 无法解析则返回 400，自由文本标识应使用 custom scope。
+列表查询的日期范围首尾均包含。未传日期时，默认返回从服务器当天开始的 7 个自然日（当天到 `today + 6 days`）；若起始日接近 `9999-12-31`，结束日钳制到 `date.max`，不会因默认窗口溢出而返回 500。`page` 范围为 1 到 1,000,000，超出范围在进入数据库前返回 4xx；repository 也拒绝超过数据库整数范围的 offset。Dashboard 可以不传 scope 获取混合事件；股票详情传 `symbol`，同一 API 会把省略的 `scope_type` 视为 `symbol`，并对同时出现的 `scope_value` 使用同一身份规则归一和校验，严格返回该股票事件，不在客户端重新拼装或猜测归属。写入与查询都会复用仓库统一股票身份规范化，例如裸五位港股 `00700`、`00700.HK` 与 `HK00700` 统一为 `HK00700`，`600519.SH` / `600519` 统一为 `600519`。symbol scope 的 market 由解析身份自动回填；显式 market 会作为裸数字身份的消歧义 hint，解析后若仍冲突或 symbol 无法解析则返回 400，自由文本标识应使用 custom scope。
 
 `metadata` 必须是只包含有限 JSON 数值的对象；`NaN` / `Infinity` 等非有限值在写入前返回 400。历史脏数据若包含非有限 metadata，列表会降级为空对象，避免单条记录拖垮整个响应。`symbol` 只属于 `scope_type=symbol` 的可查询契约；portfolio、sector 和 custom 事件若携带 symbol 会返回 400，避免写入后无法通过股票详情查询。删除路径的 `event_id` 限制为数据库有符号 64 位正整数，越界请求在数据库查询前返回 422。
 
