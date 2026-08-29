@@ -109,6 +109,11 @@ class DashboardOverviewService:
                             invalid_snapshot_count += 1
                             region_candidates.setdefault(raw_trade_date, None)
                             continue
+                        snapshot_region = str(snapshot.get("region") or "").strip().lower()
+                        if snapshot_region != region:
+                            invalid_snapshot_count += 1
+                            region_candidates.setdefault(raw_trade_date, None)
+                            continue
                         if region_candidates.get(raw_trade_date) is None:
                             region_candidates[raw_trade_date] = snapshot
                 scanned_count += len(reviews)
