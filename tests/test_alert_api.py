@@ -877,6 +877,32 @@ class AlertApiTestCase(unittest.TestCase):
         self.assertEqual(by_rule_id[rules[0]["id"]]["trigger_count"], 2)
         self.assertEqual(by_rule_id[rules[1]["id"]]["trigger_count"], 1)
 
+    def test_monitor_summary_does_not_attribute_deleted_rule_history_to_reused_id(self) -> None:
+        deleted_rule = self._create_rule({"name": "deleted", "target": "600519"})
+        with self.db.get_session() as session:
+            session.add(
+                AlertTriggerRecord(
+                    rule_id=deleted_rule["id"],
+                    target="600519",
+                    status="triggered",
+                    triggered_at=datetime(2025, 1, 1),
+                )
+            )
+            session.commit()
+
+        delete_response = self.client.delete(f"/api/v1/alerts/rules/{deleted_rule['id']}")
+        self.assertEqual(delete_response.status_code, 200, delete_response.text)
+        replacement_rule = self._create_rule({"name": "replacement", "target": "AAPL"})
+        self.assertEqual(replacement_rule["id"], deleted_rule["id"])
+
+        response = self.client.get("/api/v1/alerts/summary", params={"rule_limit": 100})
+
+        self.assertEqual(response.status_code, 200, response.text)
+        payload = response.json()
+        by_rule_id = {item["rule_id"]: item for item in payload["rules"]}
+        self.assertEqual(by_rule_id[replacement_rule["id"]]["trigger_count"], 0)
+        self.assertEqual(payload["orphaned_trigger_count"], 1)
+
     def test_monitor_summary_static_openapi_matches_runtime_contract(self) -> None:
         static_spec = json.loads(
             (Path(__file__).resolve().parents[1] / "docs" / "architecture" / "api_spec.json").read_text(

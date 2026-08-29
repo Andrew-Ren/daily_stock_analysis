@@ -437,7 +437,7 @@ worker 会把 `triggered`、`skipped`、`degraded`、`failed` 写入 `alert_trig
 - `triggers_total`：全部触发记录数量；`trigger_statuses` 按实际状态聚合。
 - `rule_types`：按 `alert_type` 聚合规则数和已启用规则数。
 - `rules`：按触发次数、最近触发时间和规则 ID 排序的规则摘要，数量由 `rule_limit` 控制。
-- 触发归属只使用持久化的 `rule_id`，不会用股票代码、目标名称或当前分页结果猜测归属。`rule_id` 为空的记录计入 `unattributed_trigger_count`；引用已不存在规则的记录计入 `orphaned_trigger_count`。
+- 触发归属使用持久化的 `rule_id`，并要求触发时间不早于当前同 ID 规则的创建时间，不会用股票代码、目标名称或当前分页结果猜测归属。这样 SQLite 删除规则后复用整数 ID 时，旧规则的触发历史不会归到新规则。`rule_id` 为空的记录计入 `unattributed_trigger_count`；引用已不存在规则或早于当前规则生命周期的记录计入 `orphaned_trigger_count`。
 
 该概览是 Issue #2281 的基础阶段，只解决全局统计与可靠归属。它不引入“论文失效”规则类型，也不把普通告警命名为失效信号；`impact`、`affected_entities` 和新的 thesis invalidation 规则语义留待后续独立 PR。回滚时 revert API、repository、Web 和文档改动即可；没有数据库迁移，现有告警数据不受影响。
 

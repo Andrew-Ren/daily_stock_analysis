@@ -296,6 +296,11 @@ class AlertRepository:
         """Aggregate the whole monitor dataset independently of list pagination."""
         safe_limit = max(1, min(int(rule_limit), 100))
         with self.db.get_session() as session:
+            trigger_belongs_to_rule = and_(
+                AlertTriggerRecord.rule_id == AlertRuleRecord.id,
+                AlertTriggerRecord.triggered_at.is_not(None),
+                AlertTriggerRecord.triggered_at >= AlertRuleRecord.created_at,
+            )
             rules_total = session.execute(
                 select(func.count(AlertRuleRecord.id)).select_from(AlertRuleRecord)
             ).scalar() or 0
@@ -331,7 +336,7 @@ class AlertRepository:
             orphaned_trigger_count = session.execute(
                 select(func.count(AlertTriggerRecord.id))
                 .select_from(AlertTriggerRecord)
-                .outerjoin(AlertRuleRecord, AlertRuleRecord.id == AlertTriggerRecord.rule_id)
+                .outerjoin(AlertRuleRecord, trigger_belongs_to_rule)
                 .where(AlertTriggerRecord.rule_id.is_not(None), AlertRuleRecord.id.is_(None))
             ).scalar() or 0
 
@@ -347,7 +352,7 @@ class AlertRepository:
                     trigger_count,
                     last_triggered_at,
                 )
-                .outerjoin(AlertTriggerRecord, AlertTriggerRecord.rule_id == AlertRuleRecord.id)
+                .outerjoin(AlertTriggerRecord, trigger_belongs_to_rule)
                 .group_by(
                     AlertRuleRecord.id,
                     AlertRuleRecord.name,
