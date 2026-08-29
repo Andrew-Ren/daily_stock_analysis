@@ -46,8 +46,8 @@ class StockProfileService:
             "history": self._history_block(canonical_code, history_days=history_days),
             "research": self._research_block(canonical_code),
             "intelligence": self._intelligence_block(canonical_code, market=market),
-            "portfolio": self._portfolio_block(canonical_code),
-            "monitors": self._monitor_block(canonical_code),
+            "portfolio": self._portfolio_block(canonical_code, market=market),
+            "monitors": self._monitor_block(canonical_code, market=market),
         }
         return {
             "requested_code": str(requested_code).strip(),
@@ -160,8 +160,18 @@ class StockProfileService:
         successful_queries = 0
         failed_queries = 0
         markets = [market] if market == "global" else [market, "global"]
-        for alias in self._code_aliases(code):
+        aliases = self._code_aliases(code, market_hint=market)
+        safe_global_aliases = set(
+            self._code_aliases(
+                code,
+                market_hint=market,
+                include_ambiguous_numeric=False,
+            )
+        )
+        for alias in aliases:
             for query_market in markets:
+                if query_market == "global" and alias not in safe_global_aliases:
+                    continue
                 try:
                     result = self._intelligence_service().list_items(
                         scope_type="symbol",
@@ -203,10 +213,18 @@ class StockProfileService:
             "limitations": ["intelligence_alias_query_partial"] if failed_queries else [],
         }
 
-    def _portfolio_block(self, code: str) -> Dict[str, Any]:
+    def _portfolio_block(self, code: str, *, market: str) -> Dict[str, Any]:
         try:
             identities = self._portfolio_repository().list_cached_position_identities()
-            matches = [market for market, symbol in identities if self.canonicalize_code(symbol) == code]
+            matches = []
+            for position_market, symbol in identities:
+                normalized_market = str(position_market or "").strip().lower()
+                identity = resolve_daily_stock_identity(symbol, market_hint=normalized_market)
+                if identity is None or identity.market != normalized_market or identity.market != market:
+                    continue
+                position_code = self.canonicalize_code(identity.refill_code or identity.normalized_code)
+                if position_code == code:
+                    matches.append(normalized_market)
         except Exception:
             return self._unavailable(
                 "portfolio_relation_unavailable",
@@ -218,11 +236,15 @@ class StockProfileService:
             "limitations": ["cached_positions_only"],
         }
 
-    def _monitor_block(self, code: str) -> Dict[str, Any]:
+    def _monitor_block(self, code: str, *, market: str) -> Dict[str, Any]:
         rules_by_id: Dict[Any, Dict[str, Any]] = {}
         successful_queries = 0
         failed_queries = 0
-        for alias in self._code_aliases(code):
+        for alias in self._code_aliases(
+            code,
+            market_hint=market,
+            include_ambiguous_numeric=False,
+        ):
             page = 1
             scanned = 0
             try:
@@ -264,13 +286,25 @@ class StockProfileService:
         }
 
     @staticmethod
-    def _code_aliases(code: str) -> List[str]:
+    def _code_aliases(
+        code: str,
+        *,
+        market_hint: Optional[str] = None,
+        include_ambiguous_numeric: bool = True,
+    ) -> List[str]:
+        market = str(market_hint or StockProfileService.market_for_code(code)).strip().lower()
         candidates = [
             *build_daily_code_candidates(code),
             *HistoryService._history_code_filter_candidates(code),
         ]
         aliases: List[str] = []
         for candidate in candidates or [code]:
+            if (
+                not include_ambiguous_numeric
+                and market in {"jp", "kr", "tw"}
+                and str(candidate).strip().isdigit()
+            ):
+                continue
             for alias in (str(candidate).strip(), str(candidate).strip().lower()):
                 if alias and alias not in aliases:
                     aliases.append(alias)

@@ -197,6 +197,43 @@ def test_jp_and_kr_codes_preserve_shared_market_identity() -> None:
     }
 
 
+def test_portfolio_identity_uses_cached_market_hint_and_requires_same_market() -> None:
+    jp_service, jp_dependencies = _service()
+    jp_dependencies["portfolio_repository"].list_cached_position_identities.return_value = [
+        ("jp", "8035"),
+    ]
+    kr_service, kr_dependencies = _service()
+    kr_dependencies["portfolio_repository"].list_cached_position_identities.return_value = [
+        ("cn", "005930"),
+    ]
+
+    jp_payload = jp_service.get_profile("8035.T")
+    kr_payload = kr_service.get_profile("005930.KS")
+
+    assert jp_payload["portfolio"]["data"] == {"held": True, "matched_markets": ["jp"]}
+    assert kr_payload["portfolio"]["data"] == {"held": False, "matched_markets": []}
+
+
+def test_offshore_monitor_lookup_excludes_ambiguous_bare_numeric_alias() -> None:
+    service, dependencies = _service()
+
+    def rules_by_alias(**kwargs: object) -> dict:
+        if kwargs.get("target") == "005930":
+            return {"items": [{"id": 99, "enabled": True}], "total": 1}
+        return {"items": [], "total": 0}
+
+    dependencies["alert_service"].list_rules.side_effect = rules_by_alias
+
+    payload = service.get_profile("005930.KS")
+
+    queried_targets = {
+        call.kwargs["target"] for call in dependencies["alert_service"].list_rules.call_args_list
+    }
+    assert "005930" not in queried_targets
+    assert "005930.KS" in queried_targets
+    assert payload["monitors"]["data"]["total_rule_count"] == 0
+
+
 def test_profile_collects_intelligence_and_monitors_saved_under_legacy_aliases() -> None:
     service, dependencies = _service()
 
