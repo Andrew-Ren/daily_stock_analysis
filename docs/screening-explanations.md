@@ -16,7 +16,7 @@
 
 ## Why Selected
 
-确定性本地解释优先使用 screening reason 和当前策略实际参与评分的因子；零权重或未配置的因子既不会进入缺省 `selection_reason`，也不会被写成“核心因子”，两处展示顺序都按“因子分数 × 策略权重”的真实贡献排列。`risk_summary` 始终保留在风险字段，不会在缺少 reason 时提升为 `selection_reason`；Web 通过独立的“风险摘要”展示该字段，即使风险标签为空也不会丢失。缺少 reason 时回退到加权因子或确定性排名说明。来自 `post_analysis_summaries` 的 DSA/外部 analyzer 摘要保留 `post_analyzer:<name>` 来源并标记为 inferred，不冒充本地 observed；本地确定性 `scorecard` 摘要保持 observed。即使 LLM 未配置、超时或返回无效结构，候选仍至少返回确定性排序/入选说明；LLM 不是本地解释的前置条件。
+确定性本地解释优先使用 screening reason 和当前策略实际参与评分的因子；零权重或未配置的因子既不会进入缺省 `selection_reason`，也不会被写成“核心因子”，两处展示顺序都按“因子分数 × 策略权重”的真实贡献排列。`risk_summary` / `risk_level` 始终保留在独立风险展示，不会在缺少 reason 时提升为 `selection_reason`；行业标签也不会单独冒充入选依据。缺少 reason 时只回退到加权因子或确定性排名说明。来自 `post_analysis_summaries` 的 DSA/外部 analyzer 摘要保留 `post_analyzer:<name>` 来源并标记为 inferred，不冒充本地 observed；纯本地确定性 `scorecard` 摘要保持 observed，但只要 scorecard 消费了 `llm_confidence`、`llm_catalysts` 或 `llm_risks`，其解释质量就保持 inferred。即使 LLM 未配置、超时或返回无效结构，候选仍至少返回确定性排序/入选说明；LLM 不是本地解释的前置条件。
 
 ## Why Now
 

@@ -4143,7 +4143,17 @@ def _build_candidate_reason(
     if isinstance(summaries, dict):
         for analyzer, value in summaries.items():
             if value:
-                quality = "observed" if str(analyzer).strip().lower() == "scorecard" else "inferred"
+                analyzer_name = str(analyzer).strip().lower()
+                scorecard_uses_llm = analyzer_name == "scorecard" and (
+                    item.get("llm_confidence") is not None
+                    or bool(item.get("llm_catalysts"))
+                    or bool(item.get("llm_risks"))
+                )
+                quality = (
+                    "observed"
+                    if analyzer_name == "scorecard" and not scorecard_uses_llm
+                    else "inferred"
+                )
                 return str(value), f"post_analyzer:{analyzer}", quality
 
     factors = item.get("factor_scores")
@@ -4167,10 +4177,6 @@ def _build_candidate_reason(
                 f"{key} {value:.1f}" for key, value, _weight in top_factors
             )
             parts.append(f"主要因子：{factor_text}")
-    if item.get("industry"):
-        parts.append(f"行业：{item['industry']}")
-    if item.get("risk_level"):
-        parts.append(f"风险等级：{item['risk_level']}")
     reason = "；".join(parts)
     return (reason, "screening", "observed") if reason else ("", "", "")
 

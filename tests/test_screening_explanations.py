@@ -243,6 +243,38 @@ def test_local_scorecard_summary_keeps_observed_provenance() -> None:
     assert result["explanation_quality"]["why_selected"] == "ok"
 
 
+def test_scorecard_using_llm_fields_keeps_inferred_provenance() -> None:
+    candidate = _normalize_candidate({
+        "code": "600519",
+        "post_analysis_summaries": {"scorecard": "本地评分叠加模型风险"},
+        "llm_confidence": 0.8,
+        "llm_risks": ["模型风险"],
+        "factor_scores": {},
+    }, 1)
+
+    result = _attach_candidate_explanations(candidate)
+
+    reason = result["why_selected"][0]
+    assert reason["source"] == "post_analyzer:scorecard"
+    assert reason["quality"] == "inferred"
+    assert result["explanation_quality"]["why_selected"] == "partial"
+
+
+def test_risk_level_is_not_promoted_to_selection_reason() -> None:
+    candidate = _normalize_candidate({
+        "code": "600519",
+        "risk_level": "high",
+        "industry": "白酒",
+        "factor_scores": {},
+    }, 1)
+
+    result = _attach_candidate_explanations(candidate)
+
+    assert candidate["reason"] == ""
+    assert [item["code"] for item in result["why_selected"]] == ["selection_rank"]
+    assert "风险" not in result["why_selected"][0]["text"]
+
+
 def test_stale_or_undated_events_are_not_why_now_evidence() -> None:
     stale_date = (datetime.now(timezone.utc) - timedelta(days=31)).isoformat()
     candidate = {
