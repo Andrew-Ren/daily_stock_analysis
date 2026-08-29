@@ -219,7 +219,8 @@ class HistoryService:
         start_date: Optional[str] = None,
         end_date: Optional[str] = None,
         page: int = 1,
-        limit: int = 20
+        limit: int = 20,
+        include_ambiguous_numeric_aliases: bool = True,
     ) -> Dict[str, Any]:
         """
         Get history analysis list.
@@ -231,6 +232,8 @@ class HistoryService:
             end_date: End date (YYYY-MM-DD)
             page: Page number
             limit: Items per page
+            include_ambiguous_numeric_aliases: Whether to include bare numeric
+                aliases that may collide across offshore markets.
             
         Returns:
             Dictionary containing total count and items
@@ -238,6 +241,8 @@ class HistoryService:
         try:
             if stock_code:
                 stock_code = self._history_code_filter_candidates(stock_code)
+                if not include_ambiguous_numeric_aliases:
+                    stock_code = [candidate for candidate in stock_code if not candidate.isdigit()]
 
             # Parse date parameters
             start_dt = None

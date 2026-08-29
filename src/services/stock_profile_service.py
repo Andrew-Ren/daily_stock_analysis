@@ -44,7 +44,7 @@ class StockProfileService:
         blocks = {
             "quote": self._quote_block(canonical_code),
             "history": self._history_block(canonical_code, history_days=history_days),
-            "research": self._research_block(canonical_code),
+            "research": self._research_block(canonical_code, market=market),
             "intelligence": self._intelligence_block(canonical_code, market=market),
             "portfolio": self._portfolio_block(canonical_code, market=market),
             "monitors": self._monitor_block(canonical_code, market=market),
@@ -105,10 +105,13 @@ class StockProfileService:
             }
         return {"status": "fresh", "period": "daily", "data": rows, "limitations": []}
 
-    def _research_block(self, code: str) -> Dict[str, Any]:
+    def _research_block(self, code: str, *, market: str) -> Dict[str, Any]:
         empty_data = {"latest_report": None, "recent_reports": [], "structured_report": None}
         try:
-            result = self._history_service().get_history_list(stock_code=code, page=1, limit=5)
+            query_options: Dict[str, Any] = {"stock_code": code, "page": 1, "limit": 5}
+            if market in {"jp", "kr", "tw"}:
+                query_options["include_ambiguous_numeric_aliases"] = False
+            result = self._history_service().get_history_list(**query_options)
             reports = list(result.get("items") or [])
         except Exception:
             return self._unavailable("report_list_unavailable", data=empty_data)

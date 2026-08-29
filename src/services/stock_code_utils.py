@@ -352,7 +352,9 @@ def resolve_daily_stock_identity(
 
     identity_code = raw_code
     trusted_market = str(market_hint or "").strip().lower()
-    if raw_code.isdigit() and len(raw_code) in {4, 5, 6}:
+    if trusted_market == "hk" and raw_code.isdigit() and 1 <= len(raw_code) <= 3:
+        identity_code = raw_code.zfill(5)
+    elif raw_code.isdigit() and len(raw_code) in {4, 5, 6}:
         from src.data.stock_index_loader import resolve_index_stock_code_candidates
 
         indexed_candidates = resolve_index_stock_code_candidates(raw_code)

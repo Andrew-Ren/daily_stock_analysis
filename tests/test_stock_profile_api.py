@@ -225,6 +225,32 @@ def test_legacy_bare_korean_position_keeps_market_hint_during_profile_match() ->
     assert payload["portfolio"]["data"] == {"held": True, "matched_markets": ["kr"]}
 
 
+def test_short_hk_cached_position_uses_its_market_hint() -> None:
+    service, dependencies = _service()
+    dependencies["portfolio_repository"].list_cached_position_identities.return_value = [
+        ("hk", "700"),
+    ]
+
+    payload = service.get_profile("HK00700")
+
+    assert payload["portfolio"]["data"] == {"held": True, "matched_markets": ["hk"]}
+
+
+def test_offshore_research_lookup_excludes_cross_market_bare_numeric_aliases() -> None:
+    service, dependencies = _service()
+    dependencies["history_service"].get_history_list.return_value = {"items": [], "total": 0}
+
+    payload = service.get_profile("8035.T")
+
+    assert payload["research"]["status"] == "unavailable"
+    dependencies["history_service"].get_history_list.assert_called_once_with(
+        stock_code="8035.T",
+        page=1,
+        limit=5,
+        include_ambiguous_numeric_aliases=False,
+    )
+
+
 def test_offshore_monitor_lookup_excludes_ambiguous_bare_numeric_alias() -> None:
     service, dependencies = _service()
 
