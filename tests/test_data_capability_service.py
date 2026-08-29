@@ -219,6 +219,7 @@ def test_provider_dataset_market_matrix_matches_fundamental_runtime_routes() -> 
     assert "quote.realtime" not in _provider(overview, "pytdx")["datasets"]
     assert "quote.realtime" not in _provider(overview, "finnhub")["datasets"]
     assert "quote.realtime" not in _provider(overview, "alphavantage")["datasets"]
+    assert "index.daily" not in _provider(overview, "finnhub")["datasets"]
 
 
 def test_hk_realtime_priority_skips_futu_when_opend_is_unconfigured() -> None:
@@ -488,7 +489,7 @@ def test_daily_dataset_quality_is_market_aware() -> None:
     for market in ("jp", "kr", "tw"):
         assert daily_quality["coverage"]["markets"][market]["status"] == "unavailable"
     assert "hk:request_available_priority_empty" in daily_quality["warnings"]
-    assert "us:source_status:yfinance:unavailable" in daily_quality["warnings"]
+    assert "us:request_available_priority_empty" in daily_quality["warnings"]
 
 
 def test_daily_dataset_quality_prefers_longbridge_for_us_when_available() -> None:
@@ -507,6 +508,22 @@ def test_daily_dataset_quality_prefers_longbridge_for_us_when_available() -> Non
     assert daily_quality["coverage"]["markets"]["us"]["status"] == "ok"
     assert daily_quality["coverage"]["markets"]["us"]["source"] == "longbridge"
     assert "us:finnhub" not in daily_quality["fallback_from"]
+
+
+def test_us_daily_priority_omits_unregistered_configured_sources() -> None:
+    manager = _FetcherManager([
+        _Fetcher("YfinanceFetcher", 4, available=True),
+    ])
+    service = DataCapabilityService(config=_config(), fetcher_manager=manager)
+
+    overview = service.get_overview()
+    priorities = {item["scenario"]: item for item in overview["priorities"]}
+    us_quality = _dataset(overview, "kline.daily")["coverage"]["markets"]["us"]
+
+    assert priorities["daily.generic"]["providers"] == ["yfinance"]
+    assert us_quality["status"] == "ok"
+    assert us_quality["source"] == "yfinance"
+    assert us_quality["fallback_from"] == []
 
 
 def test_daily_priority_excludes_request_unavailable_fetchers() -> None:
@@ -551,19 +568,19 @@ def test_daily_dataset_quality_honors_market_specific_circuit_breakers() -> None
     assert daily_quality["coverage"]["markets"]["cn"]["status"] == "ok"
     assert daily_quality["coverage"]["markets"]["hk"]["status"] == "unavailable"
     assert daily_quality["coverage"]["markets"]["hk"]["source"] is None
-    assert daily_quality["coverage"]["markets"]["us"]["status"] == "degraded"
+    assert daily_quality["coverage"]["markets"]["us"]["status"] == "ok"
     assert daily_quality["coverage"]["markets"]["us"]["source"] == "yfinance"
     assert "hk:source_status:yfinance:cooldown" in daily_quality["warnings"]
 
 
-def test_index_daily_quality_includes_us_runtime_route() -> None:
+def test_index_daily_quality_uses_only_the_executable_us_runtime_route() -> None:
     service = DataCapabilityService(
         config=_config(finnhub_api_key="key"),
         fetcher_manager=_FetcherManager([
             _Fetcher("TencentFetcher", 0, available=True),
             _Fetcher("AkshareFetcher", 1, available=True),
             _Fetcher("YfinanceFetcher", 2, available=False),
-            _Fetcher("FinnhubFetcher", 3, available=False),
+            _Fetcher("FinnhubFetcher", 3, available=True),
         ]),
     )
 
@@ -574,10 +591,10 @@ def test_index_daily_quality_includes_us_runtime_route() -> None:
     assert index_quality["status"] == "partial"
     assert us_quality["status"] == "unavailable"
     assert us_quality["source"] is None
-    assert us_quality["fallback_from"] == ["yfinance", "finnhub"]
+    assert us_quality["fallback_from"] == ["yfinance"]
     assert "us:source_status:yfinance:unavailable" in index_quality["warnings"]
-    assert "us:source_status:finnhub:unavailable" in index_quality["warnings"]
-    assert _provider(overview, "finnhub")["dataset_markets"]["index.daily"] == ["us"]
+    assert not any("finnhub" in warning for warning in index_quality["warnings"])
+    assert "index.daily" not in _provider(overview, "finnhub")["datasets"]
 
 
 def test_market_overview_dataset_quality_is_market_aware() -> None:

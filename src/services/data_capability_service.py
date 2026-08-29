@@ -147,7 +147,6 @@ _PROVIDER_DEFINITIONS: Sequence[_ProviderDefinition] = (
         fetcher_name="FinnhubFetcher",
         dataset_markets={
             "kline.daily": ("us",),
-            "index.daily": ("us",),
         },
     ),
     _ProviderDefinition(
@@ -568,7 +567,7 @@ class DataCapabilityService:
                 market_priorities={
                     "cn.exchange": priority_map.get("cn.index.daily", {}),
                     "cn.csi": {"providers": ["akshare"], "warnings": []},
-                    "us": {"providers": ["yfinance", "finnhub"], "warnings": []},
+                    "us": {"providers": ["yfinance"], "warnings": []},
                 },
                 provider_map=provider_map,
                 status_resolvers={
@@ -623,6 +622,7 @@ class DataCapabilityService:
             "us": {
                 "providers": self._us_daily_priority(fetchers),
                 "warnings": [],
+                "empty_status": "unavailable",
             },
             **{
                 market: generic_market_priority(market)
@@ -831,14 +831,19 @@ class DataCapabilityService:
         return resolve
 
     def _us_daily_priority(self, fetchers: Sequence[Any]) -> List[str]:
-        fetcher_map = {str(getattr(fetcher, "name", "")): fetcher for fetcher in fetchers}
-        longbridge = fetcher_map.get("LongbridgeFetcher")
-        if longbridge is not None and self._fetcher_available_for_capability(
-            longbridge,
-            capability="daily_data",
-        ):
-            return ["longbridge", "finnhub", "alphavantage", "yfinance"]
-        return ["finnhub", "alphavantage", "yfinance", "longbridge"]
+        available = {
+            provider
+            for fetcher in fetchers
+            if (provider := _FETCHER_TO_PROVIDER.get(str(getattr(fetcher, "name", ""))))
+            in {"longbridge", "finnhub", "alphavantage", "yfinance"}
+            and self._fetcher_available_for_capability(fetcher, capability="daily_data")
+        }
+        preferred = (
+            ["longbridge", "finnhub", "alphavantage", "yfinance"]
+            if "longbridge" in available
+            else ["finnhub", "alphavantage", "yfinance", "longbridge"]
+        )
+        return [provider for provider in preferred if provider in available]
 
     @staticmethod
     def _fetcher_available_for_capability(fetcher: Any, *, capability: str) -> bool:
