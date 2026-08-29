@@ -461,6 +461,11 @@ class CalendarEventApiTestCase(unittest.TestCase):
             for operation in runtime_spec["paths"][api_path].values():
                 if not isinstance(operation, dict) or "responses" not in operation:
                     continue
+                self.assertEqual(operation["security"], [{"AdminSessionCookie": []}])
+                auth_schema = operation["responses"]["401"]["content"][
+                    "application/json"
+                ]["schema"]
+                self.assertEqual(auth_schema, {"$ref": "#/components/schemas/ErrorResponse"})
                 validation_schema = operation["responses"]["422"]["content"][
                     "application/json"
                 ]["schema"]

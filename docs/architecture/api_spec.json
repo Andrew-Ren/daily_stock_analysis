@@ -2744,6 +2744,11 @@
         ],
         "summary": "Create a user calendar event",
         "operationId": "create_event_api_v1_calendar_events_post",
+        "security": [
+          {
+            "AdminSessionCookie": []
+          }
+        ],
         "requestBody": {
           "required": true,
           "content": {
@@ -2761,6 +2766,16 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/CalendarEventItem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "未登录或管理员会话无效（ADMIN_AUTH_ENABLED=true 时）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
                 }
               }
             }
@@ -2804,6 +2819,11 @@
         "summary": "List upcoming calendar events",
         "description": "Shared inclusive date-range query for Dashboard and symbol consumers. Defaults to seven calendar dates starting today.",
         "operationId": "list_events_api_v1_calendar_events_get",
+        "security": [
+          {
+            "AdminSessionCookie": []
+          }
+        ],
         "parameters": [
           {
             "name": "start_date",
@@ -2957,6 +2977,16 @@
               }
             }
           },
+          "401": {
+            "description": "未登录或管理员会话无效（ADMIN_AUTH_ENABLED=true 时）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
           "400": {
             "content": {
               "application/json": {
@@ -2997,6 +3027,11 @@
         ],
         "summary": "Delete a user calendar event",
         "operationId": "delete_event_api_v1_calendar_events__event_id__delete",
+        "security": [
+          {
+            "AdminSessionCookie": []
+          }
+        ],
         "parameters": [
           {
             "name": "event_id",
@@ -3017,6 +3052,16 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/CalendarEventDeleteResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "未登录或管理员会话无效（ADMIN_AUTH_ENABLED=true 时）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
                 }
               }
             }

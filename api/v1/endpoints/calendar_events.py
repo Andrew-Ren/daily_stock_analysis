@@ -7,7 +7,8 @@ import logging
 from datetime import date
 from typing import Optional
 
-from fastapi import APIRouter, HTTPException, Path, Query
+from fastapi import APIRouter, HTTPException, Path, Query, Security
+from fastapi.security import APIKeyCookie
 
 from api.v1.schemas.calendar_events import (
     CalendarEventCreateRequest,
@@ -18,6 +19,7 @@ from api.v1.schemas.calendar_events import (
     CalendarScopeType,
 )
 from api.v1.schemas.common import ErrorResponse
+from src.auth import COOKIE_NAME
 from src.services.calendar_event_service import (
     CALENDAR_EVENT_MAX_ID,
     CALENDAR_EVENT_MAX_PAGE,
@@ -27,7 +29,19 @@ from src.services.calendar_event_service import (
 from src.services.run_diagnostics import sanitize_diagnostic_text
 
 logger = logging.getLogger(__name__)
-router = APIRouter()
+admin_session_cookie = APIKeyCookie(
+    name=COOKIE_NAME,
+    scheme_name="AdminSessionCookie",
+    auto_error=False,
+)
+router = APIRouter(dependencies=[Security(admin_session_cookie)])
+
+AUTH_RESPONSE = {
+    401: {
+        "model": ErrorResponse,
+        "description": "未登录或管理员会话无效（ADMIN_AUTH_ENABLED=true 时）",
+    },
+}
 
 
 def _bad_request(exc: Exception) -> HTTPException:
@@ -54,6 +68,7 @@ def _internal_error(message: str, exc: Exception) -> HTTPException:
     "/events",
     response_model=CalendarEventItem,
     responses={
+        **AUTH_RESPONSE,
         400: {"model": ErrorResponse},
         422: {"model": ErrorResponse},
         500: {"model": ErrorResponse},
@@ -75,6 +90,7 @@ def create_event(request: CalendarEventCreateRequest) -> CalendarEventItem:
     "/events",
     response_model=CalendarEventListResponse,
     responses={
+        **AUTH_RESPONSE,
         400: {"model": ErrorResponse},
         422: {"model": ErrorResponse},
         500: {"model": ErrorResponse},
@@ -118,6 +134,7 @@ def list_events(
     "/events/{event_id}",
     response_model=CalendarEventDeleteResponse,
     responses={
+        **AUTH_RESPONSE,
         400: {"model": ErrorResponse},
         404: {"model": ErrorResponse},
         422: {"model": ErrorResponse},
