@@ -3,7 +3,7 @@
 
 from datetime import datetime, timedelta, timezone
 
-from src.services.screening_service import _attach_candidate_explanations
+from src.services.screening_service import _attach_candidate_explanations, _normalize_candidate
 
 
 def test_real_zero_quote_change_is_preserved_as_observed_evidence() -> None:
@@ -130,6 +130,21 @@ def test_llm_risk_summary_stays_inferred_and_keeps_rank_fallback() -> None:
     assert result["why_selected"][1]["code"] == "selection_rank"
 
 
+def test_risk_summary_is_not_promoted_to_selection_reason_when_reason_is_missing() -> None:
+    candidate = _normalize_candidate({
+        "code": "600519",
+        "risk_summary": "估值过高",
+        "factor_scores": {},
+    }, 1)
+
+    result = _attach_candidate_explanations(candidate)
+
+    assert candidate["risk_summary"] == "估值过高"
+    assert candidate["reason"] == ""
+    assert [item["code"] for item in result["why_selected"]] == ["selection_rank"]
+    assert all("估值过高" not in item["text"] for item in result["why_selected"])
+
+
 def test_stale_or_undated_events_are_not_why_now_evidence() -> None:
     stale_date = (datetime.now(timezone.utc) - timedelta(days=31)).isoformat()
     candidate = {
@@ -160,6 +175,26 @@ def test_recent_event_with_source_is_observed_why_now_evidence() -> None:
             "title": "Recent event",
             "source": "exchange",
             "published_date": datetime.now(timezone.utc).isoformat(),
+        }],
+    }
+
+    result = _attach_candidate_explanations(candidate)
+
+    assert result["why_now"][0]["code"] == "event"
+    assert result["why_now"][0]["quality"] == "observed"
+
+
+def test_recent_relative_provider_date_is_observed_why_now_evidence() -> None:
+    candidate = {
+        "rank": 10,
+        "reason": "local reason",
+        "factor_scores": {},
+        "dsa_context": {},
+        "dsa_news": [],
+        "dsa_events": [{
+            "title": "Recent provider event",
+            "source": "serpapi",
+            "published_date": "2 days ago",
         }],
     }
 

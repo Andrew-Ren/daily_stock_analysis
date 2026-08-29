@@ -3757,7 +3757,7 @@ def _normalize_candidate(raw: Any, rank: int) -> Dict[str, Any]:
         "name": item.get("name") or source.get("name") or item.get("stock_name") or source.get("stock_name") or "",
         "score": _first_present(item, source, "score", "final_score"),
         "screen_score": _first_present(item, source, "screen_score"),
-        "reason": item.get("reason") or source.get("reason") or source.get("ranking_reason") or source.get("risk_summary") or item.get("summary") or _build_candidate_reason(source),
+        "reason": item.get("reason") or source.get("reason") or source.get("ranking_reason") or item.get("summary") or _build_candidate_reason(source),
         "ranking_reason": item.get("ranking_reason") or source.get("ranking_reason") or "",
         "risk_summary": item.get("risk_summary") or source.get("risk_summary") or "",
         "risk_level": item.get("risk_level") or source.get("risk_level") or "",
@@ -3946,11 +3946,13 @@ def _attach_candidate_explanations(candidate: Dict[str, Any]) -> Dict[str, Any]:
 
 
 def _is_recent_explanation_item(item: Dict[str, Any]) -> bool:
-    published = _parse_cache_datetime(item.get("published_date"))
+    from src.search_service import SearchService
+
+    published = SearchService._normalize_news_publish_date(item.get("published_date"))
     if published is None:
         return False
-    age = datetime.now(timezone.utc) - published
-    return -timedelta(days=1) <= age <= timedelta(days=DSA_SCREENING_WHY_NOW_MAX_AGE_DAYS)
+    age_days = (datetime.now().astimezone().date() - published).days
+    return -1 <= age_days <= DSA_SCREENING_WHY_NOW_MAX_AGE_DAYS
 
 
 def _explanation_item(
