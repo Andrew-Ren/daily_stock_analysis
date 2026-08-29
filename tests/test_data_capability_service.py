@@ -160,6 +160,26 @@ def test_provider_runtime_probe_honors_request_time_unavailable_over_cached_avai
     assert _provider(overview, "longbridge")["warnings"] == ["provider_marked_unavailable"]
 
 
+def test_us_realtime_priority_skips_longbridge_during_request_cooldown() -> None:
+    manager = _FetcherManager([
+        _Fetcher("LongbridgeFetcher", 1, available=True, is_available_for_request=False),
+        _Fetcher("YfinanceFetcher", 4, available=True),
+    ])
+    service = DataCapabilityService(
+        config=_config(longbridge_app_key="key"),
+        fetcher_manager=manager,
+    )
+
+    overview = service.get_overview()
+    priorities = {item["scenario"]: item for item in overview["priorities"]}
+    us_quality = _dataset(overview, "quote.realtime")["coverage"]["markets"]["us"]
+
+    assert priorities["us.realtime"]["providers"] == ["yfinance", "longbridge"]
+    assert us_quality["status"] == "ok"
+    assert us_quality["source"] == "yfinance"
+    assert us_quality["fallback_from"] == []
+
+
 def test_provider_dataset_market_matrix_matches_fundamental_runtime_routes() -> None:
     service = DataCapabilityService(
         config=_config(

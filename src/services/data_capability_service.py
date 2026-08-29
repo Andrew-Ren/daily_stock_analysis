@@ -427,7 +427,7 @@ class DataCapabilityService:
             ),
             self._priority_view(
                 "us.realtime",
-                self._us_realtime_priority(),
+                self._us_realtime_priority(fetchers),
                 "DataFetcherManager US realtime route",
                 known_sources={"longbridge", "yfinance"},
             ),
@@ -484,9 +484,12 @@ class DataCapabilityService:
             logger.debug("Failed to resolve screening snapshot priority: %s", exc)
             return _split_priority("sina,efinance,akshare_em,em_datacenter")
 
-    def _us_realtime_priority(self) -> List[str]:
-        if self._is_provider_configured(
-            next(item for item in _PROVIDER_DEFINITIONS if item.name == "longbridge")
+    def _us_realtime_priority(self, fetchers: Sequence[Any]) -> List[str]:
+        fetcher_map = {str(getattr(fetcher, "name", "")): fetcher for fetcher in fetchers}
+        longbridge = fetcher_map.get("LongbridgeFetcher")
+        if longbridge is not None and self._fetcher_available_for_capability(
+            longbridge,
+            capability="realtime_quote",
         ):
             return ["longbridge", "yfinance"]
         return ["yfinance", "longbridge"]
