@@ -24,6 +24,20 @@ function formatDatasetMarkets(datasetMarkets: Record<string, string[]>): string 
     .join(' · ');
 }
 
+function formatDatasetSources(dataset: DataCapabilityOverview['datasets'][number]): string {
+  if (dataset.source) return dataset.source;
+  const markets = dataset.coverage?.markets;
+  if (!markets || typeof markets !== 'object' || Array.isArray(markets)) return '--';
+  const sources = Object.entries(markets)
+    .sort(([left], [right]) => left.localeCompare(right))
+    .flatMap(([market, value]) => {
+      if (!value || typeof value !== 'object' || Array.isArray(value)) return [];
+      const source = (value as Record<string, unknown>).source;
+      return typeof source === 'string' && source.trim() ? [`${market}: ${source.trim()}`] : [];
+    });
+  return sources.join(' / ') || '--';
+}
+
 function SummaryTile({ label, value, note }: { label: string; value: number; note: string }) {
   return (
     <div className="rounded-xl border border-border/75 bg-card/85 px-4 py-3">
@@ -155,7 +169,7 @@ const DataCenterPage: React.FC = () => {
                       <tr key={dataset.dataset}>
                         <td className="px-3 py-3 font-mono text-foreground">{dataset.dataset}</td>
                         <td className="px-3 py-3"><Badge variant={statusVariant(dataset.status)}>{dataset.status}</Badge></td>
-                        <td className="px-3 py-3 text-secondary-text">{dataset.source || '--'}</td>
+                        <td className="px-3 py-3 text-secondary-text">{formatDatasetSources(dataset)}</td>
                         <td className="px-3 py-3 text-secondary-text">{dataset.lastSuccess ? formatDateTime(dataset.lastSuccess) : '--'}</td>
                         <td className="px-3 py-3 text-secondary-text">{[dataset.lastError, ...dataset.warnings].filter(Boolean).join(' · ') || '--'}</td>
                       </tr>

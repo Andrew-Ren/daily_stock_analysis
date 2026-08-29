@@ -53,6 +53,22 @@ const overview = {
       coverage: null,
       warnings: [],
     },
+    {
+      dataset: 'quote.realtime',
+      status: 'ok',
+      source: null,
+      stale: null,
+      lastSuccess: null,
+      lastError: null,
+      fallbackFrom: [],
+      coverage: {
+        markets: {
+          cn: { status: 'ok', source: 'tencent', fallback_from: [], warnings: [] },
+          us: { status: 'ok', source: 'yfinance', fallback_from: [], warnings: [] },
+        },
+      },
+      warnings: [],
+    },
   ],
   priorities: [
     { scenario: 'cn.quote', providers: ['tencent', 'akshare'], source: 'runtime', warnings: [] },
@@ -73,6 +89,7 @@ describe('DataCenterPage', () => {
     expect(getOverview).toHaveBeenCalledTimes(1);
     expect(screen.getByText('AkShare')).toBeInTheDocument();
     expect(screen.getByText('screening.snapshot')).toBeInTheDocument();
+    expect(screen.getByText('cn: tencent / us: yfinance')).toBeInTheDocument();
     expect(screen.getAllByText('screening_health_unknown', { exact: false })).toHaveLength(2);
     expect(screen.getByText('tencent → akshare')).toBeInTheDocument();
     expect(screen.queryByText(/API[_ ]?KEY/i)).not.toBeInTheDocument();
