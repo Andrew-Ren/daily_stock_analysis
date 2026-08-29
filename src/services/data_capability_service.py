@@ -524,6 +524,11 @@ class DataCapabilityService:
                 dataset="quote.realtime",
                 market_priorities={
                     "cn": priority_map.get("cn.realtime", {}),
+                    "cn.index.exchange": {
+                        "providers": ["tencent", "akshare_sina", "efinance", "tickflow"],
+                        "warnings": [],
+                    },
+                    "cn.index.csi": {"providers": ["efinance"], "warnings": []},
                     "hk": priority_map.get("hk.realtime", {}),
                     "us": priority_map.get("us.realtime", {}),
                     "jp": {"providers": ["yfinance"], "warnings": []},
@@ -533,6 +538,8 @@ class DataCapabilityService:
                 provider_map=provider_map,
                 status_resolvers={
                     "cn": self._cn_realtime_status_resolver(provider_map),
+                    "cn.index.exchange": self._cn_realtime_status_resolver(provider_map),
+                    "cn.index.csi": self._cn_realtime_status_resolver(provider_map),
                     "hk": self._hk_realtime_status_resolver(provider_map),
                 },
                 disabled=not bool(getattr(self.config, "enable_realtime_quote", True)),
@@ -690,8 +697,6 @@ class DataCapabilityService:
     ) -> Callable[[str], str]:
         def resolve(token: str) -> str:
             provider_status = self._provider_token_status(token, provider_map)
-            if provider_status != "ok":
-                return provider_status
             definition = _PROVIDER_DEFINITION_MAP.get(token)
             fetcher_name = definition.fetcher_name if definition is not None else None
             fetcher = fetcher_map.get(fetcher_name or "")
@@ -771,21 +776,17 @@ class DataCapabilityService:
         def resolve(token: str) -> str:
             if token not in _CN_REALTIME_SOURCES:
                 return "unsupported"
-            provider_status = self._source_token_status(token, provider_map)
-            if provider_status != "ok":
-                return provider_status
             circuit_key = _AKSHARE_REALTIME_CIRCUIT_KEYS.get(token)
-            if circuit_key is None:
-                return provider_status
-            try:
-                from data_provider.realtime_types import get_realtime_circuit_breaker
+            if circuit_key is not None:
+                try:
+                    from data_provider.realtime_types import get_realtime_circuit_breaker
 
-                circuit_status = get_realtime_circuit_breaker().get_status().get(circuit_key)
-                if circuit_status == "open":
-                    return "cooldown"
-            except Exception as exc:  # noqa: BLE001 - diagnostics must fail open.
-                logger.debug("Failed to read realtime source circuit status: %s", exc)
-            return provider_status
+                    circuit_status = get_realtime_circuit_breaker().get_status().get(circuit_key)
+                    if circuit_status == "open":
+                        return "cooldown"
+                except Exception as exc:  # noqa: BLE001 - diagnostics must fail open.
+                    logger.debug("Failed to read realtime source circuit status: %s", exc)
+            return self._source_token_status(token, provider_map)
 
         return resolve
 

@@ -256,7 +256,7 @@ def test_cn_realtime_quality_honors_akshare_subsource_circuit_breaker() -> None:
         service = DataCapabilityService(
             config=_config(realtime_source_priority="tencent,efinance"),
             fetcher_manager=_FetcherManager([
-                _Fetcher("AkshareFetcher", 0, available=True),
+                _Fetcher("AkshareFetcher", 0),
                 _Fetcher("EfinanceFetcher", 1, available=True),
                 _Fetcher("YfinanceFetcher", 4, available=True),
             ]),
@@ -271,6 +271,49 @@ def test_cn_realtime_quality_honors_akshare_subsource_circuit_breaker() -> None:
         assert cn_quality["warnings"] == ["source_status:tencent:cooldown"]
     finally:
         breaker.reset("akshare_tencent")
+
+
+def test_daily_circuit_open_precedes_unknown_provider_probe() -> None:
+    service = DataCapabilityService(
+        config=_config(),
+        fetcher_manager=_FetcherManager([
+            _Fetcher("EfinanceFetcher", 0),
+            _Fetcher("PytdxFetcher", 1, available=True),
+        ]),
+    )
+
+    with patch(
+        "data_provider.base.DataFetcherManager._is_daily_source_available",
+        side_effect=lambda fetcher, _market: fetcher.name != "EfinanceFetcher",
+    ):
+        cn_quality = _dataset(service.get_overview(), "kline.daily")["coverage"]["markets"]["cn"]
+
+    assert cn_quality["status"] == "degraded"
+    assert cn_quality["source"] == "pytdx"
+    assert cn_quality["fallback_from"] == ["efinance"]
+    assert cn_quality["warnings"] == ["source_status:efinance:cooldown"]
+
+
+def test_cn_realtime_reports_fixed_index_route_separately_from_stock_priority() -> None:
+    service = DataCapabilityService(
+        config=_config(
+            tushare_token="token",
+            realtime_source_priority="tushare",
+        ),
+        fetcher_manager=_FetcherManager([
+            _Fetcher("TushareFetcher", 0, available=True),
+            _Fetcher("EfinanceFetcher", 1, available=False),
+        ]),
+    )
+
+    quote_quality = _dataset(service.get_overview(), "quote.realtime")
+    markets = quote_quality["coverage"]["markets"]
+
+    assert markets["cn"]["status"] == "ok"
+    assert markets["cn"]["source"] == "tushare"
+    assert markets["cn.index.exchange"]["status"] == "unavailable"
+    assert markets["cn.index.csi"]["status"] == "unavailable"
+    assert quote_quality["status"] == "partial"
 
 
 def test_cn_realtime_rejects_tokens_without_runtime_handlers() -> None:
