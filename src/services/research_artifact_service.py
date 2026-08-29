@@ -113,6 +113,7 @@ def _build_evidence(details: Any, context_overview: Any) -> List[Dict[str, Any]]
         })
 
     if _value(details, "news_content") or _value(details, "empty_news_disclosure"):
+        has_news_content = bool(_value(details, "news_content"))
         evidence.append({
             "id": "news:summary",
             "source_type": "news",
@@ -120,7 +121,8 @@ def _build_evidence(details: Any, context_overview: Any) -> List[Dict[str, Any]]
             "summary": _as_text(_value(details, "empty_news_disclosure"))
             or _compact(_as_text(_value(details, "news_content"))),
             "freshness": "unknown",
-            "quality_level": "usable" if _value(details, "news_content") else "limited",
+            "quality_level": "usable" if has_news_content else "limited",
+            "metadata": {"status": "available" if has_news_content else "missing"},
         })
 
     if _value(details, "financial_report"):
@@ -253,7 +255,7 @@ def _build_data_quality(context_overview: Any, evidence: List[Dict[str, Any]]) -
     return {
         "level": _as_text(_value(data_quality, "level")) or _infer_quality_level(evidence),
         "overall_score": _as_int(_value(data_quality, "overall_score")),
-        "source_count": len(evidence),
+        "source_count": sum(1 for item in evidence if _evidence_has_usable_source(item)),
         "stale_count": sum(1 for item in evidence if item.get("freshness") == "stale"),
         "missing_blocks": [block for block in missing_blocks if block],
         "limitations": _quality_limitations(context_overview),
@@ -291,7 +293,7 @@ def _score_to_confidence(score: Optional[int]) -> Optional[float]:
 
 
 def _freshness_from_status(status: str) -> str:
-    if status in {"available", "fallback", "partial", "estimated"}:
+    if status in {"available", "fallback", "partial", "estimated", "ok"}:
         return "fresh"
     if status == "stale":
         return "stale"
@@ -299,7 +301,7 @@ def _freshness_from_status(status: str) -> str:
 
 
 def _quality_from_status(status: str) -> str:
-    if status == "available":
+    if status in {"available", "ok"}:
         return "good"
     if status in {"fallback", "estimated"}:
         return "usable"
@@ -308,6 +310,12 @@ def _quality_from_status(status: str) -> str:
     if status in {"missing", "fetch_failed"}:
         return "poor"
     return "unknown"
+
+
+def _evidence_has_usable_source(item: Dict[str, Any]) -> bool:
+    metadata = item.get("metadata")
+    status = _as_text(metadata.get("status")) if isinstance(metadata, dict) else ""
+    return status not in {"missing", "fetch_failed", "not_supported", "unavailable", "unknown"}
 
 
 def _infer_quality_level(evidence: List[Dict[str, Any]]) -> str:

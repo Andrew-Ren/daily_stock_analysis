@@ -142,3 +142,40 @@ def test_attribute_report_preserves_falsey_values() -> None:
     assert artifact.thesis.confidence == 1.0
     assert artifact.thesis.direction == "bearish"
     assert artifact.thesis.action is None
+
+
+def test_unavailable_context_blocks_do_not_inflate_source_count() -> None:
+    artifact = ResearchArtifact.model_validate(build_research_artifact({
+        "meta": {"query_id": "missing-only", "stock_code": "AAPL"},
+        "summary": {"analysis_summary": "waiting for evidence"},
+        "details": {
+            "analysis_context_pack_overview": {
+                "blocks": [
+                    {"key": "daily_price", "status": "missing"},
+                    {"key": "news", "status": "fetch_failed"},
+                ],
+            },
+            "empty_news_disclosure": "News evidence is unavailable.",
+        },
+    }))
+
+    assert artifact.data_quality.source_count == 0
+    assert {item.id for item in artifact.evidence} == {
+        "context:daily_price",
+        "context:news",
+        "news:summary",
+    }
+
+
+def test_market_structure_ok_is_healthy_evidence() -> None:
+    artifact = ResearchArtifact.model_validate(build_research_artifact({
+        "meta": {"query_id": "market-ok", "stock_code": "600519"},
+        "summary": {"analysis_summary": "market structure available"},
+        "details": {"market_structure": {"status": "ok"}},
+    }))
+
+    market_evidence = next(item for item in artifact.evidence if item.id == "market:structure")
+    assert market_evidence.freshness == "fresh"
+    assert market_evidence.quality_level == "good"
+    assert artifact.data_quality.source_count == 1
+    assert artifact.data_quality.level == "good"
