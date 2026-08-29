@@ -5,6 +5,8 @@ from __future__ import annotations
 
 import json
 import os
+import subprocess
+import sys
 import tempfile
 from pathlib import Path
 from unittest.mock import MagicMock, patch
@@ -17,6 +19,23 @@ from api.app import create_app
 from src.config import Config
 from src.services.stock_profile_service import InvalidStockProfileCode, StockProfileService
 from src.storage import DatabaseManager
+
+
+def test_stock_profile_service_import_is_independent_of_api_bootstrap() -> None:
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-c",
+            "from src.services.stock_profile_service import StockProfileService; "
+            "assert StockProfileService.__name__ == 'StockProfileService'",
+        ],
+        cwd=Path(__file__).resolve().parents[1],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+    assert result.returncode == 0, result.stderr
 
 
 def _quote(code: str = "AAPL") -> dict:
