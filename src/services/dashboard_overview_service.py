@@ -92,6 +92,11 @@ class DashboardOverviewService:
                     if snapshot_container is not None and not isinstance(snapshot_container, dict):
                         detail_failure_count += 1
                         continue
+                    for raw_region, raw_snapshot in (snapshot_container or {}).items():
+                        region = str(raw_region).strip().lower()
+                        if region and not isinstance(raw_snapshot, dict):
+                            invalid_snapshot_count += 1
+                            regions_with_unknown_trade_date.add(region)
                     raw_snapshots = self._extract_snapshots(context_snapshot)
                     for region, raw_snapshot in raw_snapshots.items():
                         raw_trade_date = str(raw_snapshot.get("trade_date") or "").strip()

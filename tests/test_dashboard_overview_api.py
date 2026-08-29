@@ -316,6 +316,26 @@ def test_malformed_nested_snapshot_container_does_not_promote_older_snapshots() 
     assert "latest_completed_snapshot_unavailable" in payload["market"]["meta"]["limitations"]
 
 
+def test_malformed_region_snapshot_does_not_promote_older_region_snapshot() -> None:
+    dependencies = _dependencies()
+    original_detail = dependencies["history_service"].get_history_detail_by_id.side_effect
+
+    def detail_with_malformed_region(record_id: int) -> dict:
+        if record_id == 1:
+            return {"context_snapshot": {"market_light_snapshots": {"cn": []}}}
+        return original_detail(record_id)
+
+    dependencies["history_service"].get_history_detail_by_id.side_effect = detail_with_malformed_region
+
+    payload = DashboardOverviewService(**dependencies).get_overview()
+
+    assert payload["market"]["data"]["latest_snapshots"] == {}
+    assert payload["what_changed"]["data"]["current_trade_dates"] == {}
+    assert payload["what_changed"]["data"]["items"] == []
+    assert "invalid_market_light_snapshot_skipped" in payload["market"]["meta"]["limitations"]
+    assert "latest_completed_snapshot_unavailable:cn" in payload["market"]["meta"]["limitations"]
+
+
 def test_invalid_latest_snapshot_does_not_promote_an_older_trade_date() -> None:
     dependencies = _dependencies()
     reviews = [
