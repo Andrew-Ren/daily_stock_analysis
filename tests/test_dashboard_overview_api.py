@@ -427,7 +427,9 @@ def test_static_openapi_matches_dashboard_runtime_contract() -> None:
     api_path = "/api/v1/dashboard/overview"
     assert static_spec["paths"][api_path] == runtime_spec["paths"][api_path]
     schema_names = [
-        name for name in runtime_spec["components"]["schemas"] if name.startswith("Dashboard")
+        name
+        for name in runtime_spec["components"]["schemas"]
+        if name.startswith("Dashboard") or name.startswith("MarketLight")
     ]
     assert schema_names
     for schema_name in schema_names:
