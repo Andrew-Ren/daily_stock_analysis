@@ -423,6 +423,31 @@ class AnalysisHistoryTestCase(unittest.TestCase):
         self.assertEqual(rebuilt["effective_daily_bar_date"], "2025-12-30")
         self.assertIsNone(rebuilt["minutes_to_open"])
 
+    def test_history_list_can_project_context_snapshot_without_detail_queries(self) -> None:
+        result = self._build_result()
+        context_snapshot = {"market_light_snapshots": {"cn": {"trade_date": "2026-08-29"}}}
+        saved = self.db.save_analysis_history(
+            result=result,
+            query_id="query_context_projection",
+            report_type="market_review",
+            news_content="news",
+            context_snapshot=context_snapshot,
+            save_snapshot=True,
+        )
+        self.assertGreater(saved, 0)
+
+        service = HistoryService(self.db)
+        regular = service.get_history_list(report_type="market_review", page=1, limit=5)
+        projected = service.get_history_list(
+            report_type="market_review",
+            page=1,
+            limit=5,
+            include_context_snapshot=True,
+        )
+
+        self.assertNotIn("context_snapshot", regular["items"][0])
+        self.assertEqual(projected["items"][0]["context_snapshot"], context_snapshot)
+
     def test_history_filter_and_stock_bar_merge_bare_and_resolved_jp_kr_codes(self) -> None:
         if get_stock_bar is None:
             self.skipTest("fastapi is not installed in this test environment")

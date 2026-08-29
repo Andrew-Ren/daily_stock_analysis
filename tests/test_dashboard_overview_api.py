@@ -60,6 +60,22 @@ def _stock_report(record_id: int = 20) -> dict:
     }
 
 
+def _history_page(history: MagicMock, items: list[dict], kwargs: dict) -> dict:
+    page = int(kwargs.get("page") or 1)
+    limit = int(kwargs.get("limit") or 50)
+    start = (page - 1) * limit
+    page_items = [dict(item) for item in items[start:start + limit]]
+    if kwargs.get("include_context_snapshot"):
+        for item in page_items:
+            try:
+                detail = history.get_history_detail_by_id(item["id"])
+            except Exception:
+                detail = None
+            if detail:
+                item["context_snapshot"] = detail.get("context_snapshot")
+    return {"items": page_items, "total": len(items)}
+
+
 def _dependencies() -> dict[str, MagicMock | SimpleNamespace]:
     history = MagicMock()
     market_reviews = [
@@ -69,14 +85,11 @@ def _dependencies() -> dict[str, MagicMock | SimpleNamespace]:
     all_history = [_stock_report(20 + index) for index in range(9)] + market_reviews
 
     def list_history(**kwargs: object) -> dict:
-        page = int(kwargs.get("page") or 1)
-        limit = int(kwargs.get("limit") or 50)
         if kwargs.get("report_type") == "market_review":
             items = market_reviews
         else:
             items = all_history
-        start = (page - 1) * limit
-        return {"items": items[start:start + limit], "total": len(items)}
+        return _history_page(history, items, kwargs)
 
     history.get_history_list.side_effect = list_history
     history.get_history_detail_by_id.side_effect = lambda record_id: {
@@ -144,7 +157,11 @@ def test_overview_uses_backend_totals_and_persisted_snapshot_changes() -> None:
 def test_one_market_snapshot_keeps_dashboard_but_marks_change_baseline_partial() -> None:
     dependencies = _dependencies()
     dependencies["history_service"].get_history_list.side_effect = lambda **kwargs: (
-        {"items": [_review(1, "2026-08-29T09:00:00+08:00")], "total": 1}
+        _history_page(
+            dependencies["history_service"],
+            [_review(1, "2026-08-29T09:00:00+08:00")],
+            kwargs,
+        )
         if kwargs.get("report_type") == "market_review"
         else {"items": [], "total": 0}
     )
@@ -168,10 +185,7 @@ def test_market_history_paginates_until_an_older_valid_baseline() -> None:
     def list_history(**kwargs: object) -> dict:
         if kwargs.get("report_type") != "market_review":
             return {"items": [], "total": 0}
-        page = int(kwargs.get("page") or 1)
-        limit = int(kwargs.get("limit") or 50)
-        start = (page - 1) * limit
-        return {"items": reviews[start:start + limit], "total": len(reviews)}
+        return _history_page(dependencies["history_service"], reviews, kwargs)
 
     dependencies["history_service"].get_history_list.side_effect = list_history
     dependencies["history_service"].get_history_detail_by_id.side_effect = lambda record_id: {
@@ -197,7 +211,7 @@ def test_change_baseline_is_the_latest_strictly_earlier_trade_date() -> None:
     dependencies = _dependencies()
     reviews = [_review(index, f"2026-08-{30 - index:02d}T09:00:00+08:00") for index in range(1, 5)]
     dependencies["history_service"].get_history_list.side_effect = lambda **kwargs: (
-        {"items": reviews, "total": len(reviews)}
+        _history_page(dependencies["history_service"], reviews, kwargs)
         if kwargs.get("report_type") == "market_review"
         else {"items": [], "total": 0}
     )
@@ -268,7 +282,7 @@ def test_invalid_latest_snapshot_does_not_promote_an_older_trade_date() -> None:
         _review(2, "2026-08-28T09:00:00+08:00"),
     ]
     dependencies["history_service"].get_history_list.side_effect = lambda **kwargs: (
-        {"items": reviews, "total": len(reviews)}
+        _history_page(dependencies["history_service"], reviews, kwargs)
         if kwargs.get("report_type") == "market_review"
         else {"items": [], "total": 0}
     )
@@ -303,7 +317,7 @@ def test_snapshot_region_mismatch_does_not_promote_an_older_trade_date() -> None
         _review(2, "2026-08-28T09:00:00+08:00"),
     ]
     dependencies["history_service"].get_history_list.side_effect = lambda **kwargs: (
-        {"items": reviews, "total": len(reviews)}
+        _history_page(dependencies["history_service"], reviews, kwargs)
         if kwargs.get("report_type") == "market_review"
         else {"items": [], "total": 0}
     )
@@ -337,7 +351,7 @@ def test_invalid_previous_snapshot_does_not_fall_back_to_an_older_trade_date() -
         _review(3, "2026-08-27T09:00:00+08:00"),
     ]
     dependencies["history_service"].get_history_list.side_effect = lambda **kwargs: (
-        {"items": reviews, "total": len(reviews)}
+        _history_page(dependencies["history_service"], reviews, kwargs)
         if kwargs.get("report_type") == "market_review"
         else {"items": [], "total": 0}
     )
@@ -368,10 +382,7 @@ def test_market_history_scan_is_bounded_and_reports_truncation() -> None:
     def list_history(**kwargs: object) -> dict:
         if kwargs.get("report_type") != "market_review":
             return {"items": [], "total": 0}
-        page = int(kwargs.get("page") or 1)
-        limit = int(kwargs.get("limit") or 50)
-        start = (page - 1) * limit
-        return {"items": reviews[start:start + limit], "total": len(reviews)}
+        return _history_page(dependencies["history_service"], reviews, kwargs)
 
     dependencies["history_service"].get_history_list.side_effect = list_history
     dependencies["history_service"].get_history_detail_by_id.return_value = {
@@ -386,7 +397,7 @@ def test_market_history_scan_is_bounded_and_reports_truncation() -> None:
         if call.kwargs.get("report_type") == "market_review"
     ]
     assert [call.kwargs["page"] for call in market_calls] == [1, 2]
-    assert dependencies["history_service"].get_history_detail_by_id.call_count == 100
+    assert all(call.kwargs["include_context_snapshot"] for call in market_calls)
     assert "market_review_history_scan_incomplete" in payload["market"]["meta"]["limitations"]
     assert "market_review_history_scan_incomplete" in payload["what_changed"]["meta"]["limitations"]
 
@@ -394,7 +405,11 @@ def test_market_history_scan_is_bounded_and_reports_truncation() -> None:
 def test_changes_are_partial_when_only_some_regions_have_a_baseline() -> None:
     dependencies = _dependencies()
     dependencies["history_service"].get_history_list.side_effect = lambda **kwargs: (
-        {"items": [_review(1, "2026-08-29T09:00:00+08:00"), _review(2, "2026-08-28T09:00:00+08:00")], "total": 2}
+        _history_page(
+            dependencies["history_service"],
+            [_review(1, "2026-08-29T09:00:00+08:00"), _review(2, "2026-08-28T09:00:00+08:00")],
+            kwargs,
+        )
         if kwargs.get("report_type") == "market_review"
         else {"items": [], "total": 0}
     )

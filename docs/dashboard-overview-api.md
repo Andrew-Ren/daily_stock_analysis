@@ -23,7 +23,7 @@
 
 ## What Changed
 
-首阶段的 `comparison_mode` 固定为 `previous_completed_snapshot`。服务从已经持久化的 market review history 中分页读取结构化 `context_snapshot.market_light_snapshots`，单次请求最多扫描最近 100 条复盘记录；若历史仍未耗尽，会返回 `market_review_history_scan_incomplete` 并将 market/what_changed 降级为 partial。扫描窗口内按 `trade_date` 排序并去重，对每个 region 比较最新日期与严格更早的基线，不把同日重跑或乱序写入直接当作 previous：
+首阶段的 `comparison_mode` 固定为 `previous_completed_snapshot`。服务从已经持久化的 market review history 中分页读取结构化 `context_snapshot.market_light_snapshots`，每页在同一次历史查询中投影所需快照，不为每条记录再发详情查询；单次请求最多扫描最近 100 条复盘记录。若历史仍未耗尽，会返回 `market_review_history_scan_incomplete` 并将 market/what_changed 降级为 partial。扫描窗口内按 `trade_date` 排序并去重，对每个 region 比较最新日期与严格更早的基线，不把同日重跑或乱序写入直接当作 previous：
 
 - score 变化输出 `market.<region>.score`，并给出 before/after 与 increased/decreased。
 - red/yellow/green 状态变化输出 `market.<region>.status`。

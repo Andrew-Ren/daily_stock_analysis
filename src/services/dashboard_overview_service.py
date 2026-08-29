@@ -76,6 +76,7 @@ class DashboardOverviewService:
                     report_type=_MARKET_REVIEW_TYPE,
                     page=page,
                     limit=_DASHBOARD_HISTORY_PAGE_SIZE,
+                    include_context_snapshot=True,
                 )
                 reviews = list(result.get("items") or [])
                 if page == 1:
@@ -83,17 +84,10 @@ class DashboardOverviewService:
                 if len(latest_reviews) < 5:
                     latest_reviews.extend(reviews[: 5 - len(latest_reviews)])
                 for review in reviews:
-                    record_id = review.get("id")
-                    if record_id is None:
-                        continue
-                    try:
-                        detail = self._history().get_history_detail_by_id(int(record_id))
-                    except Exception:
-                        detail = None
-                    if not detail:
+                    if "context_snapshot" not in review:
                         detail_failure_count += 1
                         continue
-                    raw_snapshots = self._extract_snapshots(detail.get("context_snapshot"))
+                    raw_snapshots = self._extract_snapshots(review.get("context_snapshot"))
                     for region, raw_snapshot in raw_snapshots.items():
                         raw_trade_date = str(raw_snapshot.get("trade_date") or "").strip()
                         try:

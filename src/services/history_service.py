@@ -219,7 +219,8 @@ class HistoryService:
         start_date: Optional[str] = None,
         end_date: Optional[str] = None,
         page: int = 1,
-        limit: int = 20
+        limit: int = 20,
+        include_context_snapshot: bool = False,
     ) -> Dict[str, Any]:
         """
         Get history analysis list.
@@ -231,6 +232,8 @@ class HistoryService:
             end_date: End date (YYYY-MM-DD)
             page: Page number
             limit: Items per page
+            include_context_snapshot: Include the persisted context snapshot in each list item.
+                Internal aggregation callers use this to avoid per-record detail queries.
             
         Returns:
             Dictionary containing total count and items
@@ -271,7 +274,12 @@ class HistoryService:
             # Convert to response format
             items = []
             for record in records:
-                items.append(self._record_to_list_item_dict(record))
+                item = self._record_to_list_item_dict(record)
+                if include_context_snapshot:
+                    item["context_snapshot"] = parse_json_field(
+                        getattr(record, "context_snapshot", None)
+                    )
+                items.append(item)
             
             return {
                 "total": total,
