@@ -62,17 +62,21 @@ def _stock_report(record_id: int = 20) -> dict:
 
 def _dependencies() -> dict[str, MagicMock | SimpleNamespace]:
     history = MagicMock()
+    market_reviews = [
+        _review(index, f"2026-08-{30 - index:02d}T09:00:00+08:00")
+        for index in range(1, 13)
+    ]
+    all_history = [_stock_report(20 + index) for index in range(9)] + market_reviews
 
     def list_history(**kwargs: object) -> dict:
+        page = int(kwargs.get("page") or 1)
+        limit = int(kwargs.get("limit") or 50)
         if kwargs.get("report_type") == "market_review":
-            return {
-                "items": [
-                    _review(1, "2026-08-29T09:00:00+08:00"),
-                    _review(2, "2026-08-28T09:00:00+08:00"),
-                ],
-                "total": 12,
-            }
-        return {"items": [_stock_report(), _review(1, "2026-08-29T09:00:00+08:00")], "total": 21}
+            items = market_reviews
+        else:
+            items = all_history
+        start = (page - 1) * limit
+        return {"items": items[start:start + limit], "total": len(items)}
 
     history.get_history_list.side_effect = list_history
     history.get_history_detail_by_id.side_effect = lambda record_id: {
@@ -115,7 +119,7 @@ def test_overview_uses_backend_totals_and_persisted_snapshot_changes() -> None:
     payload = service.get_overview()
 
     assert payload["market"]["data"]["review_count"] == 12
-    assert len(payload["market"]["data"]["latest_reviews"]) == 2
+    assert len(payload["market"]["data"]["latest_reviews"]) == 5
     assert payload["personal"]["data"] == {
         "watchlist_count": 3,
         "cached_position_count": 2,
@@ -155,6 +159,88 @@ def test_one_market_snapshot_keeps_dashboard_but_marks_change_baseline_partial()
     assert payload["what_changed"]["meta"]["quality"] == "partial"
     assert payload["what_changed"]["data"]["items"] == []
     assert "previous_completed_snapshot_unavailable" in payload["what_changed"]["meta"]["limitations"]
+
+
+def test_market_history_paginates_until_an_older_valid_baseline() -> None:
+    dependencies = _dependencies()
+    reviews = [_review(index, f"2026-07-{(index % 28) + 1:02d}T09:00:00+08:00") for index in range(1, 52)]
+
+    def list_history(**kwargs: object) -> dict:
+        if kwargs.get("report_type") != "market_review":
+            return {"items": [], "total": 0}
+        page = int(kwargs.get("page") or 1)
+        limit = int(kwargs.get("limit") or 50)
+        start = (page - 1) * limit
+        return {"items": reviews[start:start + limit], "total": len(reviews)}
+
+    dependencies["history_service"].get_history_list.side_effect = list_history
+    dependencies["history_service"].get_history_detail_by_id.side_effect = lambda record_id: {
+        "context_snapshot": {
+            "market_light_snapshots": (
+                {"us": _snapshot("us", "2026-08-29", 60, "yellow")}
+                if record_id == 1
+                else {"us": _snapshot("us", "2026-08-28", 50, "green")}
+                if record_id == 51
+                else {}
+            )
+        }
+    }
+
+    payload = DashboardOverviewService(**dependencies).get_overview()
+
+    assert payload["what_changed"]["data"]["previous_trade_dates"]["us"] == "2026-08-28"
+    assert payload["what_changed"]["meta"]["quality"] == "fresh"
+    assert dependencies["history_service"].get_history_list.call_args_list[1].kwargs["page"] == 2
+
+
+def test_changes_are_partial_when_only_some_regions_have_a_baseline() -> None:
+    dependencies = _dependencies()
+    dependencies["history_service"].get_history_list.side_effect = lambda **kwargs: (
+        {"items": [_review(1, "2026-08-29T09:00:00+08:00"), _review(2, "2026-08-28T09:00:00+08:00")], "total": 2}
+        if kwargs.get("report_type") == "market_review"
+        else {"items": [], "total": 0}
+    )
+    dependencies["history_service"].get_history_detail_by_id.side_effect = lambda record_id: {
+        "context_snapshot": {
+            "market_light_snapshots": {
+                "cn": _snapshot("cn", "2026-08-29" if record_id == 1 else "2026-08-28", 60, "yellow"),
+                **({"us": _snapshot("us", "2026-08-29", 55, "yellow")} if record_id == 1 else {}),
+            }
+        }
+    }
+
+    payload = DashboardOverviewService(**dependencies).get_overview()
+
+    assert payload["what_changed"]["meta"]["quality"] == "partial"
+    assert "previous_completed_snapshot_unavailable:us" in payload["what_changed"]["meta"]["limitations"]
+    assert "us" in payload["what_changed"]["data"]["current_trade_dates"]
+    assert "us" not in payload["what_changed"]["data"]["previous_trade_dates"]
+
+
+def test_recent_reports_paginates_past_market_review_only_page() -> None:
+    dependencies = _dependencies()
+    first_page = [_review(index, "2026-08-29T09:00:00+08:00") for index in range(1, 51)]
+    second_page = [_stock_report(100 + index) for index in range(5)]
+    history = first_page + second_page
+
+    def list_history(**kwargs: object) -> dict:
+        if kwargs.get("report_type") == "market_review":
+            return {"items": [], "total": 0}
+        page = int(kwargs.get("page") or 1)
+        limit = int(kwargs.get("limit") or 50)
+        start = (page - 1) * limit
+        return {"items": history[start:start + limit], "total": len(history)}
+
+    dependencies["history_service"].get_history_list.side_effect = list_history
+
+    payload = DashboardOverviewService(**dependencies).get_overview()
+
+    assert [item["id"] for item in payload["activity"]["data"]["recent_reports"]] == [100, 101, 102, 103, 104]
+    activity_calls = [
+        call for call in dependencies["history_service"].get_history_list.call_args_list
+        if "report_type" not in call.kwargs
+    ]
+    assert [call.kwargs["page"] for call in activity_calls] == [1, 2]
 
 
 def test_block_failures_are_isolated_and_system_remains_read_only() -> None:

@@ -14,7 +14,7 @@ from src.services.history_service import HistoryService
 from src.services.task_queue import AnalysisTaskQueue, get_task_queue
 
 _MARKET_REVIEW_TYPE = "market_review"
-_DASHBOARD_HISTORY_SCAN_LIMIT = 10
+_DASHBOARD_HISTORY_PAGE_SIZE = 50
 
 
 class DashboardOverviewService:
@@ -56,45 +56,62 @@ class DashboardOverviewService:
         }
 
     def _market_and_changes(self) -> Tuple[Dict[str, Any], Dict[str, Any]]:
-        try:
-            result = self._history().get_history_list(
-                report_type=_MARKET_REVIEW_TYPE,
-                page=1,
-                limit=_DASHBOARD_HISTORY_SCAN_LIMIT,
-            )
-            reviews = list(result.get("items") or [])
-            review_count = int(result.get("total") or 0)
-        except Exception:
-            market = {
-                "meta": self._meta("unavailable", ["analysis_history"], ["market_review_query_failed"]),
-                "data": {"review_count": 0, "latest_reviews": [], "latest_snapshots": {}},
-            }
-            return market, self._empty_changes("unavailable", "market_review_query_failed")
-
         snapshots_by_region: Dict[str, List[Dict[str, Any]]] = {}
+        latest_reviews: List[Dict[str, Any]] = []
         invalid_snapshot_count = 0
         detail_failure_count = 0
-        for review in reviews:
-            record_id = review.get("id")
-            if record_id is None:
-                continue
-            try:
-                detail = self._history().get_history_detail_by_id(int(record_id))
-            except Exception:
-                detail = None
-            if not detail:
-                detail_failure_count += 1
-                continue
-            raw_snapshots = self._extract_snapshots(detail.get("context_snapshot"))
-            for region, raw_snapshot in raw_snapshots.items():
-                if len(snapshots_by_region.get(region, [])) >= 2:
-                    continue
-                try:
-                    snapshot = MarketLightSnapshot.model_validate(raw_snapshot).model_dump()
-                except Exception:
-                    invalid_snapshot_count += 1
-                    continue
-                snapshots_by_region.setdefault(region, []).append(snapshot)
+        history_scan_incomplete = False
+        review_count = 0
+        scanned_count = 0
+        page = 1
+        try:
+            while True:
+                result = self._history().get_history_list(
+                    report_type=_MARKET_REVIEW_TYPE,
+                    page=page,
+                    limit=_DASHBOARD_HISTORY_PAGE_SIZE,
+                )
+                reviews = list(result.get("items") or [])
+                if page == 1:
+                    review_count = int(result.get("total") or 0)
+                if len(latest_reviews) < 5:
+                    latest_reviews.extend(reviews[: 5 - len(latest_reviews)])
+                for review in reviews:
+                    record_id = review.get("id")
+                    if record_id is None:
+                        continue
+                    try:
+                        detail = self._history().get_history_detail_by_id(int(record_id))
+                    except Exception:
+                        detail = None
+                    if not detail:
+                        detail_failure_count += 1
+                        continue
+                    raw_snapshots = self._extract_snapshots(detail.get("context_snapshot"))
+                    for region, raw_snapshot in raw_snapshots.items():
+                        if len(snapshots_by_region.get(region, [])) >= 2:
+                            continue
+                        try:
+                            snapshot = MarketLightSnapshot.model_validate(raw_snapshot).model_dump()
+                        except Exception:
+                            invalid_snapshot_count += 1
+                            continue
+                        snapshots_by_region.setdefault(region, []).append(snapshot)
+                scanned_count += len(reviews)
+                if scanned_count >= review_count:
+                    break
+                if not reviews:
+                    history_scan_incomplete = True
+                    break
+                page += 1
+        except Exception:
+            if page == 1:
+                market = {
+                    "meta": self._meta("unavailable", ["analysis_history"], ["market_review_query_failed"]),
+                    "data": {"review_count": 0, "latest_reviews": [], "latest_snapshots": {}},
+                }
+                return market, self._empty_changes("unavailable", "market_review_query_failed")
+            history_scan_incomplete = True
 
         latest_snapshots = {
             region: snapshots[0]
@@ -110,6 +127,8 @@ class DashboardOverviewService:
             limitations.append("market_review_detail_partial")
         if invalid_snapshot_count:
             limitations.append("invalid_market_light_snapshot_skipped")
+        if history_scan_incomplete:
+            limitations.append("market_review_history_scan_incomplete")
         if any(snapshot.get("data_quality") != "ok" for snapshot in latest_snapshots.values()):
             limitations.append("market_light_data_partial")
         quality = "fresh" if latest_snapshots and not limitations else "partial"
@@ -121,7 +140,7 @@ class DashboardOverviewService:
             ),
             "data": {
                 "review_count": review_count,
-                "latest_reviews": reviews[:5],
+                "latest_reviews": latest_reviews,
                 "latest_snapshots": latest_snapshots,
             },
         }
@@ -172,11 +191,29 @@ class DashboardOverviewService:
         sources: List[str] = []
         success_count = 0
         try:
-            result = self._history().get_history_list(page=1, limit=10)
-            recent_reports = [
-                item for item in list(result.get("items") or [])
-                if item.get("report_type") != _MARKET_REVIEW_TYPE
-            ][:5]
+            page = 1
+            scanned_count = 0
+            total = 0
+            while len(recent_reports) < 5:
+                result = self._history().get_history_list(
+                    page=page,
+                    limit=_DASHBOARD_HISTORY_PAGE_SIZE,
+                )
+                history_items = list(result.get("items") or [])
+                if page == 1:
+                    total = int(result.get("total") or 0)
+                recent_reports.extend(
+                    item for item in history_items
+                    if item.get("report_type") != _MARKET_REVIEW_TYPE
+                )
+                scanned_count += len(history_items)
+                if len(recent_reports) >= 5 or scanned_count >= total:
+                    break
+                if not history_items:
+                    limitations.append("recent_reports_history_scan_incomplete")
+                    break
+                page += 1
+            recent_reports = recent_reports[:5]
             sources.append("analysis_history")
             success_count += 1
         except Exception:
@@ -198,11 +235,13 @@ class DashboardOverviewService:
         current_dates: Dict[str, str] = {}
         previous_dates: Dict[str, str] = {}
         comparable_regions = 0
+        missing_baseline_regions: List[str] = []
         limitations: List[str] = []
         for region, snapshots in snapshots_by_region.items():
             if snapshots:
                 current_dates[region] = str(snapshots[0].get("trade_date") or "")
             if len(snapshots) < 2:
+                missing_baseline_regions.append(region)
                 continue
             current, previous = snapshots[0], snapshots[1]
             previous_dates[region] = str(previous.get("trade_date") or "")
@@ -230,8 +269,12 @@ class DashboardOverviewService:
                     "source": "persisted_market_review",
                     "quality": quality,
                 })
-        if comparable_regions == 0:
+        if missing_baseline_regions or comparable_regions == 0:
             limitations.append("previous_completed_snapshot_unavailable")
+        limitations.extend(
+            f"previous_completed_snapshot_unavailable:{region}"
+            for region in sorted(missing_baseline_regions)
+        )
         quality = "fresh" if comparable_regions and not limitations else "partial"
         return {
             "meta": self._meta(
