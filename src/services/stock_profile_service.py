@@ -215,6 +215,7 @@ class StockProfileService:
 
     def _portfolio_block(self, code: str, *, market: str) -> Dict[str, Any]:
         try:
+            profile_identity = resolve_daily_stock_identity(code, market_hint=market)
             identities = self._portfolio_repository().list_cached_position_identities()
             matches = []
             for position_market, symbol in identities:
@@ -222,8 +223,7 @@ class StockProfileService:
                 identity = resolve_daily_stock_identity(symbol, market_hint=normalized_market)
                 if identity is None or identity.market != normalized_market or identity.market != market:
                     continue
-                position_code = self.canonicalize_code(identity.refill_code or identity.normalized_code)
-                if position_code == code:
+                if self._same_profile_identity(identity, profile_identity):
                     matches.append(normalized_market)
         except Exception:
             return self._unavailable(
@@ -235,6 +235,25 @@ class StockProfileService:
             "data": {"held": bool(matches), "matched_markets": list(dict.fromkeys(matches))},
             "limitations": ["cached_positions_only"],
         }
+
+    @staticmethod
+    def _same_profile_identity(position_identity: Any, profile_identity: Any) -> bool:
+        if profile_identity is None:
+            return False
+        position_codes = {
+            str(position_identity.normalized_code or "").strip().upper(),
+            str(position_identity.refill_code or "").strip().upper(),
+        } - {""}
+        profile_codes = {
+            str(profile_identity.normalized_code or "").strip().upper(),
+            str(profile_identity.refill_code or "").strip().upper(),
+        } - {""}
+        if position_codes & profile_codes:
+            return True
+        if position_identity.market == "kr" and not position_identity.refill_code:
+            profile_base = str(profile_identity.normalized_code or "").split(".", 1)[0]
+            return position_identity.normalized_code == profile_base
+        return False
 
     def _monitor_block(self, code: str, *, market: str) -> Dict[str, Any]:
         rules_by_id: Dict[Any, Dict[str, Any]] = {}

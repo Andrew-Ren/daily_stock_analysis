@@ -214,6 +214,17 @@ def test_portfolio_identity_uses_cached_market_hint_and_requires_same_market() -
     assert kr_payload["portfolio"]["data"] == {"held": False, "matched_markets": []}
 
 
+def test_legacy_bare_korean_position_keeps_market_hint_during_profile_match() -> None:
+    service, dependencies = _service()
+    dependencies["portfolio_repository"].list_cached_position_identities.return_value = [
+        ("kr", "123456"),
+    ]
+
+    payload = service.get_profile("123456.KS")
+
+    assert payload["portfolio"]["data"] == {"held": True, "matched_markets": ["kr"]}
+
+
 def test_offshore_monitor_lookup_excludes_ambiguous_bare_numeric_alias() -> None:
     service, dependencies = _service()
 
@@ -387,6 +398,9 @@ def test_profile_endpoint_validates_code_and_exposes_contract() -> None:
                 response = client.get("/api/v1/stocks/AAPL/profile", params={"history_days": 90})
                 jp = client.get("/api/v1/stocks/7203.T/profile")
                 kr = client.get("/api/v1/stocks/005930.KS/profile")
+                tw = client.get("/api/v1/stocks/2330.TW/profile")
+                two = client.get("/api/v1/stocks/6505.TWO/profile")
+                tw_etf = client.get("/api/v1/stocks/006208.TW/profile")
             invalid = client.get("/api/v1/stocks/invalid-code/profile")
 
             assert response.status_code == 200, response.text
@@ -395,15 +409,24 @@ def test_profile_endpoint_validates_code_and_exposes_contract() -> None:
                 ("AAPL",),
                 ("7203.T",),
                 ("005930.KS",),
+                ("2330.TW",),
+                ("6505.TWO",),
+                ("006208.TW",),
             ]
             assert [item.kwargs for item in get_profile.call_args_list] == [
                 {"history_days": 90},
+                {"history_days": 60},
+                {"history_days": 60},
+                {"history_days": 60},
                 {"history_days": 60},
                 {"history_days": 60},
             ]
             assert invalid.status_code == 400
             assert jp.status_code == 200
             assert kr.status_code == 200
+            assert tw.status_code == 200
+            assert two.status_code == 200
+            assert tw_etf.status_code == 200
         finally:
             DatabaseManager.reset_instance()
             Config.reset_instance()
