@@ -13,6 +13,7 @@ from src.services.alert_service import AlertService
 from src.services.history_service import HistoryService
 from src.services.intelligence_service import IntelligenceService
 from src.services.research_artifact_service import build_research_artifact
+from src.services.stock_code_utils import build_daily_code_candidates, resolve_daily_stock_identity
 from src.services.stock_service import StockService
 
 _BLOCK_NAMES = ("quote", "history", "research", "intelligence", "portfolio", "monitors")
@@ -58,7 +59,12 @@ class StockProfileService:
 
     @staticmethod
     def canonicalize_code(value: str) -> str:
-        normalized = canonical_stock_code(normalize_stock_code(str(value or "").strip()))
+        raw = str(value or "").strip()
+        identity = resolve_daily_stock_identity(raw)
+        if identity is not None:
+            normalized = canonical_stock_code(identity.refill_code or identity.normalized_code)
+        else:
+            normalized = canonical_stock_code(normalize_stock_code(raw))
         if normalized.isdigit() and len(normalized) == 5:
             return f"HK{normalized.zfill(5)}"
         return normalized.upper()
@@ -247,7 +253,10 @@ class StockProfileService:
 
     @staticmethod
     def _code_aliases(code: str) -> List[str]:
-        candidates = HistoryService._history_code_filter_candidates(code)
+        candidates = [
+            *build_daily_code_candidates(code),
+            *HistoryService._history_code_filter_candidates(code),
+        ]
         aliases: List[str] = []
         for candidate in candidates or [code]:
             for alias in (str(candidate).strip(), str(candidate).strip().lower()):

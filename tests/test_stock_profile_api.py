@@ -145,11 +145,15 @@ def test_profile_uses_one_canonical_code_and_returns_structured_research() -> No
     )
     assert {call.kwargs["scope_value"] for call in dependencies["intelligence_service"].list_items.call_args_list} == {
         "AAPL",
+        "AAPL.US",
         "aapl",
+        "aapl.us",
     }
     assert {call.kwargs["target"] for call in dependencies["alert_service"].list_rules.call_args_list} == {
         "AAPL",
+        "AAPL.US",
         "aapl",
+        "aapl.us",
     }
 
 
@@ -200,6 +204,27 @@ def test_profile_collects_intelligence_and_monitors_saved_under_legacy_aliases()
         "total_rule_count": 1,
         "enabled_rule_count": 1,
         "rule_ids": [88],
+    }
+
+
+def test_us_suffix_converges_to_bare_ticker_and_queries_legacy_aliases() -> None:
+    service, dependencies = _service()
+
+    payload = service.get_profile("AAPL.US")
+
+    assert payload["canonical_code"] == "AAPL"
+    assert payload["market"] == "us"
+    assert payload["portfolio"]["data"]["held"] is True
+    dependencies["stock_service"].get_realtime_quote.assert_called_once_with("AAPL")
+    dependencies["history_service"].get_history_list.assert_called_once_with(
+        stock_code="AAPL", page=1, limit=5
+    )
+    assert {"AAPL", "AAPL.US"} <= {
+        call.kwargs["scope_value"]
+        for call in dependencies["intelligence_service"].list_items.call_args_list
+    }
+    assert {"AAPL", "AAPL.US"} <= {
+        call.kwargs["target"] for call in dependencies["alert_service"].list_rules.call_args_list
     }
 
 

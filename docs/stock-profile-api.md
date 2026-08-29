@@ -10,7 +10,7 @@
 
 - A 股：`SH600519`、`600519.SH` 等收敛为 `600519`。
 - 港股：`00700`、`00700.HK`、`HK00700` 收敛为 `HK00700`。
-- 美股 ticker 统一为大写，例如 `aapl` 收敛为 `AAPL`。
+- 美股 ticker 统一为裸大写形式，例如 `aapl`、`AAPL.US` 都收敛为 `AAPL`；持久化读取仍查询裸 ticker 与 `.US` 等价别名。
 
 响应包含 `quote`、`history`、`research`、`intelligence`、`portfolio`、`monitors` 六个独立块，以及顶层 `evidence_quality` 汇总。每个块的 `status` 只允许：
 
