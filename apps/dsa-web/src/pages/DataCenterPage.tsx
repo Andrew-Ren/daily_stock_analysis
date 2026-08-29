@@ -25,17 +25,18 @@ function formatDatasetMarkets(datasetMarkets: Record<string, string[]>): string 
 }
 
 function formatDatasetSources(dataset: DataCapabilityOverview['datasets'][number]): string {
-  if (dataset.source) return dataset.source;
   const markets = dataset.coverage?.markets;
-  if (!markets || typeof markets !== 'object' || Array.isArray(markets)) return '--';
-  const sources = Object.entries(markets)
-    .sort(([left], [right]) => left.localeCompare(right))
-    .flatMap(([market, value]) => {
-      if (!value || typeof value !== 'object' || Array.isArray(value)) return [];
-      const source = (value as Record<string, unknown>).source;
-      return typeof source === 'string' && source.trim() ? [`${market}: ${source.trim()}`] : [];
-    });
-  return sources.join(' / ') || '--';
+  if (markets && typeof markets === 'object' && !Array.isArray(markets)) {
+    const sources = Object.entries(markets)
+      .sort(([left], [right]) => left.localeCompare(right))
+      .flatMap(([market, value]) => {
+        if (!value || typeof value !== 'object' || Array.isArray(value)) return [];
+        const source = (value as Record<string, unknown>).source;
+        return typeof source === 'string' && source.trim() ? [`${market}: ${source.trim()}`] : [];
+      });
+    if (sources.length) return sources.join(' / ');
+  }
+  return dataset.source || '--';
 }
 
 function SummaryTile({ label, value, note }: { label: string; value: number; note: string }) {
