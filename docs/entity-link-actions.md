@@ -49,6 +49,7 @@
 - 美股：`stock:US:AAPL`
 
 后端统一使用 `make_entity_ref()` / `parse_entity_ref()`，Web 统一使用 `makeEntityRef()` / `parseEntityRef()`。
+股票代码带有明确市场身份时（例如 `HK00700`、`AAPL.US`、`2330.TW`），后端从代码推导 market；显式传入冲突 market 会 fail closed，避免同一股票生成两个 ref。
 
 ## 可用性与 fail-closed 规则
 
@@ -58,7 +59,7 @@
 
 | 实体 | 动作 | 路由 | 上下文约束 |
 | --- | --- | --- | --- |
-| report | track_outcome | `/decision-signals?sourceReportId={entity_id}` | `entity_id` 必须是正整数；目标页按 `sourceReportId` 过滤 |
+| report | track_outcome | `/decision-signals?sourceReportId={entity_id}` | `entity_id` 必须是 ASCII 正整数（`[1-9][0-9]*`）；目标页按 `sourceReportId` 过滤 |
 
 其余动作均保持 `available=false`，不会出现在 `links` 中：
 

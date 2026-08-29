@@ -3,12 +3,14 @@
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 from typing import Any, Dict, Iterable, Optional, Tuple
 from urllib.parse import quote
 
 from api.v1.schemas.entity_link import EntityActionType, EntityType
 from data_provider.base import normalize_stock_code
+from src.services.stock_code_utils import resolve_daily_stock_identity
 
 
 _ACTION_LABELS: Dict[str, str] = {
@@ -94,10 +96,19 @@ def parse_entity_ref(ref: str) -> Tuple[str, str]:
     return entity_type, entity_id
 
 
-def stock_entity_id(stock_code: str, *, market: str = "cn") -> str:
+def stock_entity_id(stock_code: str, *, market: Optional[str] = None) -> str:
     """Build a stable stock entity id as '<MARKET>:<canonical_code>'."""
-    normalized_market = str(market or "cn").strip().upper()
-    normalized_code = normalize_stock_code(str(stock_code or "").strip())
+    raw_code = str(stock_code or "").strip()
+    identity = resolve_daily_stock_identity(raw_code)
+    inferred_market = identity.market.upper() if identity is not None else None
+    normalized_market = str(market).strip().upper() if market is not None else inferred_market or "CN"
+    if inferred_market and market is not None and normalized_market != inferred_market:
+        raise ValueError("market conflicts with stock_code identity")
+    normalized_code = (
+        identity.refill_code or identity.normalized_code
+        if identity is not None
+        else normalize_stock_code(raw_code)
+    )
     if normalized_market == "HK" and normalized_code.isdigit() and 1 <= len(normalized_code) <= 5:
         normalized_code = f"HK{normalized_code.zfill(5)}"
     elif normalized_market in {"US", "JP", "KR", "TW"}:
@@ -110,7 +121,7 @@ def stock_entity_id(stock_code: str, *, market: str = "cn") -> str:
 def build_stock_entity_link(
     stock_code: str,
     *,
-    market: str = "cn",
+    market: Optional[str] = None,
     label: str = "",
     stock_name: Optional[str] = None,
 ) -> Dict[str, Any]:
@@ -204,7 +215,7 @@ def _split_market_entity_id(entity_id: str) -> Tuple[str, str]:
 
 def _has_consumable_context(entity_type: str, entity_id: str, action: str) -> bool:
     if (entity_type, action) == ("report", "track_outcome"):
-        return entity_id.isdigit() and int(entity_id) > 0
+        return re.fullmatch(r"[1-9][0-9]*", entity_id) is not None
     return True
 
 

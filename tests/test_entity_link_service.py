@@ -52,6 +52,14 @@ def test_stock_entity_link_metadata_uses_canonical_entity_id_code() -> None:
     assert us_link.metadata["stock_code"] == "AAPL"
 
 
+def test_qualified_foreign_symbols_infer_one_stable_market_identity() -> None:
+    assert stock_entity_id("HK00700") == "HK:HK00700"
+    assert stock_entity_id("2330.TW") == "TW:2330.TW"
+    assert stock_entity_id("AAPL.US") == "US:AAPL"
+    with pytest.raises(ValueError, match="market conflicts"):
+        stock_entity_id("HK00700", market="cn")
+
+
 def test_report_entity_link_can_track_outcome_through_decision_signals() -> None:
     link = EntityLink.model_validate(build_entity_link("report", "123", label="AAPL report"))
 
@@ -83,8 +91,9 @@ def test_actions_without_a_consumed_target_context_fail_closed(
     assert all(item.disabled_reason for item in link.actions)
 
 
-def test_report_tracking_requires_a_positive_numeric_source_report_id() -> None:
-    link = EntityLink.model_validate(build_entity_link("report", "report/123"))
+@pytest.mark.parametrize("report_id", ["report/123", "0", "²", "١٢٣", "１２３"])
+def test_report_tracking_requires_an_ascii_positive_source_report_id(report_id: str) -> None:
+    link = EntityLink.model_validate(build_entity_link("report", report_id))
 
     assert link.links == {}
     action = next(item for item in link.actions if item.action == "track_outcome")
