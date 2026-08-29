@@ -150,6 +150,7 @@ _PROVIDER_DEFINITIONS: Sequence[_ProviderDefinition] = (
         dataset_markets={
             "quote.realtime": ("us",),
             "kline.daily": ("us",),
+            "index.daily": ("us",),
         },
     ),
     _ProviderDefinition(
@@ -536,11 +537,13 @@ class DataCapabilityService:
                 market_priorities={
                     "cn.exchange": priority_map.get("cn.index.daily", {}),
                     "cn.csi": {"providers": ["akshare"], "warnings": []},
+                    "us": {"providers": ["yfinance", "finnhub"], "warnings": []},
                 },
                 provider_map=provider_map,
                 status_resolvers={
                     "cn.exchange": self._index_daily_status_resolver(fetchers, provider_map),
                     "cn.csi": self._index_daily_status_resolver(fetchers, provider_map),
+                    "us": self._us_index_daily_status_resolver(fetchers, provider_map),
                 },
             ),
             self._aggregate_market_dataset(
@@ -646,6 +649,22 @@ class DataCapabilityService:
         }
         return self._market_daily_status_resolver(
             market="cn_index",
+            provider_map=provider_map,
+            fetcher_map=fetcher_map,
+        )
+
+    def _us_index_daily_status_resolver(
+        self,
+        fetchers: Sequence[Any],
+        provider_map: Dict[str, Dict[str, Any]],
+    ) -> Callable[[str], str]:
+        fetcher_map = {
+            str(getattr(fetcher, "name", "")): fetcher
+            for fetcher in fetchers
+            if getattr(fetcher, "name", None)
+        }
+        return self._market_daily_status_resolver(
+            market="us",
             provider_map=provider_map,
             fetcher_map=fetcher_map,
         )

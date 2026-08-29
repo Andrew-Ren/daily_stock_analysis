@@ -366,6 +366,30 @@ def test_daily_dataset_quality_honors_market_specific_circuit_breakers() -> None
     assert "hk:source_status:yfinance:cooldown" in daily_quality["warnings"]
 
 
+def test_index_daily_quality_includes_us_runtime_route() -> None:
+    service = DataCapabilityService(
+        config=_config(finnhub_api_key="key"),
+        fetcher_manager=_FetcherManager([
+            _Fetcher("TencentFetcher", 0, available=True),
+            _Fetcher("AkshareFetcher", 1, available=True),
+            _Fetcher("YfinanceFetcher", 2, available=False),
+            _Fetcher("FinnhubFetcher", 3, available=False),
+        ]),
+    )
+
+    overview = service.get_overview()
+    index_quality = _dataset(overview, "index.daily")
+    us_quality = index_quality["coverage"]["markets"]["us"]
+
+    assert index_quality["status"] == "partial"
+    assert us_quality["status"] == "unavailable"
+    assert us_quality["source"] is None
+    assert us_quality["fallback_from"] == ["yfinance", "finnhub"]
+    assert "us:source_status:yfinance:unavailable" in index_quality["warnings"]
+    assert "us:source_status:finnhub:unavailable" in index_quality["warnings"]
+    assert _provider(overview, "finnhub")["dataset_markets"]["index.daily"] == ["us"]
+
+
 def test_market_overview_dataset_quality_is_market_aware() -> None:
     manager = _FetcherManager([
         _Fetcher("EfinanceFetcher", 0, available=True),
@@ -393,6 +417,7 @@ def test_index_daily_quality_honors_cn_index_circuit_breakers() -> None:
     manager = _FetcherManager([
         _Fetcher("TencentFetcher", 0, available=True),
         _Fetcher("AkshareFetcher", 1, available=True),
+        _Fetcher("YfinanceFetcher", 2, available=True),
     ])
     service = DataCapabilityService(
         config=_config(),
@@ -410,10 +435,11 @@ def test_index_daily_quality_honors_cn_index_circuit_breakers() -> None:
     index_quality = _dataset(overview, "index.daily")
 
     assert index_quality["status"] == "degraded"
-    assert index_quality["source"] == "akshare"
+    assert index_quality["source"] is None
     assert index_quality["coverage"]["markets"]["cn.exchange"]["status"] == "degraded"
     assert index_quality["coverage"]["markets"]["cn.exchange"]["fallback_from"] == ["tencent"]
     assert index_quality["coverage"]["markets"]["cn.csi"]["status"] == "ok"
+    assert index_quality["coverage"]["markets"]["us"]["source"] == "yfinance"
     assert index_quality["fallback_from"] == ["cn.exchange:tencent"]
     assert index_quality["warnings"] == ["cn.exchange:source_status:tencent:cooldown"]
 
