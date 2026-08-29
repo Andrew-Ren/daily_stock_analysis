@@ -29,6 +29,27 @@ describe('entityLink helpers', () => {
     expect(actions.monitor.params.target_entity_ref).toBe('stock:CN:600519');
   });
 
+  it.each([
+    ['600519', 'stock:CN:600519'],
+    ['cn:600519', 'stock:CN:600519'],
+    ['600519.SH', 'stock:CN:600519'],
+    ['hk:700', 'stock:HK:HK00700'],
+    ['aapl', 'stock:US:AAPL'],
+    ['8035.T', 'stock:JP:8035.T'],
+    ['005930.KS', 'stock:KR:005930.KS'],
+    ['2330.TW', 'stock:TW:2330.TW'],
+  ])('canonicalizes stock entity id %s before building refs', (entityId, expectedRef) => {
+    const link = buildEntityLink('stock', entityId);
+
+    expect(link.ref).toBe(expectedRef);
+    expect(link.actions.find((item) => item.action === 'monitor')?.params.target_entity_ref).toBe(expectedRef);
+  });
+
+  it('rejects ambiguous or conflicting stock entity ids', () => {
+    expect(() => buildEntityLink('stock', 'KR:035900')).toThrow('unsupported stock entityId');
+    expect(() => buildEntityLink('stock', 'CN:HK00700')).toThrow('market conflicts');
+  });
+
   it('routes report outcome tracking through decision signals', () => {
     const link = buildEntityLink('report', '123', { label: 'AAPL report' });
     const actions = Object.fromEntries(link.actions.map((item) => [item.action, item]));

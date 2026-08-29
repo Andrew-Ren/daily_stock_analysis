@@ -1,4 +1,5 @@
 import type { EntityAction, EntityActionType, EntityLink, EntityType } from '../types/entityLink';
+import { normalizeStockCode } from './stockCode';
 
 type RouteTemplate = {
   href: string | null;
@@ -83,7 +84,7 @@ export const buildEntityLink = (
     metadata?: Record<string, unknown>;
   } = {},
 ): EntityLink => {
-  const normalizedId = String(entityId).trim();
+  const normalizedId = normalizeEntityId(entityType, entityId);
   const actions = options.actions ?? DEFAULT_ACTIONS[entityType] ?? ['view'];
   const actionItems = actions.map((action) => buildEntityAction(entityType, normalizedId, action));
   const links = actionItems.reduce<Partial<Record<EntityActionType, string>>>((result, item) => {
@@ -107,14 +108,15 @@ export const buildEntityAction = (
   entityId: string,
   action: EntityActionType,
 ): EntityAction => {
+  const normalizedId = normalizeEntityId(entityType, entityId);
   const route = ACTION_ROUTES[`${entityType}:${action}`] ?? {
     href: null,
     available: false,
     disabledReason: 'unsupported_action',
   };
-  const params = buildActionParams(entityType, entityId, action);
+  const params = buildActionParams(entityType, normalizedId, action);
   const href = route.href ? formatHref(route.href, params) : null;
-  const hasContext = hasConsumableContext(entityType, entityId, action);
+  const hasContext = hasConsumableContext(entityType, normalizedId, action);
   const available = (route.available ?? true) && hasContext;
   return {
     action,
@@ -158,6 +160,65 @@ const splitMarketEntityId = (entityId: string): [string, string] => {
   const separatorIndex = entityId.indexOf(':');
   if (separatorIndex < 0) return ['CN', entityId];
   return [entityId.slice(0, separatorIndex) || 'CN', entityId.slice(separatorIndex + 1)];
+};
+
+const normalizeEntityId = (entityType: EntityType, entityId: string): string => {
+  const normalizedId = String(entityId).trim();
+  if (entityType !== 'stock') return normalizedId;
+  return normalizeStockEntityId(normalizedId);
+};
+
+const normalizeStockEntityId = (entityId: string): string => {
+  if (!entityId) throw new Error('entityId is required');
+  const separatorIndex = entityId.indexOf(':');
+  const explicitMarket = separatorIndex >= 0
+    ? entityId.slice(0, separatorIndex).trim().toUpperCase().replace(/^BSE$/, 'CN')
+    : '';
+  const rawCode = (separatorIndex >= 0 ? entityId.slice(separatorIndex + 1) : entityId).trim();
+  const upperCode = rawCode.toUpperCase();
+  if (!rawCode || (separatorIndex >= 0 && !explicitMarket)) {
+    throw new Error('stock entityId must include a market and code');
+  }
+
+  const inferredMarket = inferStockMarket(upperCode);
+  const market = explicitMarket || inferredMarket;
+  if (!market || !['CN', 'HK', 'US', 'JP', 'KR', 'TW'].includes(market)) {
+    throw new Error('unsupported stock entityId');
+  }
+  if (
+    explicitMarket
+    && inferredMarket
+    && explicitMarket !== inferredMarket
+    && !/^\d{6}$/.test(upperCode)
+  ) {
+    throw new Error('stock entityId market conflicts with code');
+  }
+
+  let code = normalizeStockCode(rawCode).toUpperCase();
+  if (market === 'HK' && /^\d{1,5}$/.test(code)) code = `HK${code.padStart(5, '0')}`;
+  if (market === 'US' && code.endsWith('.US')) code = code.slice(0, -3);
+  if (market === 'JP' && /^\d{4,5}$/.test(code)) code = `${code}.T`;
+
+  const valid = (
+    (market === 'CN' && /^\d{6}$/.test(code))
+    || (market === 'HK' && /^HK\d{5}$/.test(code))
+    || (market === 'US' && /^[A-Z]{1,5}(?:[.-][A-Z])?$/.test(code))
+    || (market === 'JP' && /^\d{4,5}\.T$/.test(code))
+    || (market === 'KR' && /^\d{6}\.(?:KS|KQ)$/.test(code))
+    || (market === 'TW' && /^\d{4,6}\.TW(?:O)?$/.test(code))
+  );
+  if (!valid) throw new Error('unsupported stock entityId');
+  return `${market}:${code}`;
+};
+
+const inferStockMarket = (code: string): string => {
+  if (/^(?:(?:SH|SZ|BJ)\.?\d{6}|\d{6}\.(?:SH|SZ|SS|BJ)|\d{6})$/.test(code)) return 'CN';
+  if (/^(?:HK\d{1,5}|\d{1,5}\.HK|\d{5})$/.test(code)) return 'HK';
+  if (/^\d{4,5}\.T$/.test(code)) return 'JP';
+  if (/^\d{6}\.(?:KS|KQ)$/.test(code)) return 'KR';
+  if (/^\d{4,6}\.TW(?:O)?$/.test(code)) return 'TW';
+  if (/^[A-Z]{1,5}(?:[.-][A-Z])?(?:\.US)?$/.test(code)) return 'US';
+  return '';
 };
 
 const hasConsumableContext = (entityType: EntityType, entityId: string, action: EntityActionType): boolean => {
