@@ -64,6 +64,13 @@ from api.v1.schemas.data_capability import (
     DatasetQualityStatus,
     ProviderCapabilityStatus,
 )
+from api.v1.schemas.calendar_events import (
+    CalendarCoverageSummary,
+    CalendarEventCreateRequest,
+    CalendarEventDeleteResponse,
+    CalendarEventItem,
+    CalendarEventListResponse,
+)
 from api.v1.schemas.system_config import (
     SystemConfigFieldSchema,
     SystemConfigCategorySchema,
@@ -197,6 +204,12 @@ __all__ = [
     "DataProviderCapability",
     "DatasetQualityStatus",
     "ProviderCapabilityStatus",
+    # calendar events
+    "CalendarCoverageSummary",
+    "CalendarEventCreateRequest",
+    "CalendarEventDeleteResponse",
+    "CalendarEventItem",
+    "CalendarEventListResponse",
     # system config
     "SystemConfigFieldSchema",
     "SystemConfigCategorySchema",

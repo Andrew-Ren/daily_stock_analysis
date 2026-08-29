@@ -284,6 +284,32 @@ class IntelligenceItem(Base):
     )
 
 
+class CalendarEventRecord(Base):
+    """Forward-looking market, symbol, portfolio, sector, or user event."""
+
+    __tablename__ = 'calendar_events'
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    title = Column(String(200), nullable=False)
+    event_type = Column(String(32), nullable=False, index=True)
+    scope_type = Column(String(32), nullable=False, index=True)
+    scope_value = Column(String(128), index=True)
+    market = Column(String(16), index=True)
+    symbol = Column(String(32), index=True)
+    event_date = Column(Date, nullable=False, index=True)
+    source = Column(String(64), nullable=False, default='user', index=True)
+    coverage_status = Column(String(32), nullable=False, default='confirmed', index=True)
+    description = Column(Text)
+    payload = Column(Text)
+    created_at = Column(DateTime, default=datetime.now, index=True)
+    updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now, index=True)
+
+    __table_args__ = (
+        Index('ix_calendar_event_date_scope', 'event_date', 'scope_type', 'scope_value'),
+        Index('ix_calendar_event_symbol_date', 'symbol', 'event_date'),
+    )
+
+
 class FundamentalSnapshot(Base):
     """
     基本面上下文快照（P0 write-only）。

@@ -19,6 +19,7 @@ from api.v1.endpoints import (
     auth,
     backtest,
     data,
+    calendar_events,
     decision_signals,
     health,
     history,
@@ -91,6 +92,12 @@ router.include_router(
     alerts.router,
     prefix="/alerts",
     tags=["Alerts"]
+)
+
+router.include_router(
+    calendar_events.router,
+    prefix="/calendar",
+    tags=["Calendar"]
 )
 
 router.include_router(
