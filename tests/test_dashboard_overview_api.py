@@ -336,6 +336,31 @@ def test_recent_reports_paginates_past_market_review_only_page() -> None:
     assert [call.kwargs["page"] for call in activity_calls] == [1, 2]
 
 
+def test_recent_report_scan_is_bounded_when_history_contains_only_market_reviews() -> None:
+    dependencies = _dependencies()
+    history = [_review(index, "2026-08-29T09:00:00+08:00") for index in range(1, 251)]
+
+    def list_history(**kwargs: object) -> dict:
+        if kwargs.get("report_type") == "market_review":
+            return {"items": [], "total": 0}
+        page = int(kwargs.get("page") or 1)
+        limit = int(kwargs.get("limit") or 50)
+        start = (page - 1) * limit
+        return {"items": history[start:start + limit], "total": len(history)}
+
+    dependencies["history_service"].get_history_list.side_effect = list_history
+
+    payload = DashboardOverviewService(**dependencies).get_overview()
+
+    activity_calls = [
+        call for call in dependencies["history_service"].get_history_list.call_args_list
+        if "report_type" not in call.kwargs
+    ]
+    assert [call.kwargs["page"] for call in activity_calls] == [1, 2]
+    assert payload["activity"]["data"]["recent_reports"] == []
+    assert "recent_reports_history_scan_incomplete" in payload["activity"]["meta"]["limitations"]
+
+
 def test_block_failures_are_isolated_and_system_remains_read_only() -> None:
     dependencies = _dependencies()
     dependencies["history_service"].get_history_list.side_effect = RuntimeError("db unavailable")
