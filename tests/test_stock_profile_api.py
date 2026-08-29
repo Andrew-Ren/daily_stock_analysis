@@ -330,6 +330,32 @@ def test_profile_collects_intelligence_and_monitors_saved_under_legacy_aliases()
     }
 
 
+def test_explicit_cn_identity_never_reexpands_through_a_colliding_kr_alias() -> None:
+    service, dependencies = _service()
+    dependencies["history_service"].get_history_list.return_value = {"items": [], "total": 0}
+
+    payload = service.get_profile("SZ000660")
+
+    assert payload["canonical_code"] == "000660"
+    assert payload["market"] == "cn"
+    dependencies["history_service"].get_history_list.assert_called_once_with(
+        stock_code="SZ000660",
+        page=1,
+        limit=5,
+    )
+    intelligence_aliases = {
+        call.kwargs["scope_value"]
+        for call in dependencies["intelligence_service"].list_items.call_args_list
+    }
+    monitor_aliases = {
+        call.kwargs["target"] for call in dependencies["alert_service"].list_rules.call_args_list
+    }
+    assert "000660.KS" not in intelligence_aliases
+    assert "000660.KS" not in monitor_aliases
+    assert {"SZ000660", "000660.SZ"} <= intelligence_aliases
+    assert {"SZ000660", "000660.SZ"} <= monitor_aliases
+
+
 def test_us_suffix_converges_to_bare_ticker_and_queries_legacy_aliases() -> None:
     service, dependencies = _service()
 

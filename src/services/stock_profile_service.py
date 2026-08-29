@@ -14,7 +14,7 @@ from src.services.history_service import HistoryService
 from src.services.intelligence_service import IntelligenceService
 from src.services.market_symbol_utils import get_suffix_market
 from src.services.research_artifact_service import build_research_artifact
-from src.services.stock_code_utils import build_daily_code_candidates, resolve_daily_stock_identity
+from src.services.stock_code_utils import resolve_daily_stock_identity
 from src.services.stock_service import StockService
 
 _BLOCK_NAMES = ("quote", "history", "research", "intelligence", "portfolio", "monitors")
@@ -108,7 +108,11 @@ class StockProfileService:
     def _research_block(self, code: str, *, market: str) -> Dict[str, Any]:
         empty_data = {"latest_report": None, "recent_reports": [], "structured_report": None}
         try:
-            query_options: Dict[str, Any] = {"stock_code": code, "page": 1, "limit": 5}
+            query_options: Dict[str, Any] = {
+                "stock_code": self._market_qualified_history_code(code, market=market),
+                "page": 1,
+                "limit": 5,
+            }
             if market in {"jp", "kr", "tw"}:
                 query_options["include_ambiguous_numeric_aliases"] = False
             result = self._history_service().get_history_list(**query_options)
@@ -315,10 +319,8 @@ class StockProfileService:
         include_ambiguous_numeric: bool = True,
     ) -> List[str]:
         market = str(market_hint or StockProfileService.market_for_code(code)).strip().lower()
-        candidates = [
-            *build_daily_code_candidates(code),
-            *HistoryService._history_code_filter_candidates(code),
-        ]
+        identity = resolve_daily_stock_identity(code, market_hint=market)
+        candidates = list(identity.code_candidates) if identity is not None and identity.market == market else [code]
         if include_ambiguous_numeric and market == "tw" and "." in code:
             numeric_base = code.split(".", 1)[0]
             if numeric_base.isdigit():
@@ -335,6 +337,19 @@ class StockProfileService:
                 if alias and alias not in aliases:
                     aliases.append(alias)
         return aliases
+
+    @staticmethod
+    def _market_qualified_history_code(code: str, *, market: str) -> str:
+        """Keep the profile's known market when a bare code is cross-market ambiguous."""
+        identity = resolve_daily_stock_identity(code, market_hint=market)
+        if identity is None or identity.market != market:
+            return code
+        if not str(code).strip().isdigit():
+            return code
+        return next(
+            (candidate for candidate in identity.code_candidates if not candidate.isdigit()),
+            code,
+        )
 
     @staticmethod
     def _artifact_input(detail: Dict[str, Any]) -> Dict[str, Any]:

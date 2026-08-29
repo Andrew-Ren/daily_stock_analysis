@@ -8,7 +8,7 @@
 
 端点先把输入统一为 canonical code。实时行情、历史和报告链使用 canonical code；对可能由旧入口按别名持久化的 intelligence 与 monitor 记录，读取时会展开仓库既有等价代码集合并按 ID 去重：
 
-- A 股：`SH600519`、`600519.SH` 等收敛为 `600519`。
+- A 股：`SH600519`、`600519.SH` 等收敛为 `600519`。入口已经显式携带 `SH` / `SZ` / `BJ` 时，后续报告、资讯和监控别名展开会持续保留该市场身份；即使股票索引存在同形日韩代码，也不会重新按裸数字推断为其他市场。
 - 日股：`7203.T` 保留 Yahoo canonical suffix，并返回 `market=jp`。
 - 韩股：`005930.KS`、`035720.KQ` 保留 Yahoo canonical suffix，并返回 `market=kr`；股票索引唯一识别出的旧裸代码也沿用解析后的韩国市场身份。缓存持仓中的旧裸六位韩股在 market 已明确为 `kr` 时按解析身份与档案 suffix 的数字主体比较，不会再次按无 market 的 A 股规则解释。
 - 台股：profile 入口接受 4–6 位 `.TW` / `.TWO` Yahoo suffix（包括六位 ETF），并返回 `market=tw`。市场限定的资讯查询兼容旧裸数字 scope，但 `global` 查询继续排除该歧义别名；缓存持仓已明确 `market=tw` 时，旧裸代码按同市场数字主体与档案匹配。
@@ -28,7 +28,7 @@
 ## 数据来源与边界
 
 - quote/history：复用 `StockService`，不新增数据获取器。
-- research：复用 `HistoryService` 和 #2291 的 `ResearchArtifact` builder；本 PR 因此堆叠在 #2291 上。日韩台查询保留交易所后缀及其他无歧义别名，但不展开可能命中 A/HK 历史记录的裸数字代码，避免把跨市场报告构造成当前档案的 artifact。
+- research：复用 `HistoryService` 和 #2291 的 `ResearchArtifact` builder；本 PR 因此堆叠在 #2291 上。报告查询使用档案入口已经解析出的市场身份：A 股裸 canonical code 会重新限定为对应 `SH` / `SZ` / `BJ` 代码，日韩台查询保留交易所后缀及其他无歧义别名，但不展开可能命中其他市场历史记录的裸数字代码，避免把跨市场报告构造成当前档案的 artifact。
 - intelligence：复用 `IntelligenceService` 的 symbol scope 查询，并兼容 canonical、交易所前后缀、港股前后缀及大小写历史别名；同时读取具体市场与 `global` 的 symbol 资讯。任一别名/市场查询失败时块保持 partial limitation，即使其余查询成功但为空，也不误报为已确认无资讯。
 - portfolio：只读 `PortfolioRepository.list_cached_position_identities()`，并使用每条缓存持仓自己的 market 解析旧裸代码；只有 market 与档案身份一致时才算持有。不为了打开个股页触发实时估值或写 snapshot，所以状态固定为 `partial` 并包含 `cached_positions_only`。
 - monitors：复用 `AlertService.list_rules()`，分页汇总并去重 canonical code 及等价历史别名下的 `single_symbol` 规则。由于现有告警目标没有独立 market 字段，日韩台档案不会查询可能与 A/HK 同形的裸数字别名，避免跨市场规则误归属。
