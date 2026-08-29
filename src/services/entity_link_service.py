@@ -9,7 +9,6 @@ from typing import Any, Dict, Iterable, Optional, Tuple
 from urllib.parse import quote
 
 from api.v1.schemas.entity_link import EntityActionType, EntityType
-from data_provider.base import normalize_stock_code
 from src.services.stock_code_utils import resolve_daily_stock_identity
 
 
@@ -103,21 +102,23 @@ def stock_entity_id(stock_code: str, *, market: Optional[str] = None) -> str:
     if not raw_code:
         raise ValueError("stock_code is required")
     explicit_market = str(market).strip().upper() if market is not None else None
+    if explicit_market == "BSE":
+        explicit_market = "CN"
     identity = resolve_daily_stock_identity(
         raw_code,
         market_hint=explicit_market.lower() if explicit_market else None,
     )
-    if explicit_market and identity is None:
-        raise ValueError("market is incompatible with stock_code identity")
-    inferred_market = identity.market.upper() if identity is not None else None
-    normalized_market = explicit_market or inferred_market or "CN"
+    if identity is None:
+        if explicit_market:
+            raise ValueError("market is incompatible with stock_code identity")
+        raise ValueError("unsupported stock_code identity")
+    if not identity.refill_code:
+        raise ValueError("stock_code identity has no canonical exchange-qualified code")
+    inferred_market = identity.market.upper()
+    normalized_market = explicit_market or inferred_market
     if inferred_market and market is not None and normalized_market != inferred_market:
         raise ValueError("market conflicts with stock_code identity")
-    normalized_code = (
-        identity.refill_code or identity.normalized_code
-        if identity is not None
-        else normalize_stock_code(raw_code)
-    )
+    normalized_code = identity.refill_code
     if normalized_market == "HK" and normalized_code.isdigit() and 1 <= len(normalized_code) <= 5:
         normalized_code = f"HK{normalized_code.zfill(5)}"
     elif normalized_market in {"US", "JP", "KR", "TW"}:

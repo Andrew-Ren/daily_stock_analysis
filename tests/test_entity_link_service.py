@@ -65,6 +65,24 @@ def test_explicit_market_canonicalizes_legacy_bare_foreign_code() -> None:
     assert stock_entity_id("8035", market="jp") == stock_entity_id("8035.T")
 
 
+def test_invalid_unhinted_stock_identity_fails_closed() -> None:
+    with pytest.raises(ValueError, match="unsupported stock_code identity"):
+        stock_entity_id("not a stock!")
+
+
+def test_unresolved_bare_korean_identity_requires_an_exchange_suffix() -> None:
+    with pytest.raises(ValueError, match="canonical exchange-qualified"):
+        stock_entity_id("999999", market="kr")
+
+    assert stock_entity_id("999999.KS", market="kr") == "KR:999999.KS"
+    assert stock_entity_id("999999.KQ", market="kr") == "KR:999999.KQ"
+
+
+def test_bse_market_hint_converges_to_the_canonical_cn_identity() -> None:
+    assert stock_entity_id("920748", market="BSE") == "CN:920748"
+    assert stock_entity_id("920748", market="BSE") == stock_entity_id("920748.BJ")
+
+
 @pytest.mark.parametrize(
     ("stock_code", "market"),
     [("600519", "us"), ("000001", "hk")],

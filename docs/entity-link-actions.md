@@ -49,7 +49,7 @@
 - 美股：`stock:US:AAPL`
 
 后端统一使用 `make_entity_ref()` / `parse_entity_ref()`，Web 统一使用 `makeEntityRef()` / `parseEntityRef()`。
-股票代码带有明确市场身份时（例如 `HK00700`、`AAPL.US`、`2330.TW`），后端从代码推导 market；显式传入 market 时，该 market 同时作为旧裸代码的消歧提示，例如 `8035 + jp` 与 `8035.T` 收敛为同一 ref。显式 market 与代码身份冲突时会 fail closed，避免同一股票生成两个 ref。
+股票代码带有明确市场身份时（例如 `HK00700`、`AAPL.US`、`2330.TW`），后端从代码推导 market；显式传入 market 时，该 market 同时作为旧裸代码的消歧提示，例如 `8035 + jp` 与 `8035.T` 收敛为同一 ref，`BSE + 920748` 与 `920748.BJ` 统一为 `CN:920748`。无法由共享 identity resolver 解析的字符串直接拒绝，不再格式化为伪 CN 标识；无法确定 KS/KQ 交易所的旧裸韩股也在补齐 suffix 前 fail closed。显式 market 与代码身份冲突时同样 fail closed，避免同一股票生成两个 ref。
 
 ## 可用性与 fail-closed 规则
 
