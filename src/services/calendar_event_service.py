@@ -42,7 +42,10 @@ class CalendarEventService:
         scope_type = self._optional_normalized(filters.get("scope_type"))
         scope_value = self._optional_normalized(filters.get("scope_value"))
         market = self._optional_normalized(filters.get("market"), lower=True)
-        symbol, symbol_market = self._resolve_symbol_identity(filters.get("symbol"))
+        symbol, symbol_market = self._resolve_symbol_identity(
+            filters.get("symbol"),
+            market_hint=market,
+        )
         if scope_type and scope_type not in _ALLOWED_SCOPE_TYPES:
             raise CalendarEventServiceError(f"unsupported scope_type: {scope_type}")
         if market and market not in _ALLOWED_MARKETS:
@@ -52,7 +55,10 @@ class CalendarEventService:
         if symbol and scope_type and scope_type != "symbol":
             raise CalendarEventServiceError("symbol filter can only be combined with scope_type=symbol")
         if scope_type == "symbol" and scope_value:
-            scope_value, scope_market = self._resolve_symbol_identity(scope_value)
+            scope_value, scope_market = self._resolve_symbol_identity(
+                scope_value,
+                market_hint=market,
+            )
             if market and scope_market and market != scope_market:
                 raise CalendarEventServiceError("market conflicts with symbol identity")
             if symbol and scope_value != symbol:
@@ -102,7 +108,10 @@ class CalendarEventService:
         scope_type = str(payload.get("scope_type") or "").strip().lower()
         scope_value = CalendarEventService._optional_normalized(payload.get("scope_value"))
         market = CalendarEventService._optional_normalized(payload.get("market"), lower=True)
-        symbol, symbol_market = CalendarEventService._resolve_symbol_identity(payload.get("symbol"))
+        symbol, symbol_market = CalendarEventService._resolve_symbol_identity(
+            payload.get("symbol"),
+            market_hint=market,
+        )
 
         if not title:
             raise CalendarEventServiceError("title is required")
@@ -162,11 +171,15 @@ class CalendarEventService:
         return normalized.lower() if lower else normalized
 
     @staticmethod
-    def _resolve_symbol_identity(value: Any) -> tuple[Optional[str], Optional[str]]:
+    def _resolve_symbol_identity(
+        value: Any,
+        *,
+        market_hint: Optional[str] = None,
+    ) -> tuple[Optional[str], Optional[str]]:
         normalized = CalendarEventService._optional_normalized(value)
         if normalized is None:
             return None, None
-        identity = resolve_daily_stock_identity(normalized)
+        identity = resolve_daily_stock_identity(normalized, market_hint=market_hint)
         if identity is None or identity.market not in _ALLOWED_MARKETS - {"global"}:
             raise CalendarEventServiceError("unsupported symbol identity")
         code = canonical_stock_code(identity.refill_code or identity.normalized_code)

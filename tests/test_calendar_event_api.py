@@ -195,6 +195,20 @@ class CalendarEventApiTestCase(unittest.TestCase):
         self.assertEqual(conflict.status_code, 400, conflict.text)
         self.assertEqual(conflict.json()["error"], "validation_error")
 
+    def test_explicit_market_disambiguates_bare_numeric_symbol(self) -> None:
+        event = self._create(symbol="7203", market="hk")
+
+        self.assertEqual(event["symbol"], "HK07203")
+        self.assertEqual(event["scope_value"], "HK07203")
+        self.assertEqual(event["market"], "hk")
+
+        response = self.client.get(
+            "/api/v1/calendar/events",
+            params={"market": "hk", "symbol": "7203"},
+        )
+        self.assertEqual(response.status_code, 200, response.text)
+        self.assertEqual([item["id"] for item in response.json()["items"]], [event["id"]])
+
     def test_symbol_scope_rejects_unresolvable_identity(self) -> None:
         response = self.client.post(
             "/api/v1/calendar/events",
