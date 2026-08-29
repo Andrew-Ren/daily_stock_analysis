@@ -21,7 +21,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from contextvars import ContextVar
 from contextlib import contextmanager
 from dataclasses import asdict, dataclass, is_dataclass
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Callable, Dict, Iterator, List, Optional, Tuple
 from urllib.parse import urlparse
@@ -57,6 +57,7 @@ DSA_SCREENING_HOTSPOT_HISTORY_PATH = DSA_SCREENING_DATA_DIR / "hotspot.history.j
 DSA_SCREENING_MIN_HOTSPOT_CACHE_COUNT = 3
 DSA_SCREENING_HOTSPOT_DETAIL_CACHE_TTL_SECONDS = 30 * 60
 DSA_SCREENING_HOTSPOT_EVENT_SUMMARY_MAX_CHARS = 90
+DSA_SCREENING_WHY_NOW_MAX_AGE_DAYS = 30
 DSA_SCREENING_HOTSPOT_PREFETCH_DETAIL_COUNT = 8
 DSA_SCREENING_HOTSPOT_CALL_TIMEOUT_SECONDS = 8
 DSA_SCREENING_HOTSPOT_SEARCH_TIMEOUT_SECONDS = 12
@@ -3758,6 +3759,7 @@ def _normalize_candidate(raw: Any, rank: int) -> Dict[str, Any]:
         "screen_score": _first_present(item, source, "screen_score"),
         "reason": item.get("reason") or source.get("reason") or source.get("ranking_reason") or source.get("risk_summary") or item.get("summary") or _build_candidate_reason(source),
         "ranking_reason": item.get("ranking_reason") or source.get("ranking_reason") or "",
+        "risk_summary": item.get("risk_summary") or source.get("risk_summary") or "",
         "risk_level": item.get("risk_level") or source.get("risk_level") or "",
         "risk_flags": item.get("risk_flags") or source.get("risk_flags") or [],
         "llm_score": _first_present(item, source, "llm_score"),
@@ -3796,7 +3798,12 @@ def _attach_candidate_explanations(candidate: Dict[str, Any]) -> Dict[str, Any]:
     if reason:
         ranking_reason = str(candidate.get("ranking_reason") or "").strip()
         llm_thesis = str(candidate.get("llm_thesis") or "").strip()
-        reason_is_llm = reason == ranking_reason or (bool(llm_thesis) and reason == llm_thesis)
+        risk_summary = str(candidate.get("risk_summary") or "").strip()
+        reason_is_llm = (
+            reason == ranking_reason
+            or (bool(llm_thesis) and reason == llm_thesis)
+            or (bool(risk_summary) and reason == risk_summary)
+        )
         why_selected.append(
             _explanation_item(
                 "selection_reason",
@@ -3864,6 +3871,7 @@ def _attach_candidate_explanations(candidate: Dict[str, Any]) -> Dict[str, Any]:
                 for item in event_items
                 if isinstance(item, dict)
                 and str(item.get("source") or "").strip()
+                and _is_recent_explanation_item(item)
                 and str(item.get("title") or item.get("snippet") or "").strip()
             ),
             None,
@@ -3935,6 +3943,14 @@ def _attach_candidate_explanations(candidate: Dict[str, Any]) -> Dict[str, Any]:
         "why_now": _explanation_quality(why_now),
     }
     return normalized
+
+
+def _is_recent_explanation_item(item: Dict[str, Any]) -> bool:
+    published = _parse_cache_datetime(item.get("published_date"))
+    if published is None:
+        return False
+    age = datetime.now(timezone.utc) - published
+    return -timedelta(days=1) <= age <= timedelta(days=DSA_SCREENING_WHY_NOW_MAX_AGE_DAYS)
 
 
 def _explanation_item(

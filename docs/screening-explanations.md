@@ -20,7 +20,7 @@
 
 ## Why Now
 
-时点解释只使用带来源的证据：DSA 新闻、事件，以及 `dsa_context.quote` 中明确存在的实时行情字段。候选顶层的 `change_pct=0` 或 `amount=0` 不能单独证明数据真实存在，因为旧数据源可能用 0 表示缺失；没有 quote provenance 时返回 `awaiting_evidence`，不会写成“当前涨跌幅 0%”。
+时点解释只使用带来源的证据：DSA 新闻、事件，以及 `dsa_context.quote` 中明确存在的实时行情字段。事件还必须带可解析的 `published_date`，且发布时间在最近 30 天内；缺日期或过期事件不标记为 observed。候选顶层的 `change_pct=0` 或 `amount=0` 不能单独证明数据真实存在，因为旧数据源可能用 0 表示缺失；没有 quote provenance 时返回 `awaiting_evidence`，不会写成“当前涨跌幅 0%”。
 
 当 `dsa_context.quote.change_pct` 明确存在且为 `0` 时，它是合法平盘数据，返回 `value=0` 和 `quality=observed`。LLM catalyst 可作为 `inferred` 补充，但不能冒充观测事实。
 

@@ -1,6 +1,8 @@
 # -*- coding: utf-8 -*-
 """Regression tests for provenance-aware screening explanations."""
 
+from datetime import datetime, timedelta, timezone
+
 from src.services.screening_service import _attach_candidate_explanations
 
 
@@ -109,3 +111,59 @@ def test_news_and_events_without_provenance_are_not_observed() -> None:
 
     assert [item["code"] for item in result["why_now"]] == ["awaiting_evidence"]
     assert result["explanation_quality"]["why_now"] == "unknown"
+
+
+def test_llm_risk_summary_stays_inferred_and_keeps_rank_fallback() -> None:
+    candidate = {
+        "rank": 7,
+        "reason": "LLM generated risk summary",
+        "risk_summary": "LLM generated risk summary",
+        "factor_scores": {},
+        "dsa_context": {},
+        "dsa_news": [],
+        "dsa_events": [],
+    }
+
+    result = _attach_candidate_explanations(candidate)
+
+    assert [item["quality"] for item in result["why_selected"]] == ["inferred", "observed"]
+    assert result["why_selected"][1]["code"] == "selection_rank"
+
+
+def test_stale_or_undated_events_are_not_why_now_evidence() -> None:
+    stale_date = (datetime.now(timezone.utc) - timedelta(days=31)).isoformat()
+    candidate = {
+        "rank": 8,
+        "reason": "local reason",
+        "factor_scores": {},
+        "dsa_context": {},
+        "dsa_news": [],
+        "dsa_events": [
+            {"title": "Stale event", "source": "exchange", "published_date": stale_date},
+            {"title": "Undated event", "source": "exchange"},
+        ],
+    }
+
+    result = _attach_candidate_explanations(candidate)
+
+    assert [item["code"] for item in result["why_now"]] == ["awaiting_evidence"]
+
+
+def test_recent_event_with_source_is_observed_why_now_evidence() -> None:
+    candidate = {
+        "rank": 9,
+        "reason": "local reason",
+        "factor_scores": {},
+        "dsa_context": {},
+        "dsa_news": [],
+        "dsa_events": [{
+            "title": "Recent event",
+            "source": "exchange",
+            "published_date": datetime.now(timezone.utc).isoformat(),
+        }],
+    }
+
+    result = _attach_candidate_explanations(candidate)
+
+    assert result["why_now"][0]["code"] == "event"
+    assert result["why_now"][0]["quality"] == "observed"
