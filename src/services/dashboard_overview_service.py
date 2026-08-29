@@ -102,25 +102,29 @@ class DashboardOverviewService:
                     for region, raw_snapshot in raw_snapshots.items():
                         raw_trade_date = str(raw_snapshot.get("trade_date") or "").strip()
                         try:
-                            date.fromisoformat(raw_trade_date)
+                            canonical_trade_date = date.fromisoformat(raw_trade_date).isoformat()
                         except Exception:
                             invalid_snapshot_count += 1
                             regions_with_unknown_trade_date.add(region)
                             continue
-                        region_candidates = snapshot_candidates_by_region.setdefault(region, {})
                         try:
                             snapshot = MarketLightSnapshot.model_validate(raw_snapshot).model_dump()
                         except Exception:
                             invalid_snapshot_count += 1
-                            region_candidates.setdefault(raw_trade_date, None)
+                            snapshot_candidates_by_region.setdefault(region, {}).setdefault(
+                                canonical_trade_date,
+                                None,
+                            )
                             continue
                         snapshot_region = str(snapshot.get("region") or "").strip().lower()
+                        region_candidates = snapshot_candidates_by_region.setdefault(region, {})
                         if snapshot_region != region:
                             invalid_snapshot_count += 1
-                            region_candidates.setdefault(raw_trade_date, None)
+                            region_candidates.setdefault(canonical_trade_date, None)
                             continue
-                        if region_candidates.get(raw_trade_date) is None:
-                            region_candidates[raw_trade_date] = snapshot
+                        snapshot["trade_date"] = canonical_trade_date
+                        if region_candidates.get(canonical_trade_date) is None:
+                            region_candidates[canonical_trade_date] = snapshot
                 scanned_count += len(reviews)
                 if scanned_count >= review_count:
                     break

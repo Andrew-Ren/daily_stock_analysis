@@ -230,6 +230,36 @@ def test_change_baseline_is_the_latest_strictly_earlier_trade_date() -> None:
     assert payload["what_changed"]["data"]["previous_trade_dates"]["cn"] == "2026-08-28"
 
 
+def test_trade_dates_are_canonicalized_before_deduplication_and_sorting() -> None:
+    dependencies = _dependencies()
+    reviews = [
+        _review(1, "2026-08-30T09:00:00+08:00"),
+        _review(2, "2026-08-29T09:00:00+08:00"),
+    ]
+    dependencies["history_service"].get_history_list.side_effect = lambda **kwargs: (
+        _history_page(dependencies["history_service"], reviews, kwargs)
+        if kwargs.get("report_type") == "market_review"
+        else {"items": [], "total": 0}
+    )
+    dependencies["history_service"].get_history_detail_by_id.side_effect = lambda record_id: {
+        "context_snapshot": {
+            "market_light_snapshots": {
+                "cn": _snapshot(
+                    "cn",
+                    "20260829" if record_id == 1 else "2026-08-30",
+                    60,
+                    "yellow",
+                )
+            }
+        }
+    }
+
+    payload = DashboardOverviewService(**dependencies).get_overview()
+
+    assert payload["what_changed"]["data"]["current_trade_dates"] == {"cn": "2026-08-30"}
+    assert payload["what_changed"]["data"]["previous_trade_dates"] == {"cn": "2026-08-29"}
+
+
 def test_change_quality_uses_the_worse_snapshot_quality() -> None:
     dependencies = _dependencies()
     dependencies["history_service"].get_history_detail_by_id.side_effect = lambda record_id: {
