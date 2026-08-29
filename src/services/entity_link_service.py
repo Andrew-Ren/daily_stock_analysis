@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import re
+import unicodedata
 from dataclasses import dataclass
 from typing import Any, Dict, Iterable, Optional, Tuple
 from urllib.parse import quote
@@ -99,7 +100,7 @@ def parse_entity_ref(ref: str) -> Tuple[str, str]:
 
 def stock_entity_id(stock_code: str, *, market: Optional[str] = None) -> str:
     """Build a stable stock entity id as '<MARKET>:<canonical_code>'."""
-    raw_code = str(stock_code or "").strip()
+    raw_code = unicodedata.normalize("NFKC", str(stock_code or "")).strip()
     if not raw_code:
         raise ValueError("stock_code is required")
     explicit_market = str(market).strip().upper() if market is not None else None

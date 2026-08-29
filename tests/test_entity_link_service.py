@@ -136,6 +136,13 @@ def test_explicit_market_canonicalizes_legacy_bare_foreign_code() -> None:
     assert stock_entity_id("8035", market="jp") == stock_entity_id("8035.T")
 
 
+def test_unicode_width_variants_converge_to_ascii_stock_identities() -> None:
+    assert stock_entity_id("６００５１９", market="cn") == "CN:600519"
+    assert stock_entity_id("７００", market="hk") == "HK:HK00700"
+    assert stock_entity_id("ＡＡＰＬ．ＵＳ") == "US:AAPL"
+    assert make_entity_ref("stock", "CN:６００５１９") == "stock:CN:600519"
+
+
 def test_invalid_unhinted_stock_identity_fails_closed() -> None:
     with pytest.raises(ValueError, match="unsupported stock_code identity"):
         stock_entity_id("not a stock!")
