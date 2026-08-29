@@ -107,7 +107,7 @@ _PROVIDER_DEFINITIONS: Sequence[_ProviderDefinition] = (
         label="Tushare",
         fetcher_name="TushareFetcher",
         dataset_markets={
-            "quote.realtime": ("cn", "hk"),
+            "quote.realtime": ("cn",),
             "kline.daily": ("cn", "hk"),
             "index.daily": ("cn",),
             "market.overview": ("cn",),
@@ -195,6 +195,16 @@ _AKSHARE_REALTIME_CIRCUIT_KEYS = {
     "akshare_qq": "akshare_tencent",
     "akshare_sina": "akshare_sina",
     "akshare_em": "akshare_em",
+}
+
+_CN_REALTIME_SOURCES = {
+    "efinance",
+    "akshare_em",
+    "akshare_sina",
+    "akshare_qq",
+    "tencent",
+    "tushare",
+    "tickflow",
 }
 
 _SCREENING_SOURCES = {"tushare", "sina", "efinance", "akshare_em", "em_datacenter"}
@@ -394,7 +404,7 @@ class DataCapabilityService:
                 "cn.realtime",
                 _split_priority(getattr(self.config, "realtime_source_priority", "")),
                 "Config.realtime_source_priority",
-                known_sources=set(_REALTIME_SOURCE_PROVIDER),
+                known_sources=_CN_REALTIME_SOURCES,
             ),
             self._priority_view(
                 "hk.realtime",
@@ -520,11 +530,17 @@ class DataCapabilityService:
                 provider_map=provider_map,
                 status_resolvers=self._daily_status_resolvers(fetchers, provider_map),
             ),
-            self._dataset_from_priority(
+            self._aggregate_market_dataset(
                 dataset="index.daily",
-                priority=priority_map.get("cn.index.daily", {}),
+                market_priorities={
+                    "cn.exchange": priority_map.get("cn.index.daily", {}),
+                    "cn.csi": {"providers": ["akshare"], "warnings": []},
+                },
                 provider_map=provider_map,
-                status_resolver=self._index_daily_status_resolver(fetchers, provider_map),
+                status_resolvers={
+                    "cn.exchange": self._index_daily_status_resolver(fetchers, provider_map),
+                    "cn.csi": self._index_daily_status_resolver(fetchers, provider_map),
+                },
             ),
             self._aggregate_market_dataset(
                 dataset="market.overview",
@@ -641,7 +657,7 @@ class DataCapabilityService:
         fetcher_map: Dict[str, Any],
     ) -> Callable[[str], str]:
         def resolve(token: str) -> str:
-            provider_status = self._source_token_status(token, provider_map)
+            provider_status = self._provider_token_status(token, provider_map)
             if provider_status != "ok":
                 return provider_status
             definition = _PROVIDER_DEFINITION_MAP.get(token)
@@ -721,6 +737,8 @@ class DataCapabilityService:
         provider_map: Dict[str, Dict[str, Any]],
     ) -> Callable[[str], str]:
         def resolve(token: str) -> str:
+            if token not in _CN_REALTIME_SOURCES:
+                return "unsupported"
             provider_status = self._source_token_status(token, provider_map)
             if provider_status != "ok":
                 return provider_status
@@ -932,6 +950,13 @@ class DataCapabilityService:
             "coverage": None,
             "warnings": warnings,
         }
+
+    @staticmethod
+    def _provider_token_status(token: str, provider_map: Dict[str, Dict[str, Any]]) -> str:
+        provider = provider_map.get(token)
+        if provider is None:
+            return "unknown"
+        return str(provider.get("status") or "unknown")
 
     @staticmethod
     def _source_token_status(token: str, provider_map: Dict[str, Dict[str, Any]]) -> str:

@@ -174,6 +174,7 @@ def test_provider_dataset_market_matrix_matches_fundamental_runtime_routes() -> 
     ]
     assert "financial.snapshot" not in _provider(overview, "tushare")["datasets"]
     assert "financial.snapshot" not in _provider(overview, "longbridge")["datasets"]
+    assert _provider(overview, "tushare")["dataset_markets"]["quote.realtime"] == ["cn"]
 
 
 def test_realtime_dataset_quality_is_market_aware() -> None:
@@ -234,6 +235,26 @@ def test_cn_realtime_quality_honors_akshare_subsource_circuit_breaker() -> None:
         assert cn_quality["warnings"] == ["source_status:tencent:cooldown"]
     finally:
         breaker.reset("akshare_tencent")
+
+
+def test_cn_realtime_rejects_tokens_without_runtime_handlers() -> None:
+    service = DataCapabilityService(
+        config=_config(realtime_source_priority="yfinance,efinance"),
+        fetcher_manager=_FetcherManager([
+            _Fetcher("YfinanceFetcher", 0, available=True),
+            _Fetcher("EfinanceFetcher", 1, available=True),
+        ]),
+    )
+
+    overview = service.get_overview()
+    cn_quality = _dataset(overview, "quote.realtime")["coverage"]["markets"]["cn"]
+    priorities = {item["scenario"]: item for item in overview["priorities"]}
+
+    assert priorities["cn.realtime"]["warnings"] == ["unknown_source:yfinance"]
+    assert cn_quality["status"] == "degraded"
+    assert cn_quality["source"] == "efinance"
+    assert cn_quality["fallback_from"] == ["yfinance"]
+    assert "source_status:yfinance:unsupported" in cn_quality["warnings"]
 
 
 def test_daily_dataset_quality_is_market_aware() -> None:
@@ -352,8 +373,28 @@ def test_index_daily_quality_honors_cn_index_circuit_breakers() -> None:
 
     assert index_quality["status"] == "degraded"
     assert index_quality["source"] == "akshare"
-    assert index_quality["fallback_from"] == ["tencent"]
-    assert index_quality["warnings"] == ["source_status:tencent:cooldown"]
+    assert index_quality["coverage"]["markets"]["cn.exchange"]["status"] == "degraded"
+    assert index_quality["coverage"]["markets"]["cn.exchange"]["fallback_from"] == ["tencent"]
+    assert index_quality["coverage"]["markets"]["cn.csi"]["status"] == "ok"
+    assert index_quality["fallback_from"] == ["cn.exchange:tencent"]
+    assert index_quality["warnings"] == ["cn.exchange:source_status:tencent:cooldown"]
+
+
+def test_index_daily_requires_akshare_for_csi_family() -> None:
+    service = DataCapabilityService(
+        config=_config(),
+        fetcher_manager=_FetcherManager([
+            _Fetcher("TencentFetcher", 0, available=True),
+            _Fetcher("AkshareFetcher", 1, available=False),
+        ]),
+    )
+
+    index_quality = _dataset(service.get_overview(), "index.daily")
+
+    assert index_quality["status"] == "partial"
+    assert index_quality["coverage"]["markets"]["cn.exchange"]["source"] == "tencent"
+    assert index_quality["coverage"]["markets"]["cn.csi"]["status"] == "unavailable"
+    assert index_quality["coverage"]["markets"]["cn.csi"]["source"] is None
 
 
 def test_fundamental_dataset_quality_is_market_aware() -> None:
