@@ -938,7 +938,7 @@ class AlertRuleRecord(Base):
     __tablename__ = 'alert_rules'
 
     id = Column(Integer, primary_key=True, autoincrement=True)
-    lifecycle_id = Column(String(36), nullable=False, default=lambda: str(uuid.uuid4()), index=True)
+    lifecycle_id = Column(String(36), nullable=True, default=lambda: str(uuid.uuid4()), index=True)
     name = Column(String(64), nullable=False)
     target_scope = Column(String(32), nullable=False, default='single_symbol', index=True)
     target = Column(String(64), nullable=False, index=True)

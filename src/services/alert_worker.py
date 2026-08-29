@@ -207,6 +207,11 @@ class AlertWorker:
 
         for row in self.service.repo.list_enabled_rules(limit=ALERT_WORKER_RULE_LIMIT):
             try:
+                lifecycle_id = getattr(row, "lifecycle_id", None)
+                if not lifecycle_id:
+                    lifecycle_id = self.service.repo.ensure_rule_lifecycle(int(row.id))
+                if not lifecycle_id:
+                    raise ValueError("persisted alert rule has no lifecycle identity")
                 cooldown_policy = self.service._load_json(row.cooldown_policy, default=None)
                 for payload in self.service.build_runtime_payloads(row, config=config, include_overflow_payload=False):
                     if len(runtime_rules) >= ALERT_WORKER_RULE_LIMIT:
@@ -224,7 +229,7 @@ class AlertWorker:
                             cooldown_policy=cooldown_policy,
                             effective_target=payload.effective_target,
                             display_target=payload.display_target,
-                            rule_lifecycle_id=str(row.lifecycle_id),
+                            rule_lifecycle_id=str(lifecycle_id),
                         )
                     )
                     seen_keys.add(payload.key)

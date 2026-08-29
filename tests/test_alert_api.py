@@ -951,6 +951,38 @@ class AlertApiTestCase(unittest.TestCase):
         self.assertEqual(by_rule_id[rule["id"]]["trigger_count"], 0)
         self.assertEqual(payload["orphaned_trigger_count"], 1)
 
+    def test_rolling_upgrade_assigns_lifecycle_to_rule_created_by_old_process(self) -> None:
+        connection = sqlite3.connect(self.db_path)
+        try:
+            cursor = connection.execute(
+                "INSERT INTO alert_rules "
+                "(name, target_scope, target, alert_type, parameters, severity, enabled, source) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                (
+                    "legacy-process-rule",
+                    "single_symbol",
+                    "600519",
+                    "price_cross",
+                    '{"direction":"above","price":1800}',
+                    "warning",
+                    True,
+                    "api",
+                ),
+            )
+            rule_id = int(cursor.lastrowid)
+            connection.commit()
+        finally:
+            connection.close()
+
+        repo = AlertRepository(self.db)
+        self.assertIsNone(repo.get_rule(rule_id).lifecycle_id)
+
+        assigned = repo.ensure_rule_lifecycle(rule_id)
+
+        self.assertIsNotNone(assigned)
+        self.assertEqual(repo.get_rule(rule_id).lifecycle_id, assigned)
+        self.assertEqual(repo.ensure_rule_lifecycle(rule_id), assigned)
+
     def test_monitor_summary_uses_one_read_snapshot_during_concurrent_trigger_write(self) -> None:
         rule = self._create_rule({"name": "snapshot", "target": "600519"})
         AlertRepository(self.db).create_trigger(

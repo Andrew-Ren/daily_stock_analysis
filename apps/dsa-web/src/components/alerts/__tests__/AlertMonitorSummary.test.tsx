@@ -37,9 +37,9 @@ describe('AlertMonitorSummary', () => {
     expect(screen.getByText('监控概览')).toBeInTheDocument();
     expect(screen.getByText('25')).toBeInTheDocument();
     expect(screen.getByText('41')).toBeInTheDocument();
-    expect(screen.getByText('无 rule_id：1；规则已删除：2')).toBeInTheDocument();
+    expect(screen.getByText('无 rule_id：1；生命周期无法匹配：2')).toBeInTheDocument();
     expect(screen.getByText('#7 组合回撤')).toBeInTheDocument();
     expect(screen.getByText('9 次')).toBeInTheDocument();
-    expect(screen.getByText(/只按 rule_id 关联/)).toBeInTheDocument();
+    expect(screen.getByText(/按 rule_id \+ lifecycle 关联/)).toBeInTheDocument();
   });
 });

@@ -31,7 +31,7 @@ export const AlertMonitorSummary: React.FC<Props> = ({ summary, loading = false 
           <InlineAlert
             variant="warning"
             title="存在无法完整归因的触发记录"
-            message={`无 rule_id：${summary.unattributedTriggerCount}；规则已删除：${summary.orphanedTriggerCount}`}
+            message={`无 rule_id：${summary.unattributedTriggerCount}；生命周期无法匹配：${summary.orphanedTriggerCount}`}
           />
         ) : null}
         <div className="grid gap-3 md:grid-cols-3">
@@ -76,7 +76,7 @@ export const AlertMonitorSummary: React.FC<Props> = ({ summary, loading = false 
           </section>
         </div>
         <div className="flex items-center gap-2 text-xs text-muted-text">
-          <Link2Off className="h-3.5 w-3.5" />触发归因只按 rule_id 关联，不按股票 target 猜测规则。
+          <Link2Off className="h-3.5 w-3.5" />触发归因按 rule_id + lifecycle 关联，不按股票 target 猜测规则。
         </div>
       </div>
     ) : null}

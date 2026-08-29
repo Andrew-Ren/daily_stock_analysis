@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import json
 import os
+import sqlite3
 import tempfile
 import unittest
 from datetime import date
@@ -315,6 +316,40 @@ class AlertWorkerTestCase(unittest.TestCase):
         else:
             notifier.send_with_results.side_effect = list(results)
         return notifier
+
+    def test_load_runtime_rules_repairs_rule_created_by_old_process(self) -> None:
+        connection = sqlite3.connect(self.db_path)
+        try:
+            cursor = connection.execute(
+                "INSERT INTO alert_rules "
+                "(name, target_scope, target, alert_type, parameters, severity, enabled, source) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                (
+                    "legacy-process-rule",
+                    "single_symbol",
+                    "600519",
+                    "price_cross",
+                    '{"direction":"above","price":1800}',
+                    "warning",
+                    True,
+                    "api",
+                ),
+            )
+            rule_id = int(cursor.lastrowid)
+            connection.commit()
+        finally:
+            connection.close()
+
+        worker = AlertWorker(config_provider=lambda: self._config(), service=self.service)
+        runtime_rules = worker._load_runtime_rules(self._config())
+
+        self.assertEqual(len(runtime_rules), 1)
+        self.assertEqual(runtime_rules[0].source, "db")
+        self.assertIsNotNone(runtime_rules[0].rule_lifecycle_id)
+        self.assertEqual(
+            self.service.repo.get_rule(rule_id).lifecycle_id,
+            runtime_rules[0].rule_lifecycle_id,
+        )
 
     def test_p6_triggered_stock_alert_links_latest_active_decision_signal(self) -> None:
         self._create_rule(target="600519")

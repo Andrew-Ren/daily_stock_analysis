@@ -8,8 +8,9 @@ from __future__ import annotations
 
 from datetime import datetime
 from typing import Any, Dict, List, Optional, Tuple
+import uuid
 
-from sqlalchemy import and_, case, delete, desc, func, select
+from sqlalchemy import and_, case, delete, desc, func, or_, select, update
 
 from src.storage import (
     AlertCooldownRecord,
@@ -39,6 +40,30 @@ class AlertRepository:
             return session.execute(
                 select(AlertRuleRecord).where(AlertRuleRecord.id == rule_id).limit(1)
             ).scalar_one_or_none()
+
+    def ensure_rule_lifecycle(self, rule_id: int) -> Optional[str]:
+        """Atomically assign a lifecycle to a rule created by an older process."""
+        lifecycle_id = str(uuid.uuid4())
+
+        def assign(session) -> Optional[str]:
+            session.execute(
+                update(AlertRuleRecord)
+                .where(
+                    AlertRuleRecord.id == rule_id,
+                    or_(
+                        AlertRuleRecord.lifecycle_id.is_(None),
+                        AlertRuleRecord.lifecycle_id == "",
+                    ),
+                )
+                .values(lifecycle_id=lifecycle_id)
+            )
+            return session.execute(
+                select(AlertRuleRecord.lifecycle_id)
+                .where(AlertRuleRecord.id == rule_id)
+                .limit(1)
+            ).scalar_one_or_none()
+
+        return self.db._run_write_transaction("ensure_alert_rule_lifecycle", assign)
 
     def update_rule(self, rule_id: int, fields: Dict[str, Any]) -> Optional[AlertRuleRecord]:
         with self.db.get_session() as session:
