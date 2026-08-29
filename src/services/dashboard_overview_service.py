@@ -16,6 +16,7 @@ from src.services.task_queue import AnalysisTaskQueue, get_task_queue
 _MARKET_REVIEW_TYPE = "market_review"
 _DASHBOARD_HISTORY_PAGE_SIZE = 50
 _DASHBOARD_MARKET_REVIEW_SCAN_LIMIT = 100
+_DASHBOARD_RECENT_REPORT_SCAN_LIMIT = 100
 
 
 class DashboardOverviewService:
@@ -225,6 +226,9 @@ class DashboardOverviewService:
                 )
                 scanned_count += len(history_items)
                 if len(recent_reports) >= 5 or scanned_count >= total:
+                    break
+                if scanned_count >= _DASHBOARD_RECENT_REPORT_SCAN_LIMIT:
+                    limitations.append("recent_reports_history_scan_incomplete")
                     break
                 if not history_items:
                     limitations.append("recent_reports_history_scan_incomplete")
