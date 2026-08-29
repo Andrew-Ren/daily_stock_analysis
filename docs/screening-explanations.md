@@ -20,7 +20,7 @@
 
 ## Why Now
 
-时点解释只使用带来源的证据：DSA 新闻、事件，以及 `dsa_context.quote` 中明确存在的实时行情字段。事件还必须带可解析的 `published_date`，且发布时间在最近 30 天内；解析复用 SearchService 已支持的 ISO、RFC 2822、中文日期、Unix timestamp 和相对日期格式。缺日期或过期事件不标记为 observed。候选顶层的 `change_pct=0` 或 `amount=0` 不能单独证明数据真实存在，因为旧数据源可能用 0 表示缺失；没有 quote provenance 时返回 `awaiting_evidence`，不会写成“当前涨跌幅 0%”。
+时点解释只使用带来源的证据：DSA 新闻、事件，以及 `dsa_context.quote` 中明确存在的实时行情字段。新闻与事件都必须带可解析的 `published_date`，且发布时间在最近 30 天内；解析复用 SearchService 已支持的 ISO、RFC 2822、中文日期、Unix timestamp 和相对日期格式。缺日期或过期的新闻/事件不标记为 observed，包括复用已补充候选上下文而未重新搜索的路径。候选顶层的 `change_pct=0` 或 `amount=0` 不能单独证明数据真实存在，因为旧数据源可能用 0 表示缺失；没有 quote provenance 时返回 `awaiting_evidence`，不会写成“当前涨跌幅 0%”。
 
 当 `dsa_context.quote.change_pct` 明确存在且为 `0` 时，它是合法平盘数据，返回 `value=0` 和 `quality=observed`。LLM catalyst 可作为 `inferred` 补充，但不能冒充观测事实。
 若 quote 标记 `is_stale`/`price_stale`，或质量为 partial/unavailable/stale/missing/fetch_failed，则其中数值不进入 Why Now observed；没有其他新鲜证据时返回 `awaiting_evidence`。

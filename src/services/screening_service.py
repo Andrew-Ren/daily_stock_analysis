@@ -3861,6 +3861,7 @@ def _attach_candidate_explanations(candidate: Dict[str, Any]) -> Dict[str, Any]:
                 for item in news_items
                 if isinstance(item, dict)
                 and str(item.get("source") or "").strip()
+                and _is_recent_explanation_item(item)
                 and str(item.get("title") or item.get("snippet") or "").strip()
             ),
             None,

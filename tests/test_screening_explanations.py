@@ -213,6 +213,45 @@ def test_stale_or_undated_events_are_not_why_now_evidence() -> None:
     assert [item["code"] for item in result["why_now"]] == ["awaiting_evidence"]
 
 
+def test_stale_or_undated_news_is_not_why_now_evidence() -> None:
+    stale_date = (datetime.now(timezone.utc) - timedelta(days=31)).isoformat()
+    candidate = {
+        "rank": 9,
+        "reason": "local reason",
+        "factor_scores": {},
+        "dsa_context": {},
+        "dsa_news": [
+            {"title": "Stale news", "source": "wire", "published_date": stale_date},
+            {"title": "Undated news", "source": "wire"},
+        ],
+        "dsa_events": [],
+    }
+
+    result = _attach_candidate_explanations(candidate)
+
+    assert [item["code"] for item in result["why_now"]] == ["awaiting_evidence"]
+
+
+def test_recent_news_with_source_is_observed_why_now_evidence() -> None:
+    candidate = {
+        "rank": 10,
+        "reason": "local reason",
+        "factor_scores": {},
+        "dsa_context": {},
+        "dsa_news": [{
+            "title": "Recent news",
+            "source": "wire",
+            "published_date": "2 days ago",
+        }],
+        "dsa_events": [],
+    }
+
+    result = _attach_candidate_explanations(candidate)
+
+    assert result["why_now"][0]["code"] == "news"
+    assert result["why_now"][0]["quality"] == "observed"
+
+
 def test_recent_event_with_source_is_observed_why_now_evidence() -> None:
     candidate = {
         "rank": 9,
