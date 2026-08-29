@@ -1487,26 +1487,35 @@ class DatabaseManager(metaclass=_DatabaseManagerMeta):
         trigger_columns = {
             column["name"] for column in inspector.get_columns(AlertTriggerRecord.__tablename__)
         }
+        for table, column, column_type, existing in (
+            ("alert_rules", "lifecycle_id", "VARCHAR(36)", rule_columns),
+            ("alert_triggers", "rule_lifecycle_id", "VARCHAR(36)", trigger_columns),
+        ):
+            if column in existing:
+                continue
+            for attempt in range(self._sqlite_write_retry_max + 1):
+                try:
+                    with self._engine.begin() as connection:
+                        connection.exec_driver_sql(
+                            f"ALTER TABLE {table} ADD COLUMN {column} {column_type}"
+                        )
+                    existing.add(column)
+                    break
+                except OperationalError as exc:
+                    if self._is_sqlite_duplicate_column_error(exc, column):
+                        existing.add(column)
+                        break
+                    if self._is_sqlite_locked_error(exc) and attempt < self._sqlite_write_retry_max:
+                        delay = self._sqlite_write_retry_base_delay * (2 ** attempt)
+                        if delay > 0:
+                            time.sleep(delay)
+                        continue
+                    raise
+
         with self._engine.begin() as connection:
-            if "lifecycle_id" not in rule_columns:
-                connection.exec_driver_sql(
-                    "ALTER TABLE alert_rules ADD COLUMN lifecycle_id VARCHAR(36)"
-                )
-            if "rule_lifecycle_id" not in trigger_columns:
-                connection.exec_driver_sql(
-                    "ALTER TABLE alert_triggers ADD COLUMN rule_lifecycle_id VARCHAR(36)"
-                )
             connection.exec_driver_sql(
                 "UPDATE alert_rules SET lifecycle_id = lower(hex(randomblob(16))) "
                 "WHERE lifecycle_id IS NULL OR lifecycle_id = ''"
-            )
-            connection.exec_driver_sql(
-                "UPDATE alert_triggers SET rule_lifecycle_id = ("
-                "SELECT lifecycle_id FROM alert_rules "
-                "WHERE alert_rules.id = alert_triggers.rule_id "
-                "AND alert_triggers.triggered_at IS NOT NULL "
-                "AND alert_triggers.triggered_at >= alert_rules.created_at"
-                ") WHERE rule_lifecycle_id IS NULL"
             )
             connection.exec_driver_sql(
                 "CREATE INDEX IF NOT EXISTS ix_alert_rules_lifecycle_id "

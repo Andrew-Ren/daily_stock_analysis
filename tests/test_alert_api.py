@@ -932,6 +932,25 @@ class AlertApiTestCase(unittest.TestCase):
         self.assertEqual(by_rule_id[replacement_rule["id"]]["trigger_count"], 0)
         self.assertEqual(payload["orphaned_trigger_count"], 1)
 
+    def test_monitor_summary_keeps_lifecycle_less_legacy_trigger_orphaned(self) -> None:
+        rule = self._create_rule({"name": "current", "target": "600519"})
+        with self.db.get_session() as session:
+            session.add(
+                AlertTriggerRecord(
+                    rule_id=rule["id"],
+                    rule_lifecycle_id=None,
+                    target="600519",
+                    status="triggered",
+                )
+            )
+            session.commit()
+
+        payload = self.client.get("/api/v1/alerts/summary").json()
+
+        by_rule_id = {item["rule_id"]: item for item in payload["rules"]}
+        self.assertEqual(by_rule_id[rule["id"]]["trigger_count"], 0)
+        self.assertEqual(payload["orphaned_trigger_count"], 1)
+
     def test_monitor_summary_uses_one_read_snapshot_during_concurrent_trigger_write(self) -> None:
         rule = self._create_rule({"name": "snapshot", "target": "600519"})
         AlertRepository(self.db).create_trigger(
