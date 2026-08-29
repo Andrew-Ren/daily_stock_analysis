@@ -79,7 +79,7 @@ _PROVIDER_DEFINITIONS: Sequence[_ProviderDefinition] = (
         dataset_markets={
             "quote.realtime": ("hk", "us", "jp", "kr", "tw"),
             "kline.daily": ("cn", "hk", "us", "jp", "kr", "tw"),
-            "index.daily": ("cn", "hk", "us", "jp", "kr", "tw"),
+            "index.daily": ("cn", "us"),
             "market.overview": ("cn", "hk", "us", "jp", "kr", "tw"),
             "financial.snapshot": ("hk", "us", "jp", "kr", "tw"),
         },
@@ -90,7 +90,6 @@ _PROVIDER_DEFINITIONS: Sequence[_ProviderDefinition] = (
         label="PyTDX",
         fetcher_name="PytdxFetcher",
         dataset_markets={
-            "quote.realtime": ("cn",),
             "kline.daily": ("cn",),
         },
         builtin=True,
@@ -232,9 +231,16 @@ def _split_priority(value: Any) -> List[str]:
 class DataCapabilityService:
     """Build side-effect-light provider capability and dataset quality snapshots."""
 
-    def __init__(self, *, config: Any = None, fetcher_manager: Any = None) -> None:
+    def __init__(
+        self,
+        *,
+        config: Any = None,
+        fetcher_manager: Any = None,
+        runtime_scheduler: Any = None,
+    ) -> None:
         self.config = config or get_config()
         self.fetcher_manager = fetcher_manager
+        self.runtime_scheduler = runtime_scheduler
 
     def get_overview(self) -> Dict[str, Any]:
         """Return a read-only data capability overview."""
@@ -398,6 +404,13 @@ class DataCapabilityService:
         cn_index_daily = ["tencent", "akshare", "tickflow", "yfinance"]
         market_overview = self._market_overview_priority(generic_daily)
         screening_priority = self._screening_snapshot_priority()
+        hk_realtime_priority = _split_priority(
+            getattr(self.config, "futu_hk_realtime_source_priority", "")
+        )
+        if not self._is_provider_configured(_PROVIDER_DEFINITION_MAP["futu"]):
+            hk_realtime_priority = [
+                provider for provider in hk_realtime_priority if provider != "futu"
+            ]
 
         return [
             self._priority_view(
@@ -408,7 +421,7 @@ class DataCapabilityService:
             ),
             self._priority_view(
                 "hk.realtime",
-                _split_priority(getattr(self.config, "futu_hk_realtime_source_priority", "")),
+                hk_realtime_priority,
                 "Config.futu_hk_realtime_source_priority",
                 known_sources={"futu", "longbridge", "akshare", "yfinance"},
             ),
@@ -561,12 +574,7 @@ class DataCapabilityService:
             ),
             self._news_events_dataset(),
             self._screening_dataset(priority_map.get("screening.snapshot", {})),
-            self._local_dataset(
-                "alert.monitor",
-                "alerts",
-                enabled=bool(getattr(self.config, "agent_event_monitor_enabled", False)),
-                disabled_warning="agent_event_monitor_disabled",
-            ),
+            self._alert_monitor_dataset(),
             self._local_dataset("portfolio.account", "portfolio"),
         ]
         return datasets
@@ -1050,6 +1058,28 @@ class DataCapabilityService:
             "coverage": None,
             "warnings": [],
         }
+
+    def _alert_monitor_dataset(self) -> Dict[str, Any]:
+        if not bool(getattr(self.config, "agent_event_monitor_enabled", False)):
+            return self._local_dataset(
+                "alert.monitor",
+                "alerts",
+                enabled=False,
+                disabled_warning="agent_event_monitor_disabled",
+            )
+        active = False
+        checker = getattr(self.runtime_scheduler, "is_background_task_active", None)
+        if callable(checker):
+            try:
+                active = bool(checker("agent_event_monitor"))
+            except Exception as exc:  # noqa: BLE001 - diagnostics must fail open.
+                logger.debug("Failed to probe Event Monitor scheduler state: %s", exc)
+        return self._local_dataset(
+            "alert.monitor",
+            "alerts",
+            enabled=active,
+            disabled_warning="agent_event_monitor_not_running",
+        )
 
     @staticmethod
     def _news_events_dataset() -> Dict[str, Any]:

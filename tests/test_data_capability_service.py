@@ -46,6 +46,14 @@ class _FetcherManager:
         return list(self._fetchers)
 
 
+class _RuntimeScheduler:
+    def __init__(self, active: bool) -> None:
+        self.active = active
+
+    def is_background_task_active(self, name: str) -> bool:
+        return self.active and name == "agent_event_monitor"
+
+
 def _config(**overrides):
     values = {
         "tushare_token": None,
@@ -115,7 +123,7 @@ def test_realtime_dataset_degrades_when_first_priority_source_is_unconfigured() 
 
     assert quote_quality["status"] == "degraded"
     assert quote_quality["source"] is None
-    assert quote_quality["fallback_from"] == ["cn:tushare", "hk:futu", "hk:longbridge"]
+    assert quote_quality["fallback_from"] == ["cn:tushare", "hk:longbridge"]
     assert quote_quality["coverage"]["markets"]["cn"]["status"] == "degraded"
     assert quote_quality["coverage"]["markets"]["cn"]["source"] == "efinance"
     assert "cn:source_status:tushare:unconfigured" in quote_quality["warnings"]
@@ -184,6 +192,25 @@ def test_provider_dataset_market_matrix_matches_fundamental_runtime_routes() -> 
         "kr",
         "tw",
     ]
+    assert _provider(overview, "yfinance")["dataset_markets"]["index.daily"] == [
+        "cn",
+        "us",
+    ]
+    assert "quote.realtime" not in _provider(overview, "pytdx")["datasets"]
+
+
+def test_hk_realtime_priority_skips_futu_when_opend_is_unconfigured() -> None:
+    service = DataCapabilityService(
+        config=_config(futu_opend_host=None),
+        fetcher_manager=_FetcherManager([_Fetcher("YfinanceFetcher", 4, available=True)]),
+    )
+
+    overview = service.get_overview()
+    priorities = {item["scenario"]: item for item in overview["priorities"]}
+    hk_quality = _dataset(overview, "quote.realtime")["coverage"]["markets"]["hk"]
+
+    assert priorities["hk.realtime"]["providers"] == ["longbridge", "akshare", "yfinance"]
+    assert "futu" not in hk_quality["fallback_from"]
 
 
 def test_realtime_dataset_quality_is_market_aware() -> None:
@@ -704,10 +731,25 @@ def test_disabled_runtime_features_surface_dataset_quality_warnings() -> None:
     assert _dataset(overview, "news.events")["source"] is None
 
 
-def test_enabled_alert_monitor_surfaces_local_dataset_as_available() -> None:
+def test_enabled_alert_monitor_requires_a_registered_live_scheduler_task() -> None:
     service = DataCapabilityService(
         config=_config(agent_event_monitor_enabled=True),
         fetcher_manager=_FetcherManager([]),
+        runtime_scheduler=_RuntimeScheduler(active=False),
+    )
+
+    quality = _dataset(service.get_overview(), "alert.monitor")
+
+    assert quality["status"] == "unavailable"
+    assert quality["source"] is None
+    assert quality["warnings"] == ["agent_event_monitor_not_running"]
+
+
+def test_running_alert_monitor_surfaces_local_dataset_as_available() -> None:
+    service = DataCapabilityService(
+        config=_config(agent_event_monitor_enabled=True),
+        fetcher_manager=_FetcherManager([]),
+        runtime_scheduler=_RuntimeScheduler(active=True),
     )
 
     quality = _dataset(service.get_overview(), "alert.monitor")
@@ -761,8 +803,9 @@ def test_data_capability_api_paths_return_valid_contract() -> None:
     }
 
     class _Service:
-        def __init__(self, *, config) -> None:
+        def __init__(self, *, config, runtime_scheduler=None) -> None:
             self.config = config
+            self.runtime_scheduler = runtime_scheduler
 
         def get_overview(self):
             return overview_payload
