@@ -6,7 +6,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 
-from data_provider.base import canonical_stock_code, normalize_stock_code
+from data_provider.base import canonical_stock_code
 from src.analysis_context_pack_overview import extract_analysis_context_pack_overview
 from src.repositories.portfolio_repo import PortfolioRepository
 from src.services.alert_service import AlertService
@@ -22,6 +22,10 @@ from src.utils.data_processing import (
 )
 
 _BLOCK_NAMES = ("quote", "history", "research", "intelligence", "portfolio", "monitors")
+
+
+class InvalidStockProfileCode(ValueError):
+    """Raised when a stock profile request has no unambiguous shared identity."""
 
 
 class StockProfileService:
@@ -66,10 +70,9 @@ class StockProfileService:
     def canonicalize_code(value: str) -> str:
         raw = str(value or "").strip()
         identity = resolve_daily_stock_identity(raw)
-        if identity is not None:
-            normalized = canonical_stock_code(identity.refill_code or identity.normalized_code)
-        else:
-            normalized = canonical_stock_code(normalize_stock_code(raw))
+        if identity is None:
+            raise InvalidStockProfileCode("stock code has no unambiguous market identity")
+        normalized = canonical_stock_code(identity.refill_code or identity.normalized_code)
         if normalized.isdigit() and len(normalized) == 5:
             return f"HK{normalized.zfill(5)}"
         return normalized.upper()

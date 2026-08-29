@@ -10,11 +10,12 @@ from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 from fastapi.testclient import TestClient
+import pytest
 
 import src.auth as auth
 from api.app import create_app
 from src.config import Config
-from src.services.stock_profile_service import StockProfileService
+from src.services.stock_profile_service import InvalidStockProfileCode, StockProfileService
 from src.storage import DatabaseManager
 
 
@@ -156,6 +157,17 @@ def test_profile_uses_one_canonical_code_and_returns_structured_research() -> No
         "aapl",
         "aapl.us",
     }
+
+
+@pytest.mark.parametrize("code", ["600519.SZ", "000001.SH", "920748.SH"])
+def test_profile_rejects_exchange_conflicts_before_downstream_queries(code: str) -> None:
+    service, dependencies = _service()
+
+    with pytest.raises(InvalidStockProfileCode):
+        service.get_profile(code)
+
+    dependencies["stock_service"].get_realtime_quote.assert_not_called()
+    dependencies["history_service"].get_history_list.assert_not_called()
 
 
 def test_profile_research_preserves_specialized_report_evidence() -> None:
@@ -552,6 +564,10 @@ def test_profile_endpoint_validates_code_and_exposes_contract() -> None:
                 two = client.get("/api/v1/stocks/6505.TWO/profile")
                 tw_etf = client.get("/api/v1/stocks/006208.TW/profile")
             invalid = client.get("/api/v1/stocks/invalid-code/profile")
+            conflicts = [
+                client.get(f"/api/v1/stocks/{code}/profile")
+                for code in ("600519.SZ", "000001.SH", "920748.SH")
+            ]
 
             assert response.status_code == 200, response.text
             assert response.json()["canonical_code"] == "AAPL"
@@ -572,6 +588,11 @@ def test_profile_endpoint_validates_code_and_exposes_contract() -> None:
                 {"history_days": 60},
             ]
             assert invalid.status_code == 400
+            assert [item.status_code for item in conflicts] == [400, 400, 400]
+            assert {
+                item.json()["error"]
+                for item in conflicts
+            } == {"invalid_stock_code"}
             assert jp.status_code == 200
             assert kr.status_code == 200
             assert tw.status_code == 200

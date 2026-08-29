@@ -40,7 +40,7 @@ from src.services.import_parser import (
     parse_import_from_text,
 )
 from src.services.stock_service import StockService
-from src.services.stock_profile_service import StockProfileService
+from src.services.stock_profile_service import InvalidStockProfileCode, StockProfileService
 from src.services.run_diagnostics import sanitize_diagnostic_text
 from src.services.stock_list_parser import split_stock_list
 from src.services.system_config_service import SystemConfigService
@@ -430,6 +430,11 @@ def get_stock_profile(
     try:
         return StockProfileResponse(
             **StockProfileService().get_profile(stock_code, history_days=history_days)
+        )
+    except InvalidStockProfileCode:
+        raise HTTPException(
+            status_code=400,
+            detail={"error": "invalid_stock_code", "message": "股票代码与交易所不匹配"},
         )
     except Exception as exc:
         sanitized = sanitize_diagnostic_text(str(exc), max_length=300) or "internal profile error"
