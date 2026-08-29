@@ -37,7 +37,7 @@ class EntityAction(BaseModel):
     action: EntityActionType
     label: str = Field("", description="Display label. Clients may localize by action.")
     href: Optional[str] = Field(None, description="Optional frontend route")
-    available: bool = Field(True, description="Whether this action is currently usable")
+    available: bool = Field(False, description="Whether this action is currently usable")
     disabled_reason: Optional[str] = Field(None, description="Stable reason when available=false")
     params: Dict[str, Any] = Field(default_factory=dict, description="Opaque action parameters")
 

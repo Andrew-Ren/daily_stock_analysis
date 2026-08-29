@@ -5,7 +5,7 @@ from __future__ import annotations
 
 import pytest
 
-from api.v1.schemas.entity_link import EntityLink
+from api.v1.schemas.entity_link import EntityAction, EntityLink
 from src.services.entity_link_service import (
     build_entity_link,
     build_stock_entity_link,
@@ -40,6 +40,13 @@ def test_stock_entity_link_uses_stable_ref_and_pending_view_route() -> None:
     assert actions["ask_ai"].disabled_reason == "stock_action_context_pending"
     assert actions["monitor"].href == "/alerts"
     assert actions["monitor"].params["target_entity_ref"] == "stock:CN:600519"
+
+
+def test_direct_entity_action_construction_defaults_to_unavailable() -> None:
+    action = EntityAction(action="view")
+
+    assert action.href is None
+    assert action.available is False
 
 
 def test_stock_entity_link_metadata_uses_canonical_entity_id_code() -> None:
