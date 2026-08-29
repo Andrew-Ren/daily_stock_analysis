@@ -113,6 +113,7 @@ class AlertRepository:
         self._validate_trigger_fields(fields)
 
         with self.db.get_session() as session:
+            fields = self._with_current_rule_lifecycle(session, fields)
             row = AlertTriggerRecord(**fields)
             session.add(row)
             session.commit()
@@ -136,8 +137,10 @@ class AlertRepository:
             )
 
         with self.db.get_session() as session:
+            fields = self._with_current_rule_lifecycle(session, fields)
             query = select(AlertTriggerRecord).where(
                 AlertTriggerRecord.rule_id == rule_id,
+                AlertTriggerRecord.rule_lifecycle_id == fields.get("rule_lifecycle_id"),
                 AlertTriggerRecord.target == fields.get("target"),
                 AlertTriggerRecord.status == "triggered",
                 AlertTriggerRecord.data_timestamp == data_timestamp,
@@ -159,6 +162,22 @@ class AlertRepository:
             session.commit()
             session.refresh(row)
             return row, True
+
+    @staticmethod
+    def _with_current_rule_lifecycle(session, fields: Dict[str, Any]) -> Dict[str, Any]:
+        """Fill lifecycle identity for direct repository callers; workers pass the loaded identity."""
+        if fields.get("rule_id") is None or fields.get("rule_lifecycle_id"):
+            return fields
+        lifecycle_id = session.execute(
+            select(AlertRuleRecord.lifecycle_id)
+            .where(AlertRuleRecord.id == fields["rule_id"])
+            .limit(1)
+        ).scalar_one_or_none()
+        if not lifecycle_id:
+            return fields
+        enriched = dict(fields)
+        enriched["rule_lifecycle_id"] = str(lifecycle_id)
+        return enriched
 
     @staticmethod
     def _validate_trigger_fields(fields: Dict[str, Any]) -> None:
@@ -296,10 +315,11 @@ class AlertRepository:
         """Aggregate the whole monitor dataset independently of list pagination."""
         safe_limit = max(1, min(int(rule_limit), 100))
         with self.db.get_session() as session:
+            if session.bind is not None and session.bind.dialect.name == "sqlite":
+                session.connection().exec_driver_sql("BEGIN")
             trigger_belongs_to_rule = and_(
                 AlertTriggerRecord.rule_id == AlertRuleRecord.id,
-                AlertTriggerRecord.triggered_at.is_not(None),
-                AlertTriggerRecord.triggered_at >= AlertRuleRecord.created_at,
+                AlertTriggerRecord.rule_lifecycle_id == AlertRuleRecord.lifecycle_id,
             )
             rules_total = session.execute(
                 select(func.count(AlertRuleRecord.id)).select_from(AlertRuleRecord)

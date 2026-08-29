@@ -60,6 +60,7 @@ class RuntimeAlertRule:
     cooldown_policy: Optional[Dict[str, Any]] = None
     effective_target: Optional[str] = None
     display_target: Optional[str] = None
+    rule_lifecycle_id: Optional[str] = None
 
 
 @dataclass
@@ -223,6 +224,7 @@ class AlertWorker:
                             cooldown_policy=cooldown_policy,
                             effective_target=payload.effective_target,
                             display_target=payload.display_target,
+                            rule_lifecycle_id=str(row.lifecycle_id),
                         )
                     )
                     seen_keys.add(payload.key)
@@ -297,6 +299,9 @@ class AlertWorker:
 
         fields = {
             "rule_id": rule_id,
+            "rule_lifecycle_id": (
+                runtime_rule.rule_lifecycle_id if runtime_rule.source == "db" else None
+            ),
             "target": self._effective_target(runtime_rule),
             "observed_value": self._optional_float(result.get("observed_value")),
             "threshold": self._optional_float(result.get("threshold")),

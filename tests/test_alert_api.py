@@ -6,6 +6,7 @@ from __future__ import annotations
 import asyncio
 import json
 import os
+import sqlite3
 import sys
 import tempfile
 import unittest
@@ -16,6 +17,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pandas as pd
 from fastapi.testclient import TestClient
+from sqlalchemy import event
 
 try:
     import litellm  # noqa: F401
@@ -27,7 +29,14 @@ from api.app import create_app
 from src.config import Config
 from src.repositories.alert_repo import AlertRepository
 from src.services.portfolio_service import PortfolioService
-from src.storage import AlertCooldownRecord, AlertNotificationRecord, AlertTriggerRecord, Base, DatabaseManager
+from src.storage import (
+    AlertCooldownRecord,
+    AlertNotificationRecord,
+    AlertRuleRecord,
+    AlertTriggerRecord,
+    Base,
+    DatabaseManager,
+)
 
 
 def _reset_auth_globals() -> None:
@@ -848,11 +857,28 @@ class AlertApiTestCase(unittest.TestCase):
             for index in range(21)
         ]
         with self.db.get_session() as session:
+            first_lifecycle = session.get(AlertRuleRecord, rules[0]["id"]).lifecycle_id
+            second_lifecycle = session.get(AlertRuleRecord, rules[1]["id"]).lifecycle_id
             session.add_all(
                 [
-                    AlertTriggerRecord(rule_id=rules[0]["id"], target="600519", status="triggered"),
-                    AlertTriggerRecord(rule_id=rules[0]["id"], target="600519", status="degraded"),
-                    AlertTriggerRecord(rule_id=rules[1]["id"], target="600519", status="triggered"),
+                    AlertTriggerRecord(
+                        rule_id=rules[0]["id"],
+                        rule_lifecycle_id=first_lifecycle,
+                        target="600519",
+                        status="triggered",
+                    ),
+                    AlertTriggerRecord(
+                        rule_id=rules[0]["id"],
+                        rule_lifecycle_id=first_lifecycle,
+                        target="600519",
+                        status="degraded",
+                    ),
+                    AlertTriggerRecord(
+                        rule_id=rules[1]["id"],
+                        rule_lifecycle_id=second_lifecycle,
+                        target="600519",
+                        status="triggered",
+                    ),
                     AlertTriggerRecord(rule_id=None, target="600519", status="triggered"),
                     AlertTriggerRecord(rule_id=99999, target="600519", status="triggered"),
                 ]
@@ -880,20 +906,23 @@ class AlertApiTestCase(unittest.TestCase):
     def test_monitor_summary_does_not_attribute_deleted_rule_history_to_reused_id(self) -> None:
         deleted_rule = self._create_rule({"name": "deleted", "target": "600519"})
         with self.db.get_session() as session:
-            session.add(
-                AlertTriggerRecord(
-                    rule_id=deleted_rule["id"],
-                    target="600519",
-                    status="triggered",
-                    triggered_at=datetime(2025, 1, 1),
-                )
-            )
-            session.commit()
+            deleted_lifecycle = session.get(AlertRuleRecord, deleted_rule["id"]).lifecycle_id
 
         delete_response = self.client.delete(f"/api/v1/alerts/rules/{deleted_rule['id']}")
         self.assertEqual(delete_response.status_code, 200, delete_response.text)
         replacement_rule = self._create_rule({"name": "replacement", "target": "AAPL"})
         self.assertEqual(replacement_rule["id"], deleted_rule["id"])
+        with self.db.get_session() as session:
+            session.add(
+                AlertTriggerRecord(
+                    rule_id=deleted_rule["id"],
+                    rule_lifecycle_id=deleted_lifecycle,
+                    target="600519",
+                    status="triggered",
+                    triggered_at=datetime.now(),
+                )
+            )
+            session.commit()
 
         response = self.client.get("/api/v1/alerts/summary", params={"rule_limit": 100})
 
@@ -902,6 +931,43 @@ class AlertApiTestCase(unittest.TestCase):
         by_rule_id = {item["rule_id"]: item for item in payload["rules"]}
         self.assertEqual(by_rule_id[replacement_rule["id"]]["trigger_count"], 0)
         self.assertEqual(payload["orphaned_trigger_count"], 1)
+
+    def test_monitor_summary_uses_one_read_snapshot_during_concurrent_trigger_write(self) -> None:
+        rule = self._create_rule({"name": "snapshot", "target": "600519"})
+        AlertRepository(self.db).create_trigger(
+            {"rule_id": rule["id"], "target": "600519", "status": "triggered"}
+        )
+        inserted = False
+
+        def insert_after_trigger_total(_conn, _cursor, statement, _parameters, _context, _many) -> None:
+            nonlocal inserted
+            normalized = " ".join(statement.lower().split())
+            if inserted or "count(alert_triggers.id)" not in normalized:
+                return
+            inserted = True
+            writer = sqlite3.connect(self.db_path)
+            try:
+                writer.execute(
+                    "INSERT INTO alert_triggers "
+                    "(rule_id, target, status, triggered_at) VALUES (?, ?, ?, ?)",
+                    (rule["id"], "600519", "degraded", datetime.now()),
+                )
+                writer.commit()
+            finally:
+                writer.close()
+
+        event.listen(self.db._engine, "after_cursor_execute", insert_after_trigger_total)
+        try:
+            response = self.client.get("/api/v1/alerts/summary")
+        finally:
+            event.remove(self.db._engine, "after_cursor_execute", insert_after_trigger_total)
+
+        self.assertEqual(response.status_code, 200, response.text)
+        payload = response.json()
+        self.assertTrue(inserted)
+        self.assertEqual(payload["triggers_total"], 1)
+        self.assertEqual(sum(item["trigger_count"] for item in payload["trigger_statuses"]), 1)
+        self.assertEqual(self.client.get("/api/v1/alerts/triggers").json()["total"], 2)
 
     def test_monitor_summary_static_openapi_matches_runtime_contract(self) -> None:
         static_spec = json.loads(

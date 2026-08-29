@@ -18,6 +18,7 @@ import json
 import logging
 import threading
 import time
+import uuid
 from datetime import datetime, date, timedelta, timezone
 from typing import Optional, List, Dict, Any, TYPE_CHECKING, Tuple, Callable, TypeVar, Union
 
@@ -937,6 +938,7 @@ class AlertRuleRecord(Base):
     __tablename__ = 'alert_rules'
 
     id = Column(Integer, primary_key=True, autoincrement=True)
+    lifecycle_id = Column(String(36), nullable=False, default=lambda: str(uuid.uuid4()), index=True)
     name = Column(String(64), nullable=False)
     target_scope = Column(String(32), nullable=False, default='single_symbol', index=True)
     target = Column(String(64), nullable=False, index=True)
@@ -966,6 +968,7 @@ class AlertTriggerRecord(Base):
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     rule_id = Column(Integer, index=True)
+    rule_lifecycle_id = Column(String(36), index=True)
     target = Column(String(64), nullable=False, index=True)
     observed_value = Column(Float)
     threshold = Column(Float)
@@ -978,6 +981,7 @@ class AlertTriggerRecord(Base):
 
     __table_args__ = (
         Index('ix_alert_trigger_rule_time', 'rule_id', 'triggered_at'),
+        Index('ix_alert_trigger_rule_lifecycle', 'rule_id', 'rule_lifecycle_id'),
     )
 
 
@@ -1381,6 +1385,7 @@ class DatabaseManager(metaclass=_DatabaseManagerMeta):
             Base.metadata.create_all(self._engine)
             self._ensure_llm_usage_telemetry_columns()
             self._ensure_decision_signal_profile_schema()
+            self._ensure_alert_rule_lifecycle_schema()
             self._ensure_stock_daily_canonical_id()
             self._ensure_intelligence_item_scope_values()
             self._ensure_schema_migration_record()
@@ -1464,6 +1469,53 @@ class DatabaseManager(metaclass=_DatabaseManagerMeta):
 
         self._ensure_decision_signal_profile_indexes()
         self._backfill_decision_signal_profile_from_metadata()
+
+    def _ensure_alert_rule_lifecycle_schema(self) -> None:
+        """Add immutable alert-rule lifecycle identity to existing SQLite databases."""
+        if not self._is_sqlite_engine:
+            return
+        inspector = inspect(self._engine)
+        if not (
+            inspector.has_table(AlertRuleRecord.__tablename__)
+            and inspector.has_table(AlertTriggerRecord.__tablename__)
+        ):
+            return
+
+        rule_columns = {
+            column["name"] for column in inspector.get_columns(AlertRuleRecord.__tablename__)
+        }
+        trigger_columns = {
+            column["name"] for column in inspector.get_columns(AlertTriggerRecord.__tablename__)
+        }
+        with self._engine.begin() as connection:
+            if "lifecycle_id" not in rule_columns:
+                connection.exec_driver_sql(
+                    "ALTER TABLE alert_rules ADD COLUMN lifecycle_id VARCHAR(36)"
+                )
+            if "rule_lifecycle_id" not in trigger_columns:
+                connection.exec_driver_sql(
+                    "ALTER TABLE alert_triggers ADD COLUMN rule_lifecycle_id VARCHAR(36)"
+                )
+            connection.exec_driver_sql(
+                "UPDATE alert_rules SET lifecycle_id = lower(hex(randomblob(16))) "
+                "WHERE lifecycle_id IS NULL OR lifecycle_id = ''"
+            )
+            connection.exec_driver_sql(
+                "UPDATE alert_triggers SET rule_lifecycle_id = ("
+                "SELECT lifecycle_id FROM alert_rules "
+                "WHERE alert_rules.id = alert_triggers.rule_id "
+                "AND alert_triggers.triggered_at IS NOT NULL "
+                "AND alert_triggers.triggered_at >= alert_rules.created_at"
+                ") WHERE rule_lifecycle_id IS NULL"
+            )
+            connection.exec_driver_sql(
+                "CREATE INDEX IF NOT EXISTS ix_alert_rules_lifecycle_id "
+                "ON alert_rules (lifecycle_id)"
+            )
+            connection.exec_driver_sql(
+                "CREATE INDEX IF NOT EXISTS ix_alert_trigger_rule_lifecycle "
+                "ON alert_triggers (rule_id, rule_lifecycle_id)"
+            )
 
     def _ensure_decision_signal_profile_indexes(self) -> None:
         """Create profile-aware indexes without dropping legacy indexes."""

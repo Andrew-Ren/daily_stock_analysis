@@ -437,9 +437,10 @@ worker 会把 `triggered`、`skipped`、`degraded`、`failed` 写入 `alert_trig
 - `triggers_total`：全部触发记录数量；`trigger_statuses` 按实际状态聚合。
 - `rule_types`：按 `alert_type` 聚合规则数和已启用规则数。
 - `rules`：按触发次数、最近触发时间和规则 ID 排序的规则摘要，数量由 `rule_limit` 控制。
-- 触发归属使用持久化的 `rule_id`，并要求触发时间不早于当前同 ID 规则的创建时间，不会用股票代码、目标名称或当前分页结果猜测归属。这样 SQLite 删除规则后复用整数 ID 时，旧规则的触发历史不会归到新规则。`rule_id` 为空的记录计入 `unattributed_trigger_count`；引用已不存在规则或早于当前规则生命周期的记录计入 `orphaned_trigger_count`。
+- 触发归属使用 `rule_id + rule_lifecycle_id`：每次创建规则都会生成不可复用的 lifecycle ID，worker 在加载规则时固定该 ID，并随触发记录一起写入。即使旧 worker 已经开始计算、期间规则被删除且 SQLite 复用了整数 ID，迟到的旧触发也不会归到新规则。`rule_id` 为空的记录计入 `unattributed_trigger_count`；引用已不存在规则或 lifecycle 不匹配的记录计入 `orphaned_trigger_count`。
+- 摘要的总数、状态分组、规则分组和孤儿计数在同一个 SQLite 读事务快照内完成，后台 worker 同时写入触发记录时不会返回“总数小于状态分组之和”的自相矛盾结果。
 
-该概览是 Issue #2281 的基础阶段，只解决全局统计与可靠归属。它不引入“论文失效”规则类型，也不把普通告警命名为失效信号；`impact`、`affected_entities` 和新的 thesis invalidation 规则语义留待后续独立 PR。回滚时 revert API、repository、Web 和文档改动即可；没有数据库迁移，现有告警数据不受影响。
+该概览是 Issue #2281 的基础阶段，只解决全局统计与可靠归属。它不引入“论文失效”规则类型，也不把普通告警命名为失效信号；`impact`、`affected_entities` 和新的 thesis invalidation 规则语义留待后续独立 PR。启动时会为既有 SQLite 的 `alert_rules` / `alert_triggers` 增加 lifecycle 列，并只把能按原创建时间规则可靠匹配的既有触发回填到当前 lifecycle；无法可靠匹配的历史保留为 orphan。回滚代码不会自动删除新增列或历史数据，旧版本会忽略这些附加列。
 
 ## Phase 边界
 
