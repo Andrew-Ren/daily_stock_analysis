@@ -3,6 +3,8 @@
 
 from __future__ import annotations
 
+from types import SimpleNamespace
+
 from pydantic import ValidationError
 import pytest
 
@@ -91,7 +93,7 @@ def test_build_research_artifact_always_includes_invalidation_conditions() -> No
         "summary": {"analysis_summary": "等待更多证据", "sentiment_score": 50},
     }))
 
-    assert artifact.artifact_id == "report:q-empty"
+    assert artifact.artifact_id == "report:AAPL:q-empty"
     assert artifact.invalidation_conditions[0].id == "manual:thesis_reassessment"
     assert artifact.data_quality.level == "unknown"
 
@@ -104,3 +106,39 @@ def test_research_artifact_requires_invalidation_conditions() -> None:
             "thesis": {"summary": "missing invalidation"},
             "invalidation_conditions": [],
         })
+
+
+def test_fallback_artifact_id_is_unique_for_stocks_in_the_same_batch() -> None:
+    first = build_research_artifact({
+        "meta": {"query_id": "batch-1", "stock_code": "600519"},
+        "summary": {"analysis_summary": "first"},
+    })
+    second = build_research_artifact({
+        "meta": {"query_id": "batch-1", "stock_code": "000001"},
+        "summary": {"analysis_summary": "second"},
+    })
+
+    assert first["artifact_id"] == "report:600519:batch-1"
+    assert second["artifact_id"] == "report:000001:batch-1"
+    assert first["artifact_id"] != second["artifact_id"]
+
+
+def test_attribute_report_preserves_falsey_values() -> None:
+    report = SimpleNamespace(
+        meta=SimpleNamespace(query_id="batch-zero", stock_code="AAPL"),
+        summary=SimpleNamespace(
+            sentiment_score=0,
+            analysis_summary="zero is a real score",
+            action="",
+        ),
+        strategy=SimpleNamespace(),
+        details=SimpleNamespace(),
+    )
+
+    artifact = ResearchArtifact.model_validate(build_research_artifact(report))
+
+    assert artifact.artifact_id == "report:AAPL:batch-zero"
+    assert artifact.thesis.score == 0
+    assert artifact.thesis.confidence == 1.0
+    assert artifact.thesis.direction == "bearish"
+    assert artifact.thesis.action is None

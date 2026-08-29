@@ -30,7 +30,11 @@ def build_research_artifact(
     source_report_id = _as_int(_value(meta, "id"))
     query_id = _as_text(_value(meta, "query_id"))
     stock_code = _as_text(_value(meta, "stock_code")) or "UNKNOWN"
-    artifact_id = f"report:{source_report_id}" if source_report_id is not None else f"report:{query_id or stock_code}"
+    artifact_id = (
+        f"report:{source_report_id}"
+        if source_report_id is not None
+        else f"report:{stock_code}:{query_id}" if query_id else f"report:{stock_code}"
+    )
 
     evidence = _build_evidence(details, context_overview)
     if evidence_items is not None:
@@ -338,7 +342,9 @@ def _value(source: Any, key: str) -> Any:
             return source[key]
         camel_key = _snake_to_camel(key)
         return source.get(camel_key)
-    return getattr(source, key, None) or getattr(source, _snake_to_camel(key), None)
+    if hasattr(source, key):
+        return getattr(source, key)
+    return getattr(source, _snake_to_camel(key), None)
 
 
 def _snake_to_camel(value: str) -> str:

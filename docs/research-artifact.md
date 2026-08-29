@@ -15,7 +15,7 @@
 顶层结构：
 
 - `schema_version`：固定为 `research-artifact-v1`。
-- `artifact_id`：稳定产物 id，优先使用 `report:<source_report_id>`。
+- `artifact_id`：稳定产物 id，优先使用 `report:<source_report_id>`；尚未持久化时使用 `report:<stock_code>:<query_id>`，避免批量分析中多个股票共享 query id 造成碰撞；无 query id 时回退为 `report:<stock_code>`。
 - `source_report_id`：历史报告主键。
 - `source_query_id`：分析任务 query id。
 - `created_at`：报告创建时间。
@@ -71,6 +71,8 @@ structured_report?: ResearchArtifact | null
 ```
 
 旧报告可以继续不返回该字段；Web 类型和后端 schema 都按可选字段处理。
+
+本 PR 只定义 schema、类型和确定性 fallback helper，尚未把 helper 接入报告持久化或历史详情返回链路；该接线作为 #2278 的后续阶段完成。
 
 ## 实现入口
 
