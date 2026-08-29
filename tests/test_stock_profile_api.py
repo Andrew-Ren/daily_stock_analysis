@@ -148,15 +148,19 @@ def test_profile_uses_one_canonical_code_and_returns_structured_research() -> No
     assert {call.kwargs["scope_value"] for call in dependencies["intelligence_service"].list_items.call_args_list} == {
         "AAPL",
         "AAPL.US",
-        "aapl",
-        "aapl.us",
     }
     assert {call.kwargs["target"] for call in dependencies["alert_service"].list_rules.call_args_list} == {
         "AAPL",
         "AAPL.US",
-        "aapl",
-        "aapl.us",
     }
+    assert dependencies["intelligence_service"].list_items.call_count == 4
+    assert dependencies["alert_service"].list_rules.call_count == 2
+
+
+def test_profile_alias_queries_are_unique_by_casefolded_identity() -> None:
+    aliases = StockProfileService._code_aliases("600519", market_hint="cn")
+
+    assert len(aliases) == len({alias.casefold() for alias in aliases})
 
 
 @pytest.mark.parametrize("code", ["600519.SZ", "000001.SH", "920748.SH"])

@@ -334,6 +334,7 @@ class StockProfileService:
             if numeric_base.isdigit():
                 candidates.append(numeric_base)
         aliases: List[str] = []
+        seen_aliases = set()
         for candidate in candidates or [code]:
             candidate_text = str(candidate).strip()
             if not include_ambiguous_numeric and candidate_text.isdigit():
@@ -342,9 +343,10 @@ class StockProfileService:
                 unhinted_identity = resolve_daily_stock_identity(candidate_text)
                 if unhinted_identity is None or unhinted_identity.market != market:
                     continue
-            for alias in (candidate_text, candidate_text.lower()):
-                if alias and alias not in aliases:
-                    aliases.append(alias)
+            alias_key = candidate_text.casefold()
+            if candidate_text and alias_key not in seen_aliases:
+                seen_aliases.add(alias_key)
+                aliases.append(candidate_text)
         return aliases
 
     def _artifact_input(self, detail: Dict[str, Any]) -> Dict[str, Any]:
