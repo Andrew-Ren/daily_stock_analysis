@@ -2736,6 +2736,38 @@
           }
         }
       }
+    },
+    "/api/v1/dashboard/overview": {
+      "get": {
+        "tags": [
+          "Dashboard"
+        ],
+        "summary": "Get read-only dashboard overview",
+        "description": "Aggregate persisted and cached state without starting analysis or LLM work.",
+        "operationId": "get_dashboard_overview_api_v1_dashboard_overview_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DashboardOverviewResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
@@ -8362,6 +8394,477 @@
         ],
         "title": "DataProviderCapability",
         "description": "Visible capability metadata for one data provider."
+      },
+      "DashboardOverviewResponse": {
+        "properties": {
+          "as_of": {
+            "type": "string",
+            "title": "As Of"
+          },
+          "market": {
+            "$ref": "#/components/schemas/DashboardMarketBlock"
+          },
+          "personal": {
+            "$ref": "#/components/schemas/DashboardPersonalBlock"
+          },
+          "activity": {
+            "$ref": "#/components/schemas/DashboardActivityBlock"
+          },
+          "system": {
+            "$ref": "#/components/schemas/DashboardSystemBlock"
+          },
+          "what_changed": {
+            "$ref": "#/components/schemas/DashboardWhatChangedBlock"
+          }
+        },
+        "type": "object",
+        "required": [
+          "as_of",
+          "market",
+          "personal",
+          "activity",
+          "system",
+          "what_changed"
+        ],
+        "title": "DashboardOverviewResponse"
+      },
+      "DashboardWhatChangedBlock": {
+        "properties": {
+          "meta": {
+            "$ref": "#/components/schemas/DashboardBlockMeta"
+          },
+          "data": {
+            "$ref": "#/components/schemas/DashboardWhatChangedData"
+          }
+        },
+        "type": "object",
+        "required": [
+          "meta"
+        ],
+        "title": "DashboardWhatChangedBlock"
+      },
+      "DashboardWhatChangedData": {
+        "properties": {
+          "comparison_mode": {
+            "type": "string",
+            "const": "previous_completed_snapshot",
+            "title": "Comparison Mode",
+            "default": "previous_completed_snapshot"
+          },
+          "current_trade_dates": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "type": "object",
+            "title": "Current Trade Dates"
+          },
+          "previous_trade_dates": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "type": "object",
+            "title": "Previous Trade Dates"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/DashboardChangeItem"
+            },
+            "type": "array",
+            "title": "Items"
+          }
+        },
+        "type": "object",
+        "title": "DashboardWhatChangedData"
+      },
+      "DashboardChangeItem": {
+        "properties": {
+          "key": {
+            "type": "string",
+            "title": "Key"
+          },
+          "label": {
+            "type": "string",
+            "title": "Label"
+          },
+          "before": {
+            "anyOf": [
+              {},
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Before"
+          },
+          "after": {
+            "anyOf": [
+              {},
+              {
+                "type": "null"
+              }
+            ],
+            "title": "After"
+          },
+          "direction": {
+            "type": "string",
+            "enum": [
+              "increased",
+              "decreased",
+              "changed"
+            ],
+            "title": "Direction"
+          },
+          "source": {
+            "type": "string",
+            "title": "Source"
+          },
+          "quality": {
+            "type": "string",
+            "enum": [
+              "fresh",
+              "partial",
+              "unavailable"
+            ],
+            "title": "Quality"
+          }
+        },
+        "type": "object",
+        "required": [
+          "key",
+          "label",
+          "direction",
+          "source",
+          "quality"
+        ],
+        "title": "DashboardChangeItem"
+      },
+      "DashboardBlockMeta": {
+        "properties": {
+          "quality": {
+            "type": "string",
+            "enum": [
+              "fresh",
+              "partial",
+              "unavailable"
+            ],
+            "title": "Quality"
+          },
+          "sources": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Sources"
+          },
+          "stale": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Stale"
+          },
+          "limitations": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Limitations"
+          }
+        },
+        "type": "object",
+        "required": [
+          "quality"
+        ],
+        "title": "DashboardBlockMeta"
+      },
+      "DashboardSystemBlock": {
+        "properties": {
+          "meta": {
+            "$ref": "#/components/schemas/DashboardBlockMeta"
+          },
+          "data": {
+            "$ref": "#/components/schemas/DashboardSystemData"
+          }
+        },
+        "type": "object",
+        "required": [
+          "meta",
+          "data"
+        ],
+        "title": "DashboardSystemBlock"
+      },
+      "DashboardSystemData": {
+        "properties": {
+          "refresh_starts_analysis": {
+            "type": "boolean",
+            "const": false,
+            "title": "Refresh Starts Analysis",
+            "default": false
+          },
+          "generated_at": {
+            "type": "string",
+            "title": "Generated At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "generated_at"
+        ],
+        "title": "DashboardSystemData"
+      },
+      "DashboardActivityBlock": {
+        "properties": {
+          "meta": {
+            "$ref": "#/components/schemas/DashboardBlockMeta"
+          },
+          "data": {
+            "$ref": "#/components/schemas/DashboardActivityData"
+          }
+        },
+        "type": "object",
+        "required": [
+          "meta"
+        ],
+        "title": "DashboardActivityBlock"
+      },
+      "DashboardActivityData": {
+        "properties": {
+          "recent_reports": {
+            "items": {
+              "$ref": "#/components/schemas/HistoryItem"
+            },
+            "type": "array",
+            "title": "Recent Reports"
+          },
+          "task_stats": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "type": "object",
+            "title": "Task Stats"
+          }
+        },
+        "type": "object",
+        "title": "DashboardActivityData"
+      },
+      "DashboardPersonalBlock": {
+        "properties": {
+          "meta": {
+            "$ref": "#/components/schemas/DashboardBlockMeta"
+          },
+          "data": {
+            "$ref": "#/components/schemas/DashboardPersonalData"
+          }
+        },
+        "type": "object",
+        "required": [
+          "meta"
+        ],
+        "title": "DashboardPersonalBlock"
+      },
+      "DashboardPersonalData": {
+        "properties": {
+          "watchlist_count": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Watchlist Count"
+          },
+          "cached_position_count": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cached Position Count"
+          },
+          "active_monitor_count": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Active Monitor Count"
+          }
+        },
+        "type": "object",
+        "title": "DashboardPersonalData"
+      },
+      "DashboardMarketBlock": {
+        "properties": {
+          "meta": {
+            "$ref": "#/components/schemas/DashboardBlockMeta"
+          },
+          "data": {
+            "$ref": "#/components/schemas/DashboardMarketData"
+          }
+        },
+        "type": "object",
+        "required": [
+          "meta"
+        ],
+        "title": "DashboardMarketBlock"
+      },
+      "DashboardMarketData": {
+        "properties": {
+          "review_count": {
+            "type": "integer",
+            "title": "Review Count",
+            "default": 0
+          },
+          "latest_reviews": {
+            "items": {
+              "$ref": "#/components/schemas/HistoryItem"
+            },
+            "type": "array",
+            "title": "Latest Reviews"
+          },
+          "latest_snapshots": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/MarketLightSnapshot"
+            },
+            "type": "object",
+            "title": "Latest Snapshots"
+          }
+        },
+        "type": "object",
+        "title": "DashboardMarketData"
+      },
+      "MarketLightSnapshot": {
+        "properties": {
+          "region": {
+            "type": "string",
+            "enum": [
+              "cn",
+              "hk",
+              "us",
+              "jp",
+              "kr"
+            ],
+            "title": "Region"
+          },
+          "trade_date": {
+            "type": "string",
+            "title": "Trade Date"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "green",
+              "yellow",
+              "red"
+            ],
+            "title": "Status"
+          },
+          "score": {
+            "type": "integer",
+            "maximum": 100.0,
+            "minimum": 0.0,
+            "title": "Score"
+          },
+          "label": {
+            "type": "string",
+            "title": "Label"
+          },
+          "temperature_label": {
+            "type": "string",
+            "title": "Temperature Label"
+          },
+          "reasons": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Reasons"
+          },
+          "guidance": {
+            "type": "string",
+            "title": "Guidance"
+          },
+          "dimensions": {
+            "$ref": "#/components/schemas/MarketLightDimensions"
+          },
+          "data_quality": {
+            "type": "string",
+            "enum": [
+              "ok",
+              "partial",
+              "unavailable"
+            ],
+            "title": "Data Quality"
+          }
+        },
+        "type": "object",
+        "required": [
+          "region",
+          "trade_date",
+          "status",
+          "score",
+          "label",
+          "temperature_label",
+          "reasons",
+          "guidance",
+          "dimensions",
+          "data_quality"
+        ],
+        "title": "MarketLightSnapshot",
+        "description": "Structured Market Light snapshot persisted and consumed by alerts."
+      },
+      "MarketLightDimensions": {
+        "properties": {
+          "breadth": {
+            "$ref": "#/components/schemas/MarketLightDimension"
+          },
+          "index": {
+            "$ref": "#/components/schemas/MarketLightDimension"
+          },
+          "limit": {
+            "$ref": "#/components/schemas/MarketLightDimension"
+          }
+        },
+        "type": "object",
+        "required": [
+          "breadth",
+          "index",
+          "limit"
+        ],
+        "title": "MarketLightDimensions",
+        "description": "Canonical Market Light dimension scores."
+      },
+      "MarketLightDimension": {
+        "properties": {
+          "score": {
+            "type": "integer",
+            "maximum": 100.0,
+            "minimum": 0.0,
+            "title": "Score"
+          },
+          "available": {
+            "type": "boolean",
+            "title": "Available"
+          }
+        },
+        "type": "object",
+        "required": [
+          "score",
+          "available"
+        ],
+        "title": "MarketLightDimension",
+        "description": "A single Market Light scoring dimension."
       }
     },
     "securitySchemes": {
