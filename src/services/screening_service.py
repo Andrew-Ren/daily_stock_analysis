@@ -1254,7 +1254,11 @@ class ScreeningService:
             raw_data = {"candidates": raw_data}
         raw_data = _remove_non_finite_json_values(raw_data)
 
-        candidates = _normalize_candidates(raw_data)
+        strategy_factor_weights = _strategy_factor_weights(strategy)
+        candidates = _normalize_candidates(
+            raw_data,
+            factor_weights=strategy_factor_weights,
+        )
         selected = candidates[:max_results]
         _emit_screening_progress(
             progress_callback,
@@ -1262,7 +1266,6 @@ class ScreeningService:
             "正在补充入选股票的新闻与事件",
         )
         selected, dsa_enrichment = _enrich_candidates_with_dsa(selected)
-        strategy_factor_weights = _strategy_factor_weights(strategy)
         selected = [
             _attach_candidate_explanations(
                 candidate,
@@ -3732,7 +3735,11 @@ def _ensure_supported_market(market: str) -> None:
         )
 
 
-def _normalize_candidates(raw: Any) -> List[Dict[str, Any]]:
+def _normalize_candidates(
+    raw: Any,
+    *,
+    factor_weights: Optional[Dict[str, float]] = None,
+) -> List[Dict[str, Any]]:
     data = _to_plain(raw)
     items = data
     if isinstance(data, dict):
@@ -3742,10 +3749,18 @@ def _normalize_candidates(raw: Any) -> List[Dict[str, Any]]:
                 break
     if not isinstance(items, list):
         return []
-    return [_normalize_candidate(item, index + 1) for index, item in enumerate(items)]
+    return [
+        _normalize_candidate(item, index + 1, factor_weights=factor_weights)
+        for index, item in enumerate(items)
+    ]
 
 
-def _normalize_candidate(raw: Any, rank: int) -> Dict[str, Any]:
+def _normalize_candidate(
+    raw: Any,
+    rank: int,
+    *,
+    factor_weights: Optional[Dict[str, float]] = None,
+) -> Dict[str, Any]:
     item = _remove_non_finite_json_values(_to_plain(raw))
     if not isinstance(item, dict):
         item = {"code": str(item)}
@@ -3764,7 +3779,10 @@ def _normalize_candidate(raw: Any, rank: int) -> Dict[str, Any]:
         or source.get("ranking_reason")
         or item.get("summary")
     )
-    fallback_reason, fallback_reason_source, fallback_reason_quality = _build_candidate_reason(source)
+    fallback_reason, fallback_reason_source, fallback_reason_quality = _build_candidate_reason(
+        source,
+        factor_weights=factor_weights,
+    )
     reason = explicit_reason or fallback_reason
     return {
         "rank": item.get("rank") or source.get("rank") or rank,
@@ -4116,7 +4134,11 @@ def _first_present(primary: Dict[str, Any], source: Dict[str, Any], *keys: str) 
     return None
 
 
-def _build_candidate_reason(item: Dict[str, Any]) -> Tuple[str, str, str]:
+def _build_candidate_reason(
+    item: Dict[str, Any],
+    *,
+    factor_weights: Optional[Dict[str, float]] = None,
+) -> Tuple[str, str, str]:
     summaries = item.get("post_analysis_summaries")
     if isinstance(summaries, dict):
         for analyzer, value in summaries.items():
@@ -4126,14 +4148,24 @@ def _build_candidate_reason(item: Dict[str, Any]) -> Tuple[str, str, str]:
 
     factors = item.get("factor_scores")
     parts: List[str] = []
-    if isinstance(factors, dict) and factors:
+    if isinstance(factors, dict) and factors and factor_weights:
         top_factors = sorted(
-            ((key, value) for key, value in factors.items() if isinstance(value, (int, float))),
-            key=lambda pair: pair[1],
+            (
+                (str(key), float(value), float(factor_weights.get(str(key), 0)))
+                for key, value in factors.items()
+                if isinstance(value, (int, float))
+                and math.isfinite(float(value))
+                and isinstance(factor_weights.get(str(key)), (int, float))
+                and math.isfinite(float(factor_weights.get(str(key), 0)))
+                and float(factor_weights.get(str(key), 0)) > 0
+            ),
+            key=lambda factor: factor[1] * factor[2],
             reverse=True,
         )[:3]
         if top_factors:
-            factor_text = "、".join(f"{key} {value:.1f}" for key, value in top_factors)
+            factor_text = "、".join(
+                f"{key} {value:.1f}" for key, value, _weight in top_factors
+            )
             parts.append(f"主要因子：{factor_text}")
     if item.get("industry"):
         parts.append(f"行业：{item['industry']}")

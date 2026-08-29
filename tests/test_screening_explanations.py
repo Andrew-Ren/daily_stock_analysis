@@ -107,6 +107,27 @@ def test_top_factors_only_use_weighted_strategy_contributors() -> None:
     assert "topic_alignment" not in factor_text
 
 
+def test_fallback_reason_uses_the_same_strategy_weights_as_top_factors() -> None:
+    candidate = _normalize_candidate(
+        {
+            "code": "600519",
+            "factor_scores": {"topic_alignment": 99.0, "value": 70.0, "momentum": 90.0},
+        },
+        1,
+        factor_weights={"value": 0.8, "momentum": 0.2, "topic_alignment": 0.0},
+    )
+
+    result = _attach_candidate_explanations(
+        candidate,
+        factor_weights={"value": 0.8, "momentum": 0.2, "topic_alignment": 0.0},
+    )
+
+    assert "value 70.0" in candidate["reason"]
+    assert "momentum 90.0" in candidate["reason"]
+    assert "topic_alignment" not in candidate["reason"]
+    assert "topic_alignment" not in " ".join(item["text"] for item in result["why_selected"])
+
+
 def test_llm_reason_does_not_replace_the_observed_local_selection_fallback() -> None:
     candidate = {
         "rank": 4,
