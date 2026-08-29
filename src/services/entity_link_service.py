@@ -114,7 +114,7 @@ def stock_entity_id(stock_code: str, *, market: Optional[str] = None) -> str:
         if (
             explicit_market in {None, "US"}
             and len(us_code) <= 7
-            and re.fullmatch(r"[A-Z][A-Z0-9]*(?:\.[A-Z])?", us_code)
+            and re.fullmatch(r"[A-Z][A-Z0-9]*(?:\.[A-Z]+)?", us_code)
         ):
             return f"US:{us_code}"
         if explicit_market:

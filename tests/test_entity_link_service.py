@@ -74,6 +74,13 @@ def test_us_index_canonical_symbols_longer_than_five_letters_are_supported() -> 
     assert link.ref == "stock:US:AAICPRC"
 
 
+def test_us_index_preferred_share_with_multi_letter_suffix_is_supported() -> None:
+    link = EntityLink.model_validate(build_stock_entity_link("PEB.PG", market="us"))
+
+    assert link.entity_id == "US:PEB.PG"
+    assert link.ref == "stock:US:PEB.PG"
+
+
 def test_entity_link_schema_rejects_contradictory_or_empty_refs() -> None:
     with pytest.raises(ValueError, match="ref must exactly match"):
         EntityLink(entity_type="stock", entity_id="CN:600519", ref="report:7")
@@ -81,6 +88,10 @@ def test_entity_link_schema_rejects_contradictory_or_empty_refs() -> None:
         EntityLink(entity_type="stock", entity_id="CN:600519", ref="")
     with pytest.raises(ValueError, match="normalized value"):
         EntityLink(entity_type="stock", entity_id=" CN:600519 ", ref="stock:CN:600519")
+    with pytest.raises(ValueError, match="canonical market-qualified"):
+        EntityLink(entity_type="stock", entity_id="600519", ref="stock:600519")
+    with pytest.raises(ValueError, match="canonical market-qualified"):
+        EntityLink(entity_type="stock", entity_id="cn:600519", ref="stock:cn:600519")
 
 
 def test_qualified_foreign_symbols_infer_one_stable_market_identity() -> None:

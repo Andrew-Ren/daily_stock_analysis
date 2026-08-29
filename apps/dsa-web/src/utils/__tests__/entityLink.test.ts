@@ -71,6 +71,13 @@ describe('entityLink helpers', () => {
     expect(link.ref).toBe('stock:US:AAICPRC');
   });
 
+  it('accepts indexed US preferred-share symbols with multi-letter suffixes', () => {
+    const link = buildStockEntityLink('PEB.PG', 'us');
+
+    expect(link.entityId).toBe('US:PEB.PG');
+    expect(link.ref).toBe('stock:US:PEB.PG');
+  });
+
   it('routes report outcome tracking through decision signals', () => {
     const link = buildEntityLink('report', '123', { label: 'AAPL report' });
     const actions = Object.fromEntries(link.actions.map((item) => [item.action, item]));
@@ -118,6 +125,8 @@ describe('entityLink helpers', () => {
 
   it('validates refs and builds unavailable unsupported actions', () => {
     expect(makeEntityRef('signal', '42')).toBe('signal:42');
+    expect(makeEntityRef('stock', 'cn:600519')).toBe('stock:CN:600519');
+    expect(() => makeEntityRef('stock', '600519')).toThrow('explicit market');
     expect(parseEntityRef('alert:900')).toEqual(['alert', '900']);
     expect(() => makeEntityRef('stock', '')).toThrow('entityId is required');
     expect(() => parseEntityRef('missing_separator')).toThrow("entity ref must contain ':'");

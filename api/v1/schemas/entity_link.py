@@ -58,6 +58,14 @@ class EntityLink(BaseModel):
         normalized_id = self.entity_id.strip()
         if not normalized_id or normalized_id != self.entity_id:
             raise ValueError("entity_id must be a non-empty normalized value")
+        if self.entity_type == "stock":
+            # Import lazily to keep the schema/service import cycle dormant while
+            # still enforcing the exact canonicalization used by every builder.
+            from src.services.entity_link_service import stock_entity_id
+
+            market, separator, stock_code = normalized_id.partition(":")
+            if not separator or stock_entity_id(stock_code, market=market) != normalized_id:
+                raise ValueError("stock entity_id must be a canonical market-qualified value")
         expected_ref = f"{self.entity_type}:{normalized_id}"
         if self.ref != expected_ref:
             raise ValueError("ref must exactly match entity_type and entity_id")

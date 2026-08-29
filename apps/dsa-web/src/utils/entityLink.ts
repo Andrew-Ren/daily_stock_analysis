@@ -59,9 +59,12 @@ const DEFAULT_ACTIONS: Record<EntityType, EntityActionType[]> = {
 
 export const makeEntityRef = (entityType: EntityType | string, entityId: string): string => {
   const normalizedType = String(entityType).trim();
-  const normalizedId = String(entityId).trim();
+  const rawId = String(entityId).trim();
   if (!normalizedType) throw new Error('entityType is required');
-  if (!normalizedId) throw new Error('entityId is required');
+  if (!rawId) throw new Error('entityId is required');
+  const normalizedId = normalizedType === 'stock'
+    ? normalizeStockEntityId(rawId)
+    : rawId;
   return `${normalizedType}:${normalizedId}`;
 };
 
@@ -215,7 +218,7 @@ const normalizeStockEntityId = (entityId: string): string => {
   const valid = (
     (market === 'CN' && /^\d{6}$/.test(code))
     || (market === 'HK' && /^HK\d{5}$/.test(code))
-    || (market === 'US' && code.length <= 7 && /^[A-Z][A-Z0-9]*(?:\.[A-Z])?$/.test(code))
+    || (market === 'US' && code.length <= 7 && /^[A-Z][A-Z0-9]*(?:\.[A-Z]+)?$/.test(code))
     || (market === 'JP' && /^\d{4,5}\.T$/.test(code))
     || (market === 'KR' && /^\d{6}\.(?:KS|KQ)$/.test(code))
     || (market === 'TW' && /^\d{4,6}\.TW(?:O)?$/.test(code))
@@ -231,7 +234,7 @@ const inferStockMarket = (code: string): string => {
   if (/^\d{6}\.(?:KS|KQ)$/.test(code)) return 'KR';
   if (/^\d{4,6}\.TW(?:O)?$/.test(code)) return 'TW';
   const usCode = code.endsWith('.US') ? code.slice(0, -3) : code;
-  if (usCode.length <= 7 && /^[A-Z][A-Z0-9]*(?:\.[A-Z])?$/.test(usCode)) return 'US';
+  if (usCode.length <= 7 && /^[A-Z][A-Z0-9]*(?:\.[A-Z]+)?$/.test(usCode)) return 'US';
   return '';
 };
 
