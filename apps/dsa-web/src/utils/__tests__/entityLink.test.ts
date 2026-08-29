@@ -38,6 +38,8 @@ describe('entityLink helpers', () => {
   it.each([
     ['cn:600519', 'stock:CN:600519'],
     ['600519.SH', 'stock:CN:600519'],
+    ['SS600519', 'stock:CN:600519'],
+    ['SS.600519', 'stock:CN:600519'],
     ['hk:700', 'stock:HK:HK00700'],
     ['aapl', 'stock:US:AAPL'],
     ['8035.T', 'stock:JP:8035.T'],

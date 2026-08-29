@@ -228,7 +228,7 @@ const normalizeStockEntityId = (entityId: string): string => {
 };
 
 const inferStockMarket = (code: string): string => {
-  if (/^(?:(?:SH|SZ|BJ)\.?\d{6}|\d{6}\.(?:SH|SZ|SS|BJ)|\d{6})$/.test(code)) return 'CN';
+  if (/^(?:(?:SH|SS|SZ|BJ)\.?\d{6}|\d{6}\.(?:SH|SZ|SS|BJ)|\d{6})$/.test(code)) return 'CN';
   if (/^(?:HK\d{1,5}|\d{1,5}\.HK|\d{5})$/.test(code)) return 'HK';
   if (/^\d{4,5}\.T$/.test(code)) return 'JP';
   if (/^\d{6}\.(?:KS|KQ)$/.test(code)) return 'KR';

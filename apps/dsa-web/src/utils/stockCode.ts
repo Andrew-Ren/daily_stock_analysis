@@ -5,6 +5,7 @@
  *
  *   600519      → 600519     SH600519    → 600519
  *   600519.SH   → 600519     SH.600519   → 600519
+ *   SS600519    → 600519     SS.600519   → 600519
  *   SZ000001    → 000001     000001.SZ   → 000001
  *   BJ920748    → 920748     920748.BJ   → 920748
  *   HK00700     → HK00700    00700       → HK00700
@@ -30,16 +31,21 @@ export function normalizeStockCode(stockCode: string): string {
     return `HK${upper}`;
   }
 
-  // Strip SH/SZ prefix (e.g. SH600519 → 600519)
-  if ((upper.startsWith('SH') || upper.startsWith('SZ')) && !upper.startsWith('SH.') && !upper.startsWith('SZ.')) {
+  // Strip SH/SS/SZ prefix (e.g. SH600519 or legacy SS600519 → 600519)
+  if (
+    (upper.startsWith('SH') || upper.startsWith('SS') || upper.startsWith('SZ'))
+    && !upper.startsWith('SH.')
+    && !upper.startsWith('SS.')
+    && !upper.startsWith('SZ.')
+  ) {
     const candidate = code.slice(2);
     if (/^\d{5,6}$/.test(candidate)) {
       return candidate;
     }
   }
 
-  // Strip dotted SH/SZ prefix (e.g. SH.600519 → 600519)
-  if (upper.startsWith('SH.') || upper.startsWith('SZ.')) {
+  // Strip dotted SH/SS/SZ prefix (e.g. SH.600519 or legacy SS.600519 → 600519)
+  if (upper.startsWith('SH.') || upper.startsWith('SS.') || upper.startsWith('SZ.')) {
     const candidate = code.slice(3);
     if (/^\d{5,6}$/.test(candidate)) {
       return candidate;
