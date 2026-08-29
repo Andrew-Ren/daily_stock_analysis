@@ -60,6 +60,11 @@ def test_qualified_foreign_symbols_infer_one_stable_market_identity() -> None:
         stock_entity_id("HK00700", market="cn")
 
 
+def test_explicit_market_canonicalizes_legacy_bare_foreign_code() -> None:
+    assert stock_entity_id("8035", market="jp") == "JP:8035.T"
+    assert stock_entity_id("8035", market="jp") == stock_entity_id("8035.T")
+
+
 def test_report_entity_link_can_track_outcome_through_decision_signals() -> None:
     link = EntityLink.model_validate(build_entity_link("report", "123", label="AAPL report"))
 

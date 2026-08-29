@@ -99,9 +99,13 @@ def parse_entity_ref(ref: str) -> Tuple[str, str]:
 def stock_entity_id(stock_code: str, *, market: Optional[str] = None) -> str:
     """Build a stable stock entity id as '<MARKET>:<canonical_code>'."""
     raw_code = str(stock_code or "").strip()
-    identity = resolve_daily_stock_identity(raw_code)
+    explicit_market = str(market).strip().upper() if market is not None else None
+    identity = resolve_daily_stock_identity(
+        raw_code,
+        market_hint=explicit_market.lower() if explicit_market else None,
+    )
     inferred_market = identity.market.upper() if identity is not None else None
-    normalized_market = str(market).strip().upper() if market is not None else inferred_market or "CN"
+    normalized_market = explicit_market or inferred_market or "CN"
     if inferred_market and market is not None and normalized_market != inferred_market:
         raise ValueError("market conflicts with stock_code identity")
     normalized_code = (
