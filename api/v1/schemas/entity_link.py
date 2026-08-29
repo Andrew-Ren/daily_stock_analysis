@@ -5,7 +5,7 @@ from __future__ import annotations
 
 from typing import Any, Dict, List, Literal, Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 
 EntityType = Literal[
@@ -52,3 +52,13 @@ class EntityLink(BaseModel):
     links: Dict[str, str] = Field(default_factory=dict, description="Named frontend routes")
     actions: List[EntityAction] = Field(default_factory=list)
     metadata: Dict[str, Any] = Field(default_factory=dict)
+
+    @model_validator(mode="after")
+    def validate_stable_ref(self) -> "EntityLink":
+        normalized_id = self.entity_id.strip()
+        if not normalized_id or normalized_id != self.entity_id:
+            raise ValueError("entity_id must be a non-empty normalized value")
+        expected_ref = f"{self.entity_type}:{normalized_id}"
+        if self.ref != expected_ref:
+            raise ValueError("ref must exactly match entity_type and entity_id")
+        return self

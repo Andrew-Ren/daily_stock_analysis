@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { buildEntityAction, buildEntityLink, makeEntityRef, parseEntityRef } from '../entityLink';
+import {
+  buildEntityAction,
+  buildEntityLink,
+  buildStockEntityLink,
+  makeEntityRef,
+  parseEntityRef,
+} from '../entityLink';
 
 describe('entityLink helpers', () => {
   it('builds stable stock actions and marks pending routes unavailable', () => {
@@ -30,7 +36,6 @@ describe('entityLink helpers', () => {
   });
 
   it.each([
-    ['600519', 'stock:CN:600519'],
     ['cn:600519', 'stock:CN:600519'],
     ['600519.SH', 'stock:CN:600519'],
     ['hk:700', 'stock:HK:HK00700'],
@@ -46,8 +51,17 @@ describe('entityLink helpers', () => {
   });
 
   it('rejects ambiguous or conflicting stock entity ids', () => {
+    expect(() => buildEntityLink('stock', '600519')).toThrow('explicit market');
+    expect(() => buildEntityLink('stock', '005930')).toThrow('explicit market');
     expect(() => buildEntityLink('stock', 'KR:035900')).toThrow('unsupported stock entityId');
     expect(() => buildEntityLink('stock', 'CN:HK00700')).toThrow('market conflicts');
+  });
+
+  it('builds a canonical numeric stock ref when the caller supplies market context', () => {
+    const link = buildStockEntityLink('600519', 'cn', { label: '贵州茅台' });
+
+    expect(link.entityId).toBe('CN:600519');
+    expect(link.ref).toBe('stock:CN:600519');
   });
 
   it('routes report outcome tracking through decision signals', () => {

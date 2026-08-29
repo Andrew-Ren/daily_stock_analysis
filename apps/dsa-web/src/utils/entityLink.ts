@@ -103,6 +103,16 @@ export const buildEntityLink = (
   };
 };
 
+export const buildStockEntityLink = (
+  stockCode: string,
+  market: string,
+  options: {
+    label?: string;
+    actions?: EntityActionType[];
+    metadata?: Record<string, unknown>;
+  } = {},
+): EntityLink => buildEntityLink('stock', `${market}:${stockCode}`, options);
+
 export const buildEntityAction = (
   entityType: EntityType,
   entityId: string,
@@ -178,6 +188,9 @@ const normalizeStockEntityId = (entityId: string): string => {
   const upperCode = rawCode.toUpperCase();
   if (!rawCode || (separatorIndex >= 0 && !explicitMarket)) {
     throw new Error('stock entityId must include a market and code');
+  }
+  if (!explicitMarket && /^\d+$/.test(upperCode)) {
+    throw new Error('ambiguous numeric stock entityId requires an explicit market');
   }
 
   const inferredMarket = inferStockMarket(upperCode);

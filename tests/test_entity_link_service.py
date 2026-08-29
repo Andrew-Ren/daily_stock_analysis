@@ -59,6 +59,15 @@ def test_stock_entity_link_metadata_uses_canonical_entity_id_code() -> None:
     assert us_link.metadata["stock_code"] == "AAPL"
 
 
+def test_entity_link_schema_rejects_contradictory_or_empty_refs() -> None:
+    with pytest.raises(ValueError, match="ref must exactly match"):
+        EntityLink(entity_type="stock", entity_id="CN:600519", ref="report:7")
+    with pytest.raises(ValueError, match="ref must exactly match"):
+        EntityLink(entity_type="stock", entity_id="CN:600519", ref="")
+    with pytest.raises(ValueError, match="normalized value"):
+        EntityLink(entity_type="stock", entity_id=" CN:600519 ", ref="stock:CN:600519")
+
+
 def test_qualified_foreign_symbols_infer_one_stable_market_identity() -> None:
     assert stock_entity_id("HK00700") == "HK:HK00700"
     assert stock_entity_id("2330.TW") == "TW:2330.TW"
