@@ -9,7 +9,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any, Dict, List, Optional, Tuple
 
-from sqlalchemy import and_, delete, desc, func, select
+from sqlalchemy import and_, case, delete, desc, func, select
 
 from src.storage import (
     AlertCooldownRecord,
@@ -291,6 +291,105 @@ class AlertRepository:
                 .limit(page_size)
             ).scalars().all()
             return list(rows), int(total)
+
+    def get_monitor_summary(self, *, rule_limit: int = 20) -> Dict[str, Any]:
+        """Aggregate the whole monitor dataset independently of list pagination."""
+        safe_limit = max(1, min(int(rule_limit), 100))
+        with self.db.get_session() as session:
+            rules_total = session.execute(
+                select(func.count(AlertRuleRecord.id)).select_from(AlertRuleRecord)
+            ).scalar() or 0
+            enabled_rules_total = session.execute(
+                select(func.count(AlertRuleRecord.id))
+                .select_from(AlertRuleRecord)
+                .where(AlertRuleRecord.enabled.is_(True))
+            ).scalar() or 0
+            triggers_total = session.execute(
+                select(func.count(AlertTriggerRecord.id)).select_from(AlertTriggerRecord)
+            ).scalar() or 0
+
+            rule_type_rows = session.execute(
+                select(
+                    AlertRuleRecord.alert_type,
+                    func.count(AlertRuleRecord.id),
+                    func.sum(case((AlertRuleRecord.enabled.is_(True), 1), else_=0)),
+                )
+                .group_by(AlertRuleRecord.alert_type)
+                .order_by(desc(func.count(AlertRuleRecord.id)), AlertRuleRecord.alert_type)
+            ).all()
+            trigger_status_rows = session.execute(
+                select(AlertTriggerRecord.status, func.count(AlertTriggerRecord.id))
+                .group_by(AlertTriggerRecord.status)
+                .order_by(desc(func.count(AlertTriggerRecord.id)), AlertTriggerRecord.status)
+            ).all()
+
+            unattributed_trigger_count = session.execute(
+                select(func.count(AlertTriggerRecord.id))
+                .select_from(AlertTriggerRecord)
+                .where(AlertTriggerRecord.rule_id.is_(None))
+            ).scalar() or 0
+            orphaned_trigger_count = session.execute(
+                select(func.count(AlertTriggerRecord.id))
+                .select_from(AlertTriggerRecord)
+                .outerjoin(AlertRuleRecord, AlertRuleRecord.id == AlertTriggerRecord.rule_id)
+                .where(AlertTriggerRecord.rule_id.is_not(None), AlertRuleRecord.id.is_(None))
+            ).scalar() or 0
+
+            trigger_count = func.count(AlertTriggerRecord.id).label("trigger_count")
+            last_triggered_at = func.max(AlertTriggerRecord.triggered_at).label("last_triggered_at")
+            rule_rows = session.execute(
+                select(
+                    AlertRuleRecord.id,
+                    AlertRuleRecord.name,
+                    AlertRuleRecord.alert_type,
+                    AlertRuleRecord.severity,
+                    AlertRuleRecord.enabled,
+                    trigger_count,
+                    last_triggered_at,
+                )
+                .outerjoin(AlertTriggerRecord, AlertTriggerRecord.rule_id == AlertRuleRecord.id)
+                .group_by(
+                    AlertRuleRecord.id,
+                    AlertRuleRecord.name,
+                    AlertRuleRecord.alert_type,
+                    AlertRuleRecord.severity,
+                    AlertRuleRecord.enabled,
+                )
+                .order_by(desc(trigger_count), desc(last_triggered_at), AlertRuleRecord.id)
+                .limit(safe_limit)
+            ).all()
+
+        return {
+            "rules_total": int(rules_total),
+            "enabled_rules_total": int(enabled_rules_total),
+            "triggers_total": int(triggers_total),
+            "unattributed_trigger_count": int(unattributed_trigger_count),
+            "orphaned_trigger_count": int(orphaned_trigger_count),
+            "rule_types": [
+                {
+                    "alert_type": str(alert_type),
+                    "rule_count": int(count or 0),
+                    "enabled_count": int(enabled_count or 0),
+                }
+                for alert_type, count, enabled_count in rule_type_rows
+            ],
+            "trigger_statuses": [
+                {"status": str(status), "trigger_count": int(count or 0)}
+                for status, count in trigger_status_rows
+            ],
+            "rules": [
+                {
+                    "rule_id": int(rule_id),
+                    "name": str(name or ""),
+                    "alert_type": str(alert_type or ""),
+                    "severity": str(severity or ""),
+                    "enabled": bool(enabled),
+                    "trigger_count": int(count or 0),
+                    "last_triggered_at": last_seen.isoformat() if last_seen else None,
+                }
+                for rule_id, name, alert_type, severity, enabled, count, last_seen in rule_rows
+            ],
+        }
 
     def list_notifications(
         self,

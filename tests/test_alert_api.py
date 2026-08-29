@@ -26,7 +26,6 @@ import src.auth as auth
 from api.app import create_app
 from src.config import Config
 from src.repositories.alert_repo import AlertRepository
-from src.services.alert_service import AlertService
 from src.services.portfolio_service import PortfolioService
 from src.storage import AlertCooldownRecord, AlertNotificationRecord, AlertTriggerRecord, Base, DatabaseManager
 
@@ -842,6 +841,64 @@ class AlertApiTestCase(unittest.TestCase):
         self.assertTrue(notification_payload["items"][0]["retryable"])
         self.assertNotIn("secret-token", str(notification_payload))
         self.assertNotIn("example.com/webhook", str(notification_payload))
+
+    def test_monitor_summary_aggregates_all_pages_and_attributes_by_rule_id(self) -> None:
+        rules = [
+            self._create_rule({"name": f"rule-{index}", "target": "600519"})
+            for index in range(21)
+        ]
+        with self.db.get_session() as session:
+            session.add_all(
+                [
+                    AlertTriggerRecord(rule_id=rules[0]["id"], target="600519", status="triggered"),
+                    AlertTriggerRecord(rule_id=rules[0]["id"], target="600519", status="degraded"),
+                    AlertTriggerRecord(rule_id=rules[1]["id"], target="600519", status="triggered"),
+                    AlertTriggerRecord(rule_id=None, target="600519", status="triggered"),
+                    AlertTriggerRecord(rule_id=99999, target="600519", status="triggered"),
+                ]
+            )
+            session.commit()
+
+        page = self.client.get("/api/v1/alerts/rules", params={"page": 1, "page_size": 20}).json()
+        response = self.client.get("/api/v1/alerts/summary", params={"rule_limit": 100})
+
+        self.assertEqual(response.status_code, 200, response.text)
+        payload = response.json()
+        self.assertEqual(len(page["items"]), 20)
+        self.assertEqual(payload["rules_total"], 21)
+        self.assertEqual(payload["enabled_rules_total"], 21)
+        self.assertEqual(payload["triggers_total"], 5)
+        self.assertEqual(payload["unattributed_trigger_count"], 1)
+        self.assertEqual(payload["orphaned_trigger_count"], 1)
+        self.assertEqual(payload["rule_types"], [
+            {"alert_type": "price_cross", "rule_count": 21, "enabled_count": 21}
+        ])
+        by_rule_id = {item["rule_id"]: item for item in payload["rules"]}
+        self.assertEqual(by_rule_id[rules[0]["id"]]["trigger_count"], 2)
+        self.assertEqual(by_rule_id[rules[1]["id"]]["trigger_count"], 1)
+
+    def test_monitor_summary_static_openapi_matches_runtime_contract(self) -> None:
+        static_spec = json.loads(
+            (Path(__file__).resolve().parents[1] / "docs" / "architecture" / "api_spec.json").read_text(
+                encoding="utf-8"
+            )
+        )
+        runtime_spec = self.client.app.openapi()
+
+        self.assertEqual(
+            static_spec["paths"]["/api/v1/alerts/summary"],
+            runtime_spec["paths"]["/api/v1/alerts/summary"],
+        )
+        for schema_name in (
+            "AlertMonitorRuleSummary",
+            "AlertMonitorRuleTypeSummary",
+            "AlertMonitorSummaryResponse",
+            "AlertMonitorTriggerStatusSummary",
+        ):
+            self.assertEqual(
+                static_spec["components"]["schemas"][schema_name],
+                runtime_spec["components"]["schemas"][schema_name],
+            )
 
     def test_trigger_query_derives_analysis_visibility_from_json_diagnostics(self) -> None:
         rule = self._create_rule()

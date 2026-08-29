@@ -67,6 +67,39 @@ class AlertRuleListResponse(BaseModel):
     page_size: int
 
 
+class AlertMonitorRuleTypeSummary(BaseModel):
+    alert_type: str
+    rule_count: int
+    enabled_count: int
+
+
+class AlertMonitorTriggerStatusSummary(BaseModel):
+    status: str
+    trigger_count: int
+
+
+class AlertMonitorRuleSummary(BaseModel):
+    rule_id: int
+    name: str
+    alert_type: str
+    severity: str
+    enabled: bool
+    trigger_count: int
+    last_triggered_at: Optional[str] = None
+
+
+class AlertMonitorSummaryResponse(BaseModel):
+    as_of: str
+    rules_total: int
+    enabled_rules_total: int
+    triggers_total: int
+    unattributed_trigger_count: int
+    orphaned_trigger_count: int
+    rule_types: List[AlertMonitorRuleTypeSummary] = Field(default_factory=list)
+    trigger_statuses: List[AlertMonitorTriggerStatusSummary] = Field(default_factory=list)
+    rules: List[AlertMonitorRuleSummary] = Field(default_factory=list)
+
+
 class AlertDeleteResponse(BaseModel):
     deleted: int
 

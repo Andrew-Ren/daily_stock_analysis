@@ -22,6 +22,37 @@ describe('alertsApi', () => {
     deleteRequest.mockReset();
   });
 
+  it('loads the global monitor summary independently of list pagination', async () => {
+    get.mockResolvedValueOnce({
+      data: {
+        as_of: '2026-08-29T10:00:00',
+        rules_total: 25,
+        enabled_rules_total: 20,
+        triggers_total: 41,
+        unattributed_trigger_count: 1,
+        orphaned_trigger_count: 2,
+        rule_types: [{ alert_type: 'price_cross', rule_count: 25, enabled_count: 20 }],
+        trigger_statuses: [{ status: 'triggered', trigger_count: 41 }],
+        rules: [{
+          rule_id: 7,
+          name: 'rule 7',
+          alert_type: 'price_cross',
+          severity: 'warning',
+          enabled: true,
+          trigger_count: 9,
+          last_triggered_at: '2026-08-29T09:59:00',
+        }],
+      },
+    });
+
+    const result = await alertsApi.getMonitorSummary(30);
+
+    expect(get).toHaveBeenCalledWith('/api/v1/alerts/summary', { params: { rule_limit: 30 } });
+    expect(result.rulesTotal).toBe(25);
+    expect(result.rules[0].ruleId).toBe(7);
+    expect(result.ruleTypes[0].alertType).toBe('price_cross');
+  });
+
   it('lists rules with snake_case query params and camelCase response fields', async () => {
     get.mockResolvedValueOnce({
       data: {

@@ -10,6 +10,7 @@ from fastapi import APIRouter, HTTPException, Query
 
 from api.v1.schemas.alerts import (
     AlertDeleteResponse,
+    AlertMonitorSummaryResponse,
     AlertNotificationListResponse,
     AlertRuleCreateRequest,
     AlertRuleItem,
@@ -101,6 +102,23 @@ def list_rules(
         )
     except Exception as exc:
         raise _internal_error("List alert rules failed", exc)
+
+
+@router.get(
+    "/summary",
+    response_model=AlertMonitorSummaryResponse,
+    responses={500: {"model": ErrorResponse}},
+    summary="Get global alert monitor summary",
+    description="Aggregate rules and triggers independently of paginated list endpoints.",
+)
+def get_monitor_summary(
+    rule_limit: int = Query(20, ge=1, le=100),
+) -> AlertMonitorSummaryResponse:
+    service = AlertService()
+    try:
+        return AlertMonitorSummaryResponse(**service.get_monitor_summary(rule_limit=rule_limit))
+    except Exception as exc:
+        raise _internal_error("Get alert monitor summary failed", exc)
 
 
 @router.get(

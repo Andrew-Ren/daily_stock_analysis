@@ -11,6 +11,7 @@ const {
   testRule,
   listTriggers,
   listNotifications,
+  getMonitorSummary,
 } = vi.hoisted(() => ({
   listRules: vi.fn(),
   createRule: vi.fn(),
@@ -20,6 +21,7 @@ const {
   testRule: vi.fn(),
   listTriggers: vi.fn(),
   listNotifications: vi.fn(),
+  getMonitorSummary: vi.fn(),
 }));
 
 vi.mock('../../api/alerts', () => ({
@@ -32,6 +34,7 @@ vi.mock('../../api/alerts', () => ({
     testRule,
     listTriggers,
     listNotifications,
+    getMonitorSummary,
   },
 }));
 
@@ -94,6 +97,17 @@ beforeEach(() => {
     pageSize: 20,
   });
   listNotifications.mockResolvedValue({ items: [], total: 0, page: 1, pageSize: 20 });
+  getMonitorSummary.mockResolvedValue({
+    asOf: '2026-08-29T10:00:00',
+    rulesTotal: 25,
+    enabledRulesTotal: 20,
+    triggersTotal: 41,
+    unattributedTriggerCount: 0,
+    orphanedTriggerCount: 0,
+    ruleTypes: [{ alertType: 'price_cross', ruleCount: 25, enabledCount: 20 }],
+    triggerStatuses: [{ status: 'triggered', triggerCount: 41 }],
+    rules: [{ ruleId: 1, name: '茅台价格突破', alertType: 'price_cross', severity: 'warning', enabled: true, triggerCount: 41 }],
+  });
   testRule.mockResolvedValue({
     ruleId: 1,
     status: 'triggered',
@@ -115,6 +129,8 @@ describe('AlertsPage', () => {
     expect(await screen.findByText('茅台价格突破')).toBeInTheDocument();
     expect(await screen.findByText('600519 price above 1800')).toBeInTheDocument();
     expect(await screen.findByText('暂无通知尝试记录')).toBeInTheDocument();
+    expect(await screen.findByText('监控概览')).toBeInTheDocument();
+    expect(screen.getByText('41')).toBeInTheDocument();
     expect(listRules).toHaveBeenCalledWith({
       enabled: undefined,
       alertType: undefined,
@@ -123,6 +139,7 @@ describe('AlertsPage', () => {
     });
     expect(listTriggers).toHaveBeenCalledWith({ page: 1, pageSize: 20 });
     expect(listNotifications).toHaveBeenCalledWith({ page: 1, pageSize: 20 });
+    expect(getMonitorSummary).toHaveBeenCalledWith(20);
   });
 
   it('runs a dry-run test and renders only declared response fields', async () => {

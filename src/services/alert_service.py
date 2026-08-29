@@ -169,6 +169,10 @@ class AlertService:
             "page_size": page_size,
         }
 
+    def get_monitor_summary(self, *, rule_limit: int = 20) -> Dict[str, Any]:
+        summary = self.repo.get_monitor_summary(rule_limit=rule_limit)
+        return {"as_of": datetime.now().isoformat(), **summary}
+
     def test_rule(self, rule_id: int) -> Dict[str, Any]:
         row = self.repo.get_rule(rule_id)
         if row is None:

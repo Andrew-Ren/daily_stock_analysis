@@ -2736,6 +2736,62 @@
           }
         }
       }
+    },
+    "/api/v1/alerts/summary": {
+      "get": {
+        "tags": [
+          "Alerts"
+        ],
+        "summary": "Get global alert monitor summary",
+        "description": "Aggregate rules and triggers independently of paginated list endpoints.",
+        "operationId": "get_monitor_summary_api_v1_alerts_summary_get",
+        "parameters": [
+          {
+            "name": "rule_limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 100,
+              "minimum": 1,
+              "default": 20,
+              "title": "Rule Limit"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AlertMonitorSummaryResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
@@ -8362,6 +8418,155 @@
         ],
         "title": "DataProviderCapability",
         "description": "Visible capability metadata for one data provider."
+      },
+      "AlertMonitorRuleSummary": {
+        "properties": {
+          "rule_id": {
+            "type": "integer",
+            "title": "Rule Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "alert_type": {
+            "type": "string",
+            "title": "Alert Type"
+          },
+          "severity": {
+            "type": "string",
+            "title": "Severity"
+          },
+          "enabled": {
+            "type": "boolean",
+            "title": "Enabled"
+          },
+          "trigger_count": {
+            "type": "integer",
+            "title": "Trigger Count"
+          },
+          "last_triggered_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Triggered At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "rule_id",
+          "name",
+          "alert_type",
+          "severity",
+          "enabled",
+          "trigger_count"
+        ],
+        "title": "AlertMonitorRuleSummary"
+      },
+      "AlertMonitorRuleTypeSummary": {
+        "properties": {
+          "alert_type": {
+            "type": "string",
+            "title": "Alert Type"
+          },
+          "rule_count": {
+            "type": "integer",
+            "title": "Rule Count"
+          },
+          "enabled_count": {
+            "type": "integer",
+            "title": "Enabled Count"
+          }
+        },
+        "type": "object",
+        "required": [
+          "alert_type",
+          "rule_count",
+          "enabled_count"
+        ],
+        "title": "AlertMonitorRuleTypeSummary"
+      },
+      "AlertMonitorSummaryResponse": {
+        "properties": {
+          "as_of": {
+            "type": "string",
+            "title": "As Of"
+          },
+          "rules_total": {
+            "type": "integer",
+            "title": "Rules Total"
+          },
+          "enabled_rules_total": {
+            "type": "integer",
+            "title": "Enabled Rules Total"
+          },
+          "triggers_total": {
+            "type": "integer",
+            "title": "Triggers Total"
+          },
+          "unattributed_trigger_count": {
+            "type": "integer",
+            "title": "Unattributed Trigger Count"
+          },
+          "orphaned_trigger_count": {
+            "type": "integer",
+            "title": "Orphaned Trigger Count"
+          },
+          "rule_types": {
+            "items": {
+              "$ref": "#/components/schemas/AlertMonitorRuleTypeSummary"
+            },
+            "type": "array",
+            "title": "Rule Types"
+          },
+          "trigger_statuses": {
+            "items": {
+              "$ref": "#/components/schemas/AlertMonitorTriggerStatusSummary"
+            },
+            "type": "array",
+            "title": "Trigger Statuses"
+          },
+          "rules": {
+            "items": {
+              "$ref": "#/components/schemas/AlertMonitorRuleSummary"
+            },
+            "type": "array",
+            "title": "Rules"
+          }
+        },
+        "type": "object",
+        "required": [
+          "as_of",
+          "rules_total",
+          "enabled_rules_total",
+          "triggers_total",
+          "unattributed_trigger_count",
+          "orphaned_trigger_count"
+        ],
+        "title": "AlertMonitorSummaryResponse"
+      },
+      "AlertMonitorTriggerStatusSummary": {
+        "properties": {
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "trigger_count": {
+            "type": "integer",
+            "title": "Trigger Count"
+          }
+        },
+        "type": "object",
+        "required": [
+          "status",
+          "trigger_count"
+        ],
+        "title": "AlertMonitorTriggerStatusSummary"
       }
     },
     "securitySchemes": {

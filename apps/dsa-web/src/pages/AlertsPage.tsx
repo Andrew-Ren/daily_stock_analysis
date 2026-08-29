@@ -5,6 +5,7 @@ import { alertsApi } from '../api/alerts';
 import type { ParsedApiError } from '../api/error';
 import { getParsedApiError } from '../api/error';
 import { AlertRuleForm } from '../components/alerts/AlertRuleForm';
+import { AlertMonitorSummary } from '../components/alerts/AlertMonitorSummary';
 import {
   AlertRuleList,
   type AlertRuleBusyState,
@@ -15,6 +16,7 @@ import { AlertTriggerHistory } from '../components/alerts/AlertTriggerHistory';
 import { ApiErrorAlert, AppPage, Card, EmptyState, InlineAlert, Loading, PageHeader } from '../components/common';
 import type {
   AlertNotificationItem,
+  AlertMonitorSummary as AlertMonitorSummaryData,
   AlertRuleCreateRequest,
   AlertRuleItem,
   AlertRuleTestResponse,
@@ -110,6 +112,9 @@ const AlertsPage: React.FC = () => {
   const [rulesLoading, setRulesLoading] = useState(false);
   const [rulesError, setRulesError] = useState<ParsedApiError | null>(null);
   const [rulesLoaded, setRulesLoaded] = useState(false);
+  const [monitorSummary, setMonitorSummary] = useState<AlertMonitorSummaryData | null>(null);
+  const [monitorSummaryLoading, setMonitorSummaryLoading] = useState(false);
+  const [monitorSummaryError, setMonitorSummaryError] = useState<ParsedApiError | null>(null);
 
   const [triggers, setTriggers] = useState<AlertTriggerItem[]>([]);
   const [triggersLoading, setTriggersLoading] = useState(false);
@@ -177,6 +182,18 @@ const AlertsPage: React.FC = () => {
     }
   }, []);
 
+  const loadMonitorSummary = useCallback(async () => {
+    setMonitorSummaryLoading(true);
+    try {
+      setMonitorSummary(await alertsApi.getMonitorSummary(20));
+      setMonitorSummaryError(null);
+    } catch (error) {
+      setMonitorSummaryError(getParsedApiError(error));
+    } finally {
+      setMonitorSummaryLoading(false);
+    }
+  }, []);
+
   const loadNotifications = useCallback(async () => {
     setNotificationsLoading(true);
     try {
@@ -195,6 +212,10 @@ const AlertsPage: React.FC = () => {
   }, [loadRules]);
 
   useEffect(() => {
+    void loadMonitorSummary();
+  }, [loadMonitorSummary]);
+
+  useEffect(() => {
     if (!rulesLoaded) return;
     void loadTriggers();
     void loadNotifications();
@@ -208,6 +229,7 @@ const AlertsPage: React.FC = () => {
       const created = await alertsApi.createRule(payload);
       setCreateSuccess(`已创建告警规则「${created.name}」`);
       await loadRules(1);
+      await loadMonitorSummary();
       return true;
     } catch (error) {
       setCreateError(getParsedApiError(error));
@@ -226,6 +248,7 @@ const AlertsPage: React.FC = () => {
         await alertsApi.enableRule(rule.id);
       }
       await loadRules();
+      await loadMonitorSummary();
     } catch (error) {
       setRulesError(getParsedApiError(error));
     } finally {
@@ -238,6 +261,7 @@ const AlertsPage: React.FC = () => {
     try {
       await alertsApi.deleteRule(rule.id);
       await loadRules();
+      await loadMonitorSummary();
     } catch (error) {
       setRulesError(getParsedApiError(error));
     } finally {
@@ -280,6 +304,8 @@ const AlertsPage: React.FC = () => {
         />
       ) : null}
       {rulesError ? <ApiErrorAlert error={rulesError} onDismiss={() => setRulesError(null)} /> : null}
+      {monitorSummaryError ? <ApiErrorAlert error={monitorSummaryError} onDismiss={() => setMonitorSummaryError(null)} /> : null}
+      <AlertMonitorSummary summary={monitorSummary} loading={monitorSummaryLoading} />
 
       <div className="grid items-stretch gap-5 xl:grid-cols-[380px_minmax(0,1fr)]">
         <AlertRuleForm onSubmit={handleCreateRule} isSubmitting={createLoading} />

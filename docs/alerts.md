@@ -429,6 +429,18 @@ worker 会把 `triggered`、`skipped`、`degraded`、`failed` 写入 `alert_trig
 
 回滚 P8 只需 revert 文档、配置说明和 Web 文案改动；没有数据库迁移或用户数据清理。回滚早期 Phase 时，已创建的持久化规则不会自动删除，按下方 Phase 回滚说明处理。
 
+## 全局监控概览
+
+`GET /api/v1/alerts/summary?rule_limit=20` 为 Web 告警中心提供服务端聚合的监控概览。统计覆盖数据库中的全部规则和触发记录，不受规则列表或触发历史分页影响。
+
+- `rules_total` / `enabled_rules_total`：全部规则和已启用规则数量。
+- `triggers_total`：全部触发记录数量；`trigger_statuses` 按实际状态聚合。
+- `rule_types`：按 `alert_type` 聚合规则数和已启用规则数。
+- `rules`：按触发次数、最近触发时间和规则 ID 排序的规则摘要，数量由 `rule_limit` 控制。
+- 触发归属只使用持久化的 `rule_id`，不会用股票代码、目标名称或当前分页结果猜测归属。`rule_id` 为空的记录计入 `unattributed_trigger_count`；引用已不存在规则的记录计入 `orphaned_trigger_count`。
+
+该概览是 Issue #2281 的基础阶段，只解决全局统计与可靠归属。它不引入“论文失效”规则类型，也不把普通告警命名为失效信号；`impact`、`affected_entities` 和新的 thesis invalidation 规则语义留待后续独立 PR。回滚时 revert API、repository、Web 和文档改动即可；没有数据库迁移，现有告警数据不受影响。
+
 ## Phase 边界
 
 - P0：本文档、契约、存储评估和兼容测试。

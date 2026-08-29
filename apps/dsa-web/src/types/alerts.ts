@@ -69,6 +69,33 @@ export interface AlertRuleListResponse {
   pageSize: number;
 }
 
+export interface AlertMonitorSummary {
+  asOf: string;
+  rulesTotal: number;
+  enabledRulesTotal: number;
+  triggersTotal: number;
+  unattributedTriggerCount: number;
+  orphanedTriggerCount: number;
+  ruleTypes: Array<{
+    alertType: string;
+    ruleCount: number;
+    enabledCount: number;
+  }>;
+  triggerStatuses: Array<{
+    status: string;
+    triggerCount: number;
+  }>;
+  rules: Array<{
+    ruleId: number;
+    name: string;
+    alertType: string;
+    severity: string;
+    enabled: boolean;
+    triggerCount: number;
+    lastTriggeredAt?: string | null;
+  }>;
+}
+
 export interface AlertRuleCreateRequest {
   name?: string;
   targetScope?: AlertTargetScope;

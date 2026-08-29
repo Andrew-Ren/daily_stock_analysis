@@ -2,6 +2,7 @@ import apiClient from './index';
 import { toCamelCase } from './utils';
 import type {
   AlertDeleteResponse,
+  AlertMonitorSummary,
   AlertNotificationListQuery,
   AlertNotificationListResponse,
   AlertRuleCreateRequest,
@@ -82,6 +83,13 @@ function toNotificationListParams(query: AlertNotificationListQuery = {}): Recor
 }
 
 export const alertsApi = {
+  async getMonitorSummary(ruleLimit = 20): Promise<AlertMonitorSummary> {
+    const response = await apiClient.get<Record<string, unknown>>('/api/v1/alerts/summary', {
+      params: { rule_limit: ruleLimit },
+    });
+    return toCamelCase<AlertMonitorSummary>(response.data);
+  },
+
   async listRules(query: AlertRuleListQuery = {}): Promise<AlertRuleListResponse> {
     const response = await apiClient.get<Record<string, unknown>>('/api/v1/alerts/rules', {
       params: toRuleListParams(query),
