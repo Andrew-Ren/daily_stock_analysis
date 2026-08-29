@@ -15,6 +15,7 @@ _ALLOWED_EVENT_TYPES = {"earnings", "dividend", "lockup_unlock", "macro", "user"
 _ALLOWED_SCOPE_TYPES = {"market", "symbol", "portfolio", "sector", "custom"}
 _ALLOWED_MARKETS = {"cn", "hk", "us", "jp", "kr", "tw", "global"}
 CALENDAR_EVENT_MAX_PAGE = 1_000_000
+CALENDAR_EVENT_MAX_ID = 2**63 - 1
 
 
 class CalendarEventServiceError(ValueError):
@@ -99,6 +100,8 @@ class CalendarEventService:
         }
 
     def delete_user_event(self, event_id: int) -> bool:
+        if isinstance(event_id, bool) or event_id < 1 or event_id > CALENDAR_EVENT_MAX_ID:
+            raise CalendarEventServiceError("event_id is outside the supported database range")
         row = self.repo.get_event(event_id)
         if row is None:
             return False
@@ -139,8 +142,13 @@ class CalendarEventService:
                 raise CalendarEventServiceError("market conflicts with symbol identity")
             market = symbol_market
             scope_value = symbol
-        elif not scope_value:
-            raise CalendarEventServiceError(f"{scope_type} scope requires scope_value")
+        else:
+            if symbol:
+                raise CalendarEventServiceError(
+                    "symbol is only supported for scope_type=symbol"
+                )
+            if not scope_value:
+                raise CalendarEventServiceError(f"{scope_type} scope requires scope_value")
 
         metadata = payload.get("metadata") or {}
         if not isinstance(metadata, dict):

@@ -7,7 +7,7 @@ import logging
 from datetime import date
 from typing import Optional
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, HTTPException, Path, Query
 
 from api.v1.schemas.calendar_events import (
     CalendarEventCreateRequest,
@@ -19,6 +19,7 @@ from api.v1.schemas.calendar_events import (
 )
 from api.v1.schemas.common import ErrorResponse
 from src.services.calendar_event_service import (
+    CALENDAR_EVENT_MAX_ID,
     CALENDAR_EVENT_MAX_PAGE,
     CalendarEventService,
     CalendarEventServiceError,
@@ -111,7 +112,9 @@ def list_events(
     responses={400: {"model": ErrorResponse}, 404: {"model": ErrorResponse}, 500: {"model": ErrorResponse}},
     summary="Delete a user calendar event",
 )
-def delete_event(event_id: int) -> CalendarEventDeleteResponse:
+def delete_event(
+    event_id: int = Path(..., ge=1, le=CALENDAR_EVENT_MAX_ID),
+) -> CalendarEventDeleteResponse:
     try:
         if not CalendarEventService().delete_user_event(event_id):
             raise _not_found()

@@ -3003,6 +3003,8 @@
             "in": "path",
             "required": true,
             "schema": {
+              "maximum": 9223372036854775807,
+              "minimum": 1,
               "type": "integer",
               "title": "Event Id"
             }

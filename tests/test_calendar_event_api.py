@@ -292,6 +292,23 @@ class CalendarEventApiTestCase(unittest.TestCase):
                 self.assertEqual(response.status_code, 400, response.text)
                 self.assertEqual(response.json()["error"], "validation_error")
 
+    def test_non_symbol_scopes_reject_unqueryable_symbol_metadata(self) -> None:
+        for scope_type in ("portfolio", "sector", "custom"):
+            with self.subTest(scope_type=scope_type):
+                response = self.client.post(
+                    "/api/v1/calendar/events",
+                    json={
+                        "title": "invalid symbol metadata",
+                        "event_type": "user",
+                        "scope_type": scope_type,
+                        "scope_value": f"{scope_type}-1",
+                        "symbol": "AAPL",
+                        "event_date": date.today().isoformat(),
+                    },
+                )
+                self.assertEqual(response.status_code, 400, response.text)
+                self.assertEqual(response.json()["error"], "validation_error")
+
     def test_non_finite_metadata_is_rejected_before_persistence(self) -> None:
         event_date = date.today().isoformat()
         response = self.client.post(
@@ -361,6 +378,16 @@ class CalendarEventApiTestCase(unittest.TestCase):
         refused = self.client.delete(f"/api/v1/calendar/events/{external.id}")
         self.assertEqual(refused.status_code, 400)
         self.assertEqual(refused.json()["error"], "validation_error")
+
+    def test_delete_rejects_ids_outside_the_database_integer_range(self) -> None:
+        created = self._create()
+
+        for event_id in (0, 2**63):
+            with self.subTest(event_id=event_id):
+                response = self.client.delete(f"/api/v1/calendar/events/{event_id}")
+                self.assertEqual(response.status_code, 422, response.text)
+
+        self.assertIsNotNone(self.repo.get_event(created["id"]))
 
     def test_static_openapi_matches_calendar_runtime_contract(self) -> None:
         static_spec = json.loads(
