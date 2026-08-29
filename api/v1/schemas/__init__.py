@@ -47,6 +47,7 @@ from api.v1.schemas.backtest import (
     BacktestResultsResponse,
     PerformanceMetrics,
 )
+from api.v1.schemas.dashboard import DashboardOverviewResponse
 from api.v1.schemas.system_config import (
     SystemConfigFieldSchema,
     SystemConfigCategorySchema,
@@ -165,6 +166,8 @@ __all__ = [
     "BacktestResultItem",
     "BacktestResultsResponse",
     "PerformanceMetrics",
+    # dashboard
+    "DashboardOverviewResponse",
     # system config
     "SystemConfigFieldSchema",
     "SystemConfigCategorySchema",
