@@ -49,7 +49,7 @@
 - 美股：`stock:US:AAPL`
 
 后端统一使用 `make_entity_ref()` / `parse_entity_ref()`，Web 统一使用 `makeEntityRef()` / `parseEntityRef()`；后端 schema 还会校验 `ref` 必须与 `entity_type`、规范化后的 `entity_id` 完全一致，直接构造矛盾字段会被拒绝。
-股票代码带有明确市场身份时（例如 `HK00700`、`AAPL.US`、`2330.TW`），后端从代码推导 market；显式传入 market 时，该 market 同时作为旧裸代码的消歧提示，例如 `8035 + jp` 与 `8035.T` 收敛为同一 ref，`BSE + 920748` 与 `920748.BJ` 统一为 `CN:920748`。无法由共享 identity resolver 解析的字符串直接拒绝，不再格式化为伪 CN 标识；无法确定 KS/KQ 交易所的旧裸韩股也在补齐 suffix 前 fail closed。显式 market 与代码身份冲突时同样 fail closed，避免同一股票生成两个 ref。Web 同步 helper 无法在运行前读取服务端股票索引，因此裸数字代码不得默认推断为 CN；调用方必须传入 `<MARKET>:<code>`，或使用 `buildStockEntityLink(code, market)` 提供已有市场上下文。
+股票代码带有明确市场身份时（例如 `HK00700`、`AAPL.US`、`2330.TW`），后端从代码推导 market；显式传入 market 时，该 market 同时作为旧裸代码的消歧提示，例如 `8035 + jp` 与 `8035.T` 收敛为同一 ref，`BSE + 920748` 与 `920748.BJ` 统一为 `CN:920748`。无法由共享 identity resolver 解析的字符串直接拒绝，不再格式化为伪 CN 标识；无法确定 KS/KQ 交易所的旧裸韩股也在补齐 suffix 前 fail closed。显式 market 与代码身份冲突时同样 fail closed，避免同一股票生成两个 ref。后端 generic stock builder 与专用 builder 共用此规范化路径；美股代码同时覆盖仓库股票索引中的最长 7 字符 canonical symbol（例如 `AAICPRC`）。Web 同步 helper 无法在运行前读取服务端股票索引，因此裸数字代码不得默认推断为 CN；调用方必须传入 `<MARKET>:<code>`，或使用 `buildStockEntityLink(code, market)` 提供已有市场上下文。
 
 ## 可用性与 fail-closed 规则
 

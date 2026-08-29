@@ -64,6 +64,13 @@ describe('entityLink helpers', () => {
     expect(link.ref).toBe('stock:CN:600519');
   });
 
+  it('accepts longer canonical US symbols from the checked-in stock index', () => {
+    const link = buildStockEntityLink('AAICPRC', 'us');
+
+    expect(link.entityId).toBe('US:AAICPRC');
+    expect(link.ref).toBe('stock:US:AAICPRC');
+  });
+
   it('routes report outcome tracking through decision signals', () => {
     const link = buildEntityLink('report', '123', { label: 'AAPL report' });
     const actions = Object.fromEntries(link.actions.map((item) => [item.action, item]));

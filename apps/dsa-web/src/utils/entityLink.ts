@@ -215,7 +215,7 @@ const normalizeStockEntityId = (entityId: string): string => {
   const valid = (
     (market === 'CN' && /^\d{6}$/.test(code))
     || (market === 'HK' && /^HK\d{5}$/.test(code))
-    || (market === 'US' && /^[A-Z]{1,5}(?:[.-][A-Z])?$/.test(code))
+    || (market === 'US' && code.length <= 7 && /^[A-Z][A-Z0-9]*(?:\.[A-Z])?$/.test(code))
     || (market === 'JP' && /^\d{4,5}\.T$/.test(code))
     || (market === 'KR' && /^\d{6}\.(?:KS|KQ)$/.test(code))
     || (market === 'TW' && /^\d{4,6}\.TW(?:O)?$/.test(code))
@@ -230,7 +230,8 @@ const inferStockMarket = (code: string): string => {
   if (/^\d{4,5}\.T$/.test(code)) return 'JP';
   if (/^\d{6}\.(?:KS|KQ)$/.test(code)) return 'KR';
   if (/^\d{4,6}\.TW(?:O)?$/.test(code)) return 'TW';
-  if (/^[A-Z]{1,5}(?:[.-][A-Z])?(?:\.US)?$/.test(code)) return 'US';
+  const usCode = code.endsWith('.US') ? code.slice(0, -3) : code;
+  if (usCode.length <= 7 && /^[A-Z][A-Z0-9]*(?:\.[A-Z])?$/.test(usCode)) return 'US';
   return '';
 };
 

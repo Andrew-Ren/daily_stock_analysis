@@ -59,6 +59,21 @@ def test_stock_entity_link_metadata_uses_canonical_entity_id_code() -> None:
     assert us_link.metadata["stock_code"] == "AAPL"
 
 
+def test_generic_stock_builder_uses_the_same_canonical_identity_path() -> None:
+    generic = EntityLink.model_validate(build_entity_link("stock", "600519"))
+    specific = EntityLink.model_validate(build_stock_entity_link("600519"))
+
+    assert generic.entity_id == "CN:600519"
+    assert generic.ref == specific.ref == "stock:CN:600519"
+
+
+def test_us_index_canonical_symbols_longer_than_five_letters_are_supported() -> None:
+    link = EntityLink.model_validate(build_stock_entity_link("AAICPRC", market="us"))
+
+    assert link.entity_id == "US:AAICPRC"
+    assert link.ref == "stock:US:AAICPRC"
+
+
 def test_entity_link_schema_rejects_contradictory_or_empty_refs() -> None:
     with pytest.raises(ValueError, match="ref must exactly match"):
         EntityLink(entity_type="stock", entity_id="CN:600519", ref="report:7")

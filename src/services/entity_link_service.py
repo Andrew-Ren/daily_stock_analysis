@@ -80,6 +80,7 @@ def make_entity_ref(entity_type: EntityType | str, entity_id: str) -> str:
         raise ValueError("entity_type is required")
     if not normalized_id:
         raise ValueError("entity_id is required")
+    normalized_id = _normalize_entity_id(normalized_type, normalized_id)
     return f"{normalized_type}:{normalized_id}"
 
 
@@ -109,6 +110,13 @@ def stock_entity_id(stock_code: str, *, market: Optional[str] = None) -> str:
         market_hint=explicit_market.lower() if explicit_market else None,
     )
     if identity is None:
+        us_code = raw_code.upper().removesuffix(".US")
+        if (
+            explicit_market in {None, "US"}
+            and len(us_code) <= 7
+            and re.fullmatch(r"[A-Z][A-Z0-9]*(?:\.[A-Z])?", us_code)
+        ):
+            return f"US:{us_code}"
         if explicit_market:
             raise ValueError("market is incompatible with stock_code identity")
         raise ValueError("unsupported stock_code identity")
@@ -126,6 +134,16 @@ def stock_entity_id(stock_code: str, *, market: Optional[str] = None) -> str:
     if not normalized_code:
         raise ValueError("stock_code is required")
     return f"{normalized_market}:{normalized_code}"
+
+
+def _normalize_entity_id(entity_type: str, entity_id: str) -> str:
+    normalized_id = str(entity_id or "").strip()
+    if entity_type != "stock":
+        return normalized_id
+    if ":" not in normalized_id:
+        return stock_entity_id(normalized_id)
+    market, stock_code = normalized_id.split(":", 1)
+    return stock_entity_id(stock_code, market=market)
 
 
 def build_stock_entity_link(
@@ -157,7 +175,7 @@ def build_entity_link(
 ) -> Dict[str, Any]:
     """Build an EntityLink-compatible dict with default or explicit actions."""
     normalized_type = str(entity_type).strip()
-    normalized_id = str(entity_id).strip()
+    normalized_id = _normalize_entity_id(normalized_type, entity_id)
     selected_actions = tuple(actions) if actions is not None else _DEFAULT_ACTIONS.get(normalized_type, ("view",))
     action_items = [
         build_entity_action(normalized_type, normalized_id, str(action))
@@ -181,6 +199,7 @@ def build_entity_link(
 
 def build_entity_action(entity_type: str, entity_id: str, action: str) -> Dict[str, Any]:
     """Build one action descriptor for an entity."""
+    entity_id = _normalize_entity_id(entity_type, entity_id)
     route = _ACTION_ROUTES.get(
         (entity_type, action),
         _RouteTemplate(None, available=False, disabled_reason="unsupported_action"),
