@@ -49,12 +49,12 @@
 - 美股：`stock:US:AAPL`
 
 后端统一使用 `make_entity_ref()` / `parse_entity_ref()`，Web 统一使用 `makeEntityRef()` / `parseEntityRef()`；后端 schema 还会校验 `ref` 必须与 `entity_type`、规范化后的 `entity_id` 完全一致，直接构造矛盾字段会被拒绝。
-股票代码带有明确市场身份时（例如 `HK00700`、`AAPL.US`、`2330.TW`），后端从代码推导 market；显式传入 market 时，该 market 同时作为旧裸代码的消歧提示，例如 `8035 + jp` 与 `8035.T` 收敛为同一 ref，`BSE + 920748` 与 `920748.BJ` 统一为 `CN:920748`。无法由共享 identity resolver 解析的字符串直接拒绝，不再格式化为伪 CN 标识；无法确定 KS/KQ 交易所的旧裸韩股也在补齐 suffix 前 fail closed。显式 market 与代码身份冲突时同样 fail closed，避免同一股票生成两个 ref。后端 generic stock builder、专用 builder 与 API schema 共用此规范化路径；美股代码同时覆盖仓库股票索引中的最长 7 字符 canonical symbol（例如 `AAICPRC`）及多字母优先股后缀（例如 `PEB.PG`）。Web 同步 helper 的 `buildEntityLink()`、`makeEntityRef()` 与 `buildStockEntityLink()` 也统一规范化股票身份；它无法在运行前读取服务端股票索引，因此裸数字代码不得默认推断为 CN，调用方必须传入 `<MARKET>:<code>`，或使用 `buildStockEntityLink(code, market)` 提供已有市场上下文。
+股票代码带有明确市场身份时（例如 `HK00700`、`AAPL.US`、`2330.TW`），后端从代码推导 market；显式传入 market 时，该 market 同时作为旧裸代码的消歧提示，例如 `8035 + jp` 与 `8035.T` 收敛为同一 ref，`BSE + 920748` 与 `920748.BJ` 统一为 `CN:920748`。无法由共享 identity resolver 解析的字符串直接拒绝，不再格式化为伪 CN 标识；无法确定 KS/KQ 交易所的旧裸韩股也在补齐 suffix 前 fail closed。显式 market 与代码身份冲突时同样 fail closed，避免同一股票生成两个 ref。沪深北代码还会校验交易所前后缀与数字段一致，例如 `SH600519` 合法，而 `SZ600519` 会被拒绝，不能剥掉错误前缀后悄悄链接到上海股票。后端 generic stock builder、专用 builder 与 API schema 共用此规范化路径；美股代码同时覆盖仓库股票索引中的最长 7 字符 canonical symbol（例如 `AAICPRC`）及多字母优先股后缀（例如 `PEB.PG`）。Web 同步 helper 的 `buildEntityLink()`、`makeEntityRef()` 与 `buildStockEntityLink()` 也统一规范化股票身份；它无法在运行前读取服务端股票索引，因此裸数字代码不得默认推断为 CN，调用方必须传入 `<MARKET>:<code>`，或使用 `buildStockEntityLink(code, market)` 提供已有市场上下文。
 
 ## 可用性与 fail-closed 规则
 
 动作出现在 `actions` 中只表示契约认识这个动作，不代表目标页面已能处理它。只有目标页已消费足以定位实体的参数时，动作才可设置 `available=true` 并进入 `links`。
-`EntityAction.available` 默认值为 `false`；任何直接构造 schema 的 producer 都必须在同时提供可消费 route 与完整上下文后显式 opt in，避免省略字段时误报为可执行。
+`EntityAction.available` 默认值为 `false`；任何直接构造 schema 的 producer 都必须在同时提供非空 `href` 与完整上下文后显式 opt in。后端 schema 会拒绝 `available=true` 但没有可导航 route 的动作，避免客户端拿到“声称可用、实际点不了”的入口。
 
 当前唯一可用动作：
 

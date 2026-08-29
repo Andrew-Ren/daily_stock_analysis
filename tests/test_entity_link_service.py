@@ -49,6 +49,14 @@ def test_direct_entity_action_construction_defaults_to_unavailable() -> None:
     assert action.available is False
 
 
+def test_available_entity_action_requires_a_route() -> None:
+    with pytest.raises(ValueError, match="requires a non-empty href"):
+        EntityAction(action="view", available=True)
+
+    action = EntityAction(action="view", available=True, href="/stocks/600519")
+    assert action.href == "/stocks/600519"
+
+
 def test_stock_entity_link_metadata_uses_canonical_entity_id_code() -> None:
     hk_link = EntityLink.model_validate(build_stock_entity_link("00700", market="hk"))
     us_link = EntityLink.model_validate(build_stock_entity_link("aapl", market="us"))

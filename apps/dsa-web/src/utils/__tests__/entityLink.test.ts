@@ -57,6 +57,10 @@ describe('entityLink helpers', () => {
     expect(() => buildEntityLink('stock', '005930')).toThrow('explicit market');
     expect(() => buildEntityLink('stock', 'KR:035900')).toThrow('unsupported stock entityId');
     expect(() => buildEntityLink('stock', 'CN:HK00700')).toThrow('market conflicts');
+    expect(() => buildStockEntityLink('SZ600519', 'cn')).toThrow('exchange conflicts');
+    expect(() => buildStockEntityLink('600519.SZ', 'cn')).toThrow('exchange conflicts');
+    expect(() => buildStockEntityLink('SH000001', 'cn')).toThrow('exchange conflicts');
+    expect(() => buildStockEntityLink('BJ600519', 'cn')).toThrow('exchange conflicts');
   });
 
   it('builds a canonical numeric stock ref when the caller supplies market context', () => {

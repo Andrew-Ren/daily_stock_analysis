@@ -210,6 +210,14 @@ const normalizeStockEntityId = (entityId: string): string => {
     throw new Error('stock entityId market conflicts with code');
   }
 
+  const explicitCnExchange = extractExplicitCnExchange(upperCode);
+  if (explicitCnExchange) {
+    const numericCode = upperCode.replace(/^(?:SH|SS|SZ|BJ)\.?/, '').replace(/\.(?:SH|SS|SZ|BJ)$/, '');
+    if (inferCnExchange(numericCode) !== explicitCnExchange) {
+      throw new Error('stock entityId exchange conflicts with code');
+    }
+  }
+
   let code = normalizeStockCode(rawCode).toUpperCase();
   if (market === 'HK' && /^\d{1,5}$/.test(code)) code = `HK${code.padStart(5, '0')}`;
   if (market === 'US' && code.endsWith('.US')) code = code.slice(0, -3);
@@ -236,6 +244,19 @@ const inferStockMarket = (code: string): string => {
   const usCode = code.endsWith('.US') ? code.slice(0, -3) : code;
   if (usCode.length <= 7 && /^[A-Z][A-Z0-9]*(?:\.[A-Z]+)?$/.test(usCode)) return 'US';
   return '';
+};
+
+const extractExplicitCnExchange = (code: string): 'SH' | 'SZ' | 'BJ' | '' => {
+  const prefix = code.match(/^(SH|SS|SZ|BJ)\.?\d{6}$/)?.[1];
+  const suffix = code.match(/^\d{6}\.(SH|SS|SZ|BJ)$/)?.[1];
+  const exchange = prefix || suffix || '';
+  return exchange === 'SS' ? 'SH' : exchange as 'SH' | 'SZ' | 'BJ' | '';
+};
+
+const inferCnExchange = (code: string): 'SH' | 'SZ' | 'BJ' | '' => {
+  if (!/^\d{6}$/.test(code)) return '';
+  if (!code.startsWith('900') && /^(?:92|43|81|82|83|87|88)/.test(code)) return 'BJ';
+  return /^[569]/.test(code) ? 'SH' : 'SZ';
 };
 
 const hasConsumableContext = (entityType: EntityType, entityId: string, action: EntityActionType): boolean => {

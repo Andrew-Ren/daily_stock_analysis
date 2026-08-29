@@ -41,6 +41,12 @@ class EntityAction(BaseModel):
     disabled_reason: Optional[str] = Field(None, description="Stable reason when available=false")
     params: Dict[str, Any] = Field(default_factory=dict, description="Opaque action parameters")
 
+    @model_validator(mode="after")
+    def validate_available_route(self) -> "EntityAction":
+        if self.available and not str(self.href or "").strip():
+            raise ValueError("available entity action requires a non-empty href")
+        return self
+
 
 class EntityLink(BaseModel):
     """Stable cross-page reference to a business entity."""
