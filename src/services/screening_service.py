@@ -1262,7 +1262,14 @@ class ScreeningService:
             "正在补充入选股票的新闻与事件",
         )
         selected, dsa_enrichment = _enrich_candidates_with_dsa(selected)
-        selected = [_attach_candidate_explanations(candidate) for candidate in selected]
+        strategy_factor_weights = _strategy_factor_weights(strategy)
+        selected = [
+            _attach_candidate_explanations(
+                candidate,
+                factor_weights=strategy_factor_weights,
+            )
+            for candidate in selected
+        ]
         warnings = _collect_screening_warning_messages(raw_data)
         response = {
             "enabled": True,
@@ -3798,7 +3805,25 @@ def _normalize_candidate(raw: Any, rank: int) -> Dict[str, Any]:
     }
 
 
-def _attach_candidate_explanations(candidate: Dict[str, Any]) -> Dict[str, Any]:
+def _strategy_factor_weights(strategy_name: str) -> Dict[str, float]:
+    for strategy in load_screening_strategies():
+        if strategy.name != strategy_name:
+            continue
+        return {
+            str(factor): float(weight)
+            for factor, weight in strategy.factor_weights.items()
+            if isinstance(weight, (int, float))
+            and math.isfinite(float(weight))
+            and float(weight) > 0
+        }
+    return {}
+
+
+def _attach_candidate_explanations(
+    candidate: Dict[str, Any],
+    *,
+    factor_weights: Optional[Dict[str, float]] = None,
+) -> Dict[str, Any]:
     """Attach deterministic, provenance-aware candidate explanations."""
     normalized = dict(candidate)
     why_selected: List[Dict[str, Any]] = []
@@ -3829,15 +3854,18 @@ def _attach_candidate_explanations(candidate: Dict[str, Any]) -> Dict[str, Any]:
     if isinstance(factors, dict):
         top_factors = sorted(
             (
-                (str(key), float(value))
+                (str(key), float(value), float((factor_weights or {}).get(str(key), 0)))
                 for key, value in factors.items()
                 if isinstance(value, (int, float)) and math.isfinite(float(value))
+                and isinstance((factor_weights or {}).get(str(key)), (int, float))
+                and math.isfinite(float((factor_weights or {}).get(str(key), 0)))
+                and float((factor_weights or {}).get(str(key), 0)) > 0
             ),
-            key=lambda pair: pair[1],
+            key=lambda factor: factor[1] * factor[2],
             reverse=True,
         )[:3]
         if top_factors:
-            text = "、".join(f"{key} {value:.1f}" for key, value in top_factors)
+            text = "、".join(f"{key} {value:.1f}" for key, value, _weight in top_factors)
             why_selected.append(
                 _explanation_item("top_factors", f"核心因子：{text}", source="screening", quality="observed")
             )

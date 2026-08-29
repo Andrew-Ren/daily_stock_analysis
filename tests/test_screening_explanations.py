@@ -17,7 +17,10 @@ def test_real_zero_quote_change_is_preserved_as_observed_evidence() -> None:
         "llm_catalysts": [],
     }
 
-    result = _attach_candidate_explanations(candidate)
+    result = _attach_candidate_explanations(
+        candidate,
+        factor_weights={"quality": 0.4, "value": 0.6},
+    )
 
     quote_item = next(item for item in result["why_now"] if item["code"] == "quote_change_pct")
     assert quote_item["value"] == 0.0
@@ -72,11 +75,36 @@ def test_local_selection_explanation_survives_without_llm_output() -> None:
         "dsa_events": [],
     }
 
-    result = _attach_candidate_explanations(candidate)
+    result = _attach_candidate_explanations(
+        candidate,
+        factor_weights={"quality": 0.4, "value": 0.6},
+    )
 
     assert result["why_selected"][0]["code"] == "top_factors"
     assert "value 91.0" in result["why_selected"][0]["text"]
     assert result["explanation_quality"]["why_selected"] == "ok"
+
+
+def test_top_factors_only_use_weighted_strategy_contributors() -> None:
+    candidate = {
+        "rank": 3,
+        "reason": "",
+        "factor_scores": {"topic_alignment": 99.0, "value": 70.0, "momentum": 90.0},
+        "dsa_context": {},
+        "dsa_news": [],
+        "dsa_events": [],
+    }
+
+    result = _attach_candidate_explanations(
+        candidate,
+        factor_weights={"value": 0.8, "momentum": 0.2},
+    )
+
+    factor_text = result["why_selected"][0]["text"]
+    assert "value 70.0" in factor_text
+    assert "momentum 90.0" in factor_text
+    assert factor_text.index("value 70.0") < factor_text.index("momentum 90.0")
+    assert "topic_alignment" not in factor_text
 
 
 def test_llm_reason_does_not_replace_the_observed_local_selection_fallback() -> None:
