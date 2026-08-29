@@ -138,7 +138,7 @@ class CalendarEventApiTestCase(unittest.TestCase):
         hk_event = self._create(
             title="Tencent earnings",
             market="hk",
-            symbol="00700.HK",
+            symbol="00700",
             event_date=(start + timedelta(days=1)).isoformat(),
         )
         cn_event = self._create(
@@ -153,7 +153,12 @@ class CalendarEventApiTestCase(unittest.TestCase):
         self.assertEqual(cn_event["symbol"], "600519")
         self.assertEqual(cn_event["scope_value"], "600519")
 
-        for alias, expected_id in (("HK00700", hk_event["id"]), ("600519", cn_event["id"])):
+        for alias, expected_id in (
+            ("00700", hk_event["id"]),
+            ("00700.HK", hk_event["id"]),
+            ("HK00700", hk_event["id"]),
+            ("600519", cn_event["id"]),
+        ):
             response = self.client.get(
                 "/api/v1/calendar/events",
                 params={
@@ -164,6 +169,16 @@ class CalendarEventApiTestCase(unittest.TestCase):
             )
             self.assertEqual(response.status_code, 200, response.text)
             self.assertEqual([item["id"] for item in response.json()["items"]], [expected_id])
+
+    def test_default_window_clamps_at_date_max(self) -> None:
+        response = self.client.get(
+            "/api/v1/calendar/events",
+            params={"start_date": date.max.isoformat()},
+        )
+
+        self.assertEqual(response.status_code, 200, response.text)
+        self.assertEqual(response.json()["start_date"], date.max.isoformat())
+        self.assertEqual(response.json()["end_date"], date.max.isoformat())
 
     def test_repository_range_and_pagination_do_not_depend_on_ui_state(self) -> None:
         start = date.today()

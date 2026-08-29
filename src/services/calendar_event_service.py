@@ -9,6 +9,7 @@ from typing import Any, Dict, Optional
 
 from data_provider.base import canonical_stock_code, normalize_stock_code
 from src.repositories.calendar_event_repo import CalendarEventRepository
+from src.services.stock_code_utils import resolve_daily_stock_identity
 
 _ALLOWED_EVENT_TYPES = {"earnings", "dividend", "lockup_unlock", "macro", "user", "monitor"}
 _ALLOWED_SCOPE_TYPES = {"market", "symbol", "portfolio", "sector", "custom"}
@@ -31,7 +32,10 @@ class CalendarEventService:
 
     def list_events(self, **filters: Any) -> Dict[str, Any]:
         start_date = filters.get("start_date") or date.today()
-        end_date = filters.get("end_date") or (start_date + timedelta(days=6))
+        end_date = filters.get("end_date")
+        if end_date is None:
+            remaining_days = (date.max - start_date).days
+            end_date = start_date + timedelta(days=min(6, remaining_days))
         if end_date < start_date:
             raise CalendarEventServiceError("end_date must be on or after start_date")
 
@@ -153,6 +157,9 @@ class CalendarEventService:
         normalized = CalendarEventService._optional_normalized(value)
         if normalized is None:
             return None
+        identity = resolve_daily_stock_identity(normalized)
+        if identity is not None:
+            return canonical_stock_code(identity.refill_code or identity.normalized_code)
         return canonical_stock_code(normalize_stock_code(normalized))
 
     @staticmethod
