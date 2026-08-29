@@ -198,7 +198,11 @@ class CalendarEventService:
         identity = resolve_daily_stock_identity(normalized, market_hint=market_hint)
         if identity is None or identity.market not in _ALLOWED_MARKETS - {"global"}:
             raise CalendarEventServiceError("unsupported symbol identity")
-        code = canonical_stock_code(identity.refill_code or identity.normalized_code)
+        if not identity.refill_code:
+            raise CalendarEventServiceError(
+                "symbol identity requires an exchange-qualified canonical code"
+            )
+        code = canonical_stock_code(identity.refill_code)
         return code, identity.market
 
     @staticmethod

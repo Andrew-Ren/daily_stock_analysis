@@ -224,6 +224,27 @@ class CalendarEventApiTestCase(unittest.TestCase):
         self.assertEqual(response.status_code, 400, response.text)
         self.assertEqual(response.json()["error"], "validation_error")
 
+    def test_unindexed_korean_symbol_requires_exchange_qualified_identity(self) -> None:
+        bare = self.client.post(
+            "/api/v1/calendar/events",
+            json={
+                "title": "Ambiguous Korean symbol",
+                "event_type": "earnings",
+                "scope_type": "symbol",
+                "market": "kr",
+                "symbol": "035900",
+                "event_date": date.today().isoformat(),
+            },
+        )
+
+        self.assertEqual(bare.status_code, 400, bare.text)
+        self.assertEqual(bare.json()["error"], "validation_error")
+
+        qualified = self._create(market="kr", symbol="035900.KQ")
+        self.assertEqual(qualified["market"], "kr")
+        self.assertEqual(qualified["symbol"], "035900.KQ")
+        self.assertEqual(qualified["scope_value"], "035900.KQ")
+
     def test_default_window_clamps_at_date_max(self) -> None:
         response = self.client.get(
             "/api/v1/calendar/events",
