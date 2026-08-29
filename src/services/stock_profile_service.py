@@ -335,13 +335,14 @@ class StockProfileService:
                 candidates.append(numeric_base)
         aliases: List[str] = []
         for candidate in candidates or [code]:
-            if (
-                not include_ambiguous_numeric
-                and market in {"jp", "kr", "tw"}
-                and str(candidate).strip().isdigit()
-            ):
-                continue
-            for alias in (str(candidate).strip(), str(candidate).strip().lower()):
+            candidate_text = str(candidate).strip()
+            if not include_ambiguous_numeric and candidate_text.isdigit():
+                if market in {"jp", "kr", "tw"}:
+                    continue
+                unhinted_identity = resolve_daily_stock_identity(candidate_text)
+                if unhinted_identity is None or unhinted_identity.market != market:
+                    continue
+            for alias in (candidate_text, candidate_text.lower()):
                 if alias and alias not in aliases:
                     aliases.append(alias)
         return aliases

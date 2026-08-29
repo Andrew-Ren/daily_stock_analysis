@@ -449,10 +449,32 @@ def test_explicit_cn_identity_never_reexpands_through_a_colliding_kr_alias() -> 
     monitor_aliases = {
         call.kwargs["target"] for call in dependencies["alert_service"].list_rules.call_args_list
     }
+    intelligence_calls = {
+        (call.kwargs["scope_value"], call.kwargs["market"])
+        for call in dependencies["intelligence_service"].list_items.call_args_list
+    }
     assert "000660.KS" not in intelligence_aliases
     assert "000660.KS" not in monitor_aliases
+    assert ("000660", "cn") in intelligence_calls
+    assert ("000660", "global") not in intelligence_calls
     assert {"SZ000660", "000660.SZ"} <= intelligence_aliases
     assert {"SZ000660", "000660.SZ"} <= monitor_aliases
+
+
+def test_unambiguous_cn_bare_code_remains_available_to_global_and_monitor_queries() -> None:
+    service, dependencies = _service()
+
+    service.get_profile("600519")
+
+    intelligence_calls = {
+        (call.kwargs["scope_value"], call.kwargs["market"])
+        for call in dependencies["intelligence_service"].list_items.call_args_list
+    }
+    monitor_targets = {
+        call.kwargs["target"] for call in dependencies["alert_service"].list_rules.call_args_list
+    }
+    assert ("600519", "global") in intelligence_calls
+    assert "600519" in monitor_targets
 
 
 def test_us_suffix_converges_to_bare_ticker_and_queries_legacy_aliases() -> None:
