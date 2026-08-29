@@ -1229,6 +1229,40 @@ describe('StockScreeningPage', () => {
     expect(screen.queryByText(/LLM 已降级/)).not.toBeInTheDocument();
   });
 
+  it('renders an LLM risk summary separately when no LLM reason or thesis is available', async () => {
+    getScreeningStatus.mockResolvedValueOnce({ enabled: true, available: true });
+    screenStocks.mockResolvedValueOnce({
+      enabled: true,
+      candidates: [
+        {
+          rank: 1,
+          code: '000001',
+          name: '平安银行',
+          score: 88.5,
+          reason: '主要优势：估值 88',
+          riskSummary: '资产质量仍需持续观察',
+          riskFlags: [],
+          llmRisks: [],
+          raw: {},
+        },
+      ],
+      candidateCount: 1,
+      llmRanked: true,
+    });
+
+    render(<StockScreeningPage />);
+
+    expect(await screen.findByText('选股已开启')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: /运行选股/ }));
+    expect(await screen.findByText('平安银行')).toBeInTheDocument();
+    const expandButton = screen.queryByRole('button', { name: '展开查看' });
+    if (expandButton) fireEvent.click(expandButton);
+
+    expect(screen.getByText('风险摘要')).toBeInTheDocument();
+    expect(screen.getByText('资产质量仍需持续观察')).toBeInTheDocument();
+    expect(screen.getByText('主要优势：估值 88')).toBeInTheDocument();
+  });
+
   it('deduplicates Screening snapshot fallback warnings and source errors', async () => {
     getScreeningStatus.mockResolvedValueOnce({
       enabled: true,

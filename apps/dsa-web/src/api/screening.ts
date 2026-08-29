@@ -29,6 +29,7 @@ export type ScreeningCandidate = {
   score?: number | null;
   screenScore?: number | null;
   reason: string;
+  riskSummary?: string;
   riskLevel?: string;
   riskFlags?: string[];
   llmScore?: number | null;

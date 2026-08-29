@@ -1829,6 +1829,12 @@ const StockScreeningPage: React.FC = () => {
                                       : '无'}
                                   </p>
                                 </div>
+                                {item.riskSummary ? (
+                                  <div>
+                                    <p className="text-xs font-semibold text-secondary-text">风险摘要</p>
+                                    <p className="mt-1 text-sm text-foreground">{item.riskSummary}</p>
+                                  </div>
+                                ) : null}
                               </div>
                               <div className="space-y-3">
                                 <div>
