@@ -57,10 +57,25 @@ const DEFAULT_ACTIONS: Record<EntityType, EntityActionType[]> = {
   calendar_event: ['view', 'monitor'],
 };
 
+const normalizeEntityType = (value: unknown): EntityType => {
+  const normalized = String(value).trim();
+  if (!Object.prototype.hasOwnProperty.call(DEFAULT_ACTIONS, normalized)) {
+    throw new Error('unsupported entityType');
+  }
+  return normalized as EntityType;
+};
+
+const normalizeActionType = (value: unknown): EntityActionType => {
+  const normalized = String(value).trim();
+  if (!Object.prototype.hasOwnProperty.call(ACTION_LABELS, normalized)) {
+    throw new Error(`unsupported entity action: ${normalized}`);
+  }
+  return normalized as EntityActionType;
+};
+
 export const makeEntityRef = (entityType: EntityType | string, entityId: string): string => {
-  const normalizedType = String(entityType).trim();
+  const normalizedType = normalizeEntityType(entityType);
   const rawId = String(entityId).trim();
-  if (!normalizedType) throw new Error('entityType is required');
   if (!rawId) throw new Error('entityId is required');
   const normalizedId = normalizedType === 'stock'
     ? normalizeEntityId('stock', rawId)
@@ -87,18 +102,20 @@ export const buildEntityLink = (
     metadata?: Record<string, unknown>;
   } = {},
 ): EntityLink => {
-  const normalizedId = normalizeEntityId(entityType, entityId);
-  const actions = [...new Set(options.actions ?? DEFAULT_ACTIONS[entityType] ?? ['view'])];
-  const actionItems = actions.map((action) => buildEntityAction(entityType, normalizedId, action));
+  const normalizedType = normalizeEntityType(entityType);
+  const normalizedId = normalizeEntityId(normalizedType, entityId);
+  const actions = [...new Set(options.actions ?? DEFAULT_ACTIONS[normalizedType])]
+    .map(normalizeActionType);
+  const actionItems = actions.map((action) => buildEntityAction(normalizedType, normalizedId, action));
   const links = actionItems.reduce<Partial<Record<EntityActionType, string>>>((result, item) => {
     if (item.href && item.available) result[item.action] = item.href;
     return result;
   }, {});
 
   return {
-    entityType,
+    entityType: normalizedType,
     entityId: normalizedId,
-    ref: makeEntityRef(entityType, normalizedId),
+    ref: makeEntityRef(normalizedType, normalizedId),
     label: options.label ?? '',
     links,
     actions: actionItems,
@@ -121,19 +138,21 @@ export const buildEntityAction = (
   entityId: string,
   action: EntityActionType,
 ): EntityAction => {
-  const normalizedId = normalizeEntityId(entityType, entityId);
-  const route = ACTION_ROUTES[`${entityType}:${action}`] ?? {
+  const normalizedType = normalizeEntityType(entityType);
+  const normalizedAction = normalizeActionType(action);
+  const normalizedId = normalizeEntityId(normalizedType, entityId);
+  const route = ACTION_ROUTES[`${normalizedType}:${normalizedAction}`] ?? {
     href: null,
     available: false,
     disabledReason: 'unsupported_action',
   };
-  const params = buildActionParams(entityType, normalizedId, action);
+  const params = buildActionParams(normalizedType, normalizedId, normalizedAction);
   const href = route.href ? formatHref(route.href, params) : null;
-  const hasContext = hasConsumableContext(entityType, normalizedId, action);
+  const hasContext = hasConsumableContext(normalizedType, normalizedId, normalizedAction);
   const available = (route.available ?? true) && hasContext;
   return {
-    action,
-    label: ACTION_LABELS[action],
+    action: normalizedAction,
+    label: ACTION_LABELS[normalizedAction],
     href,
     available,
     disabledReason: route.disabledReason ?? (available ? null : 'invalid_entity_context'),

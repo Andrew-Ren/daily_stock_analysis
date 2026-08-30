@@ -77,8 +77,8 @@ def make_entity_ref(entity_type: EntityType | str, entity_id: str) -> str:
     """Build a stable opaque entity ref."""
     normalized_type = str(entity_type).strip()
     normalized_id = str(entity_id).strip()
-    if not normalized_type:
-        raise ValueError("entity_type is required")
+    if normalized_type not in _DEFAULT_ACTIONS:
+        raise ValueError("unsupported entity_type")
     if not normalized_id:
         raise ValueError("entity_id is required")
     normalized_id = _normalize_entity_id(normalized_type, normalized_id)

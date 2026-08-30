@@ -85,4 +85,25 @@ class EntityLink(BaseModel):
         }
         if self.links != expected_links:
             raise ValueError("links must exactly match available action hrefs")
+        if expected_links:
+            # Validate the executable contract at the public schema boundary,
+            # not only in the preferred builder. Direct API producers must not
+            # make pending routes or invalid entity context clickable.
+            from src.services.entity_link_service import build_entity_action
+
+            for action in self.actions:
+                if not action.available:
+                    continue
+                expected_action = build_entity_action(
+                    self.entity_type,
+                    normalized_id,
+                    action.action,
+                )
+                if (
+                    not expected_action["available"]
+                    or action.href != expected_action["href"]
+                ):
+                    raise ValueError(
+                        "available entity action must match the supported route contract"
+                    )
         return self

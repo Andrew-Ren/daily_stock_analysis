@@ -58,23 +58,61 @@ def test_available_entity_action_requires_a_route() -> None:
 
 
 def test_entity_links_must_match_available_actions() -> None:
-    action = EntityAction(action="view", available=True, href="/stocks/600519")
-    valid = EntityLink(
-        entity_type="stock",
-        entity_id="CN:600519",
-        ref="stock:CN:600519",
-        actions=[action],
-        links={"view": "/stocks/600519"},
+    action = EntityAction(
+        action="track_outcome",
+        available=True,
+        href="/decision-signals?sourceReportId=123",
     )
-    assert valid.links == {"view": "/stocks/600519"}
+    valid = EntityLink(
+        entity_type="report",
+        entity_id="123",
+        ref="report:123",
+        actions=[action],
+        links={"track_outcome": "/decision-signals?sourceReportId=123"},
+    )
+    assert valid.links == {"track_outcome": "/decision-signals?sourceReportId=123"}
 
     with pytest.raises(ValueError, match="exactly match"):
+        EntityLink(
+            entity_type="report",
+            entity_id="123",
+            ref="report:123",
+            actions=[action],
+            links={"watch": "/"},
+        )
+
+
+def test_entity_link_schema_rejects_builder_availability_bypasses() -> None:
+    pending_action = EntityAction(
+        action="view",
+        available=True,
+        href="/stocks/600519",
+    )
+    with pytest.raises(ValueError, match="supported route contract"):
         EntityLink(
             entity_type="stock",
             entity_id="CN:600519",
             ref="stock:CN:600519",
-            actions=[action],
-            links={"watch": "/"},
+            actions=[pending_action],
+            links={"view": "/stocks/600519"},
+        )
+
+    unsafe_report_action = EntityAction(
+        action="track_outcome",
+        available=True,
+        href="/decision-signals?sourceReportId=9007199254740993",
+    )
+    with pytest.raises(ValueError, match="supported route contract"):
+        EntityLink(
+            entity_type="report",
+            entity_id="9007199254740993",
+            ref="report:9007199254740993",
+            actions=[unsafe_report_action],
+            links={
+                "track_outcome": (
+                    "/decision-signals?sourceReportId=9007199254740993"
+                )
+            },
         )
 
 
@@ -92,6 +130,8 @@ def test_entity_link_builder_deduplicates_actions_in_first_seen_order() -> None:
 def test_entity_link_builder_rejects_values_outside_the_shared_schema() -> None:
     with pytest.raises(ValueError, match="unsupported entity_type"):
         build_entity_link("unknown", "1")
+    with pytest.raises(ValueError, match="unsupported entity_type"):
+        make_entity_ref("unknown", "1")
     with pytest.raises(ValueError, match="unsupported entity action"):
         build_entity_link("report", "1", actions=["view", "launch"])
 

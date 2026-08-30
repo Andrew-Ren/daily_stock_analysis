@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import type { EntityActionType, EntityType } from '../../types/entityLink';
 import {
   buildEntityAction,
   buildEntityLink,
@@ -168,5 +169,23 @@ describe('entityLink helpers', () => {
     expect(action.available).toBe(false);
     expect(action.disabledReason).toBe('unsupported_action');
     expect(action.href).toBeNull();
+  });
+
+  it('rejects values outside the shared schema at runtime boundaries', () => {
+    expect(() => makeEntityRef('unknown', '1')).toThrow('unsupported entityType');
+    expect(() => buildEntityLink('unknown' as EntityType, '1')).toThrow('unsupported entityType');
+    expect(() => buildEntityLink('report', '1', {
+      actions: ['launch' as EntityActionType],
+    })).toThrow('unsupported entity action');
+    expect(() => buildEntityAction(
+      'unknown' as EntityType,
+      '1',
+      'view',
+    )).toThrow('unsupported entityType');
+    expect(() => buildEntityAction(
+      'report',
+      '1',
+      'launch' as EntityActionType,
+    )).toThrow('unsupported entity action');
   });
 });
