@@ -384,6 +384,76 @@ def test_malformed_nested_snapshot_container_does_not_promote_older_snapshots() 
     assert "latest_completed_snapshot_unavailable" in payload["market"]["meta"]["limitations"]
 
 
+def test_older_malformed_detail_does_not_hide_valid_current_and_baseline() -> None:
+    dependencies = _dependencies()
+    reviews = [
+        _review(1, "2026-08-29T09:00:00+08:00"),
+        _review(2, "2026-08-28T09:00:00+08:00"),
+        _review(3, "2026-08-27T09:00:00+08:00"),
+    ]
+    dependencies["history_service"].get_history_list.side_effect = lambda **kwargs: (
+        _history_page(dependencies["history_service"], reviews, kwargs)
+        if kwargs.get("report_type") == "market_review"
+        else {"items": [], "total": 0}
+    )
+
+    def detail(record_id: int) -> dict:
+        if record_id == 3:
+            return {"context_snapshot": "{invalid-json"}
+        trade_date = "2026-08-29" if record_id == 1 else "2026-08-28"
+        return {
+            "context_snapshot": {
+                "market_light_snapshots": {
+                    "cn": _snapshot("cn", trade_date, 60 if record_id == 1 else 50, "yellow")
+                }
+            }
+        }
+
+    dependencies["history_service"].get_history_detail_by_id.side_effect = detail
+
+    payload = DashboardOverviewService(**dependencies).get_overview()
+
+    assert payload["market"]["data"]["latest_snapshots"]["cn"]["trade_date"] == "2026-08-29"
+    assert payload["what_changed"]["data"]["current_trade_dates"] == {"cn": "2026-08-29"}
+    assert payload["what_changed"]["data"]["previous_trade_dates"] == {"cn": "2026-08-28"}
+    assert "market_review_detail_partial" in payload["market"]["meta"]["limitations"]
+
+
+def test_malformed_detail_between_candidates_blocks_only_the_baseline() -> None:
+    dependencies = _dependencies()
+    reviews = [
+        _review(1, "2026-08-29T09:00:00+08:00"),
+        _review(2, "2026-08-28T09:00:00+08:00"),
+        _review(3, "2026-08-27T09:00:00+08:00"),
+    ]
+    dependencies["history_service"].get_history_list.side_effect = lambda **kwargs: (
+        _history_page(dependencies["history_service"], reviews, kwargs)
+        if kwargs.get("report_type") == "market_review"
+        else {"items": [], "total": 0}
+    )
+
+    def detail(record_id: int) -> dict:
+        if record_id == 2:
+            return {"context_snapshot": "{invalid-json"}
+        trade_date = "2026-08-29" if record_id == 1 else "2026-08-27"
+        return {
+            "context_snapshot": {
+                "market_light_snapshots": {
+                    "cn": _snapshot("cn", trade_date, 60 if record_id == 1 else 40, "yellow")
+                }
+            }
+        }
+
+    dependencies["history_service"].get_history_detail_by_id.side_effect = detail
+
+    payload = DashboardOverviewService(**dependencies).get_overview()
+
+    assert payload["market"]["data"]["latest_snapshots"]["cn"]["trade_date"] == "2026-08-29"
+    assert payload["what_changed"]["data"]["current_trade_dates"] == {"cn": "2026-08-29"}
+    assert payload["what_changed"]["data"]["previous_trade_dates"] == {}
+    assert "previous_completed_snapshot_unavailable:cn" in payload["what_changed"]["meta"]["limitations"]
+
+
 def test_malformed_region_snapshot_does_not_promote_older_region_snapshot() -> None:
     dependencies = _dependencies()
     original_detail = dependencies["history_service"].get_history_detail_by_id.side_effect

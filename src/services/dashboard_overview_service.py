@@ -3,8 +3,8 @@
 
 from __future__ import annotations
 
-from datetime import date, datetime
-from typing import Any, Dict, List, Optional, Set, Tuple
+from datetime import datetime
+from typing import Any, Dict, List, Optional, Tuple
 
 from src.config import Config, get_config
 from src.repositories.portfolio_repo import PortfolioRepository
@@ -61,7 +61,9 @@ class DashboardOverviewService:
             str,
             Dict[str, Optional[Dict[str, Any]]],
         ] = {}
-        regions_with_unknown_trade_date: Set[str] = set()
+        snapshot_candidate_ranks_by_region: Dict[str, Dict[str, int]] = {}
+        global_detail_failure_ranks: List[int] = []
+        unknown_trade_date_failure_ranks_by_region: Dict[str, List[int]] = {}
         latest_reviews: List[Dict[str, Any]] = []
         invalid_snapshot_count = 0
         detail_failure_count = 0
@@ -83,47 +85,58 @@ class DashboardOverviewService:
                     review_count = int(result.get("total") or 0)
                 if len(latest_reviews) < 5:
                     latest_reviews.extend(reviews[: 5 - len(latest_reviews)])
-                for review in reviews:
+                for review_index, review in enumerate(reviews):
+                    review_rank = scanned_count + review_index
                     context_snapshot = review.get("context_snapshot")
                     if not isinstance(context_snapshot, dict):
                         detail_failure_count += 1
+                        global_detail_failure_ranks.append(review_rank)
                         continue
                     snapshot_container = context_snapshot.get("market_light_snapshots")
                     if snapshot_container is not None and not isinstance(snapshot_container, dict):
                         detail_failure_count += 1
+                        global_detail_failure_ranks.append(review_rank)
                         continue
                     for raw_region, raw_snapshot in (snapshot_container or {}).items():
                         region = str(raw_region).strip().lower()
                         if region and not isinstance(raw_snapshot, dict):
                             invalid_snapshot_count += 1
-                            regions_with_unknown_trade_date.add(region)
+                            unknown_trade_date_failure_ranks_by_region.setdefault(region, []).append(
+                                review_rank
+                            )
                     raw_snapshots = self._extract_snapshots(context_snapshot)
                     for region, raw_snapshot in raw_snapshots.items():
                         raw_trade_date = str(raw_snapshot.get("trade_date") or "").strip()
                         try:
-                            canonical_trade_date = date.fromisoformat(raw_trade_date).isoformat()
+                            canonical_trade_date = self._canonical_trade_date(raw_trade_date)
                         except Exception:
                             invalid_snapshot_count += 1
-                            regions_with_unknown_trade_date.add(region)
+                            unknown_trade_date_failure_ranks_by_region.setdefault(region, []).append(
+                                review_rank
+                            )
                             continue
+                        region_ranks = snapshot_candidate_ranks_by_region.setdefault(region, {})
                         try:
                             snapshot = MarketLightSnapshot.model_validate(raw_snapshot).model_dump()
                         except Exception:
                             invalid_snapshot_count += 1
-                            snapshot_candidates_by_region.setdefault(region, {}).setdefault(
-                                canonical_trade_date,
-                                None,
-                            )
+                            region_candidates = snapshot_candidates_by_region.setdefault(region, {})
+                            if canonical_trade_date not in region_candidates:
+                                region_candidates[canonical_trade_date] = None
+                                region_ranks[canonical_trade_date] = review_rank
                             continue
                         snapshot_region = str(snapshot.get("region") or "").strip().lower()
                         region_candidates = snapshot_candidates_by_region.setdefault(region, {})
                         if snapshot_region != region:
                             invalid_snapshot_count += 1
-                            region_candidates.setdefault(canonical_trade_date, None)
+                            if canonical_trade_date not in region_candidates:
+                                region_candidates[canonical_trade_date] = None
+                                region_ranks[canonical_trade_date] = review_rank
                             continue
                         snapshot["trade_date"] = canonical_trade_date
                         if region_candidates.get(canonical_trade_date) is None:
                             region_candidates[canonical_trade_date] = snapshot
+                            region_ranks[canonical_trade_date] = review_rank
                 scanned_count += len(reviews)
                 if scanned_count >= review_count:
                     break
@@ -147,17 +160,25 @@ class DashboardOverviewService:
         unavailable_current_regions: List[str] = []
         for region, candidates in snapshot_candidates_by_region.items():
             ordered_dates = sorted(candidates, reverse=True)
-            if detail_failure_count or region in regions_with_unknown_trade_date:
-                unavailable_current_regions.append(region)
-                continue
-            current = candidates[ordered_dates[0]] if ordered_dates else None
-            if current is None:
+            candidate_ranks = snapshot_candidate_ranks_by_region.get(region, {})
+            failure_ranks = [
+                *global_detail_failure_ranks,
+                *unknown_trade_date_failure_ranks_by_region.get(region, []),
+            ]
+            current_date = ordered_dates[0] if ordered_dates else None
+            current = candidates[current_date] if current_date else None
+            current_rank = candidate_ranks.get(current_date, scanned_count) if current_date else scanned_count
+            if current is None or any(rank < current_rank for rank in failure_ranks):
                 unavailable_current_regions.append(region)
                 continue
             selected = [current]
             if len(ordered_dates) > 1:
-                previous = candidates[ordered_dates[1]]
-                if previous is not None:
+                previous_date = ordered_dates[1]
+                previous = candidates[previous_date]
+                previous_rank = candidate_ranks.get(previous_date, scanned_count)
+                if previous is not None and not any(
+                    rank < previous_rank for rank in failure_ranks
+                ):
                     selected.append(previous)
             snapshots_by_region[region] = selected
 
@@ -202,6 +223,14 @@ class DashboardOverviewService:
             snapshots_by_region,
             source_limitations=limitations,
         )
+
+    @staticmethod
+    def _canonical_trade_date(raw_trade_date: str) -> str:
+        """Parse supported ISO date forms consistently on Python 3.10+."""
+        raw = str(raw_trade_date or "").strip()
+        compact = len(raw) == 8 and raw.isascii() and raw.isdigit()
+        date_format = "%Y%m%d" if compact else "%Y-%m-%d"
+        return datetime.strptime(raw, date_format).date().isoformat()
 
     def _personal_block(self) -> Dict[str, Any]:
         data = {
