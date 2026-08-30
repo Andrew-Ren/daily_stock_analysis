@@ -118,12 +118,18 @@ class DashboardOverviewService:
                         detail_failure_count += 1
                         register_detail_failure(review, context_snapshot, review_rank)
                         continue
+                    raw_snapshots: Dict[str, Dict[str, Any]] = {}
                     for raw_region, raw_snapshot in (snapshot_container or {}).items():
-                        region = str(raw_region).strip().lower()
-                        if region and not isinstance(raw_snapshot, dict):
+                        region = self._snapshot_region(raw_region)
+                        if not region:
+                            invalid_snapshot_count += 1
+                            register_detail_failure(review, context_snapshot, review_rank)
+                            continue
+                        if not isinstance(raw_snapshot, dict):
                             invalid_snapshot_count += 1
                             register_unknown_date_failure(region, review_rank)
-                    raw_snapshots = self._extract_snapshots(context_snapshot)
+                            continue
+                        raw_snapshots[region] = raw_snapshot
                     for region, raw_snapshot in raw_snapshots.items():
                         raw_trade_date = str(raw_snapshot.get("trade_date") or "").strip()
                         try:
@@ -273,6 +279,17 @@ class DashboardOverviewService:
             return normalized.split(",")
         return []
 
+    @staticmethod
+    def _snapshot_region(raw_region: Any) -> str:
+        raw = str(raw_region or "").strip()
+        if not raw:
+            return ""
+        try:
+            normalized = normalize_market_review_region_strict(raw)
+        except ValueError:
+            return ""
+        return normalized if "," not in normalized else ""
+
     def _personal_block(self) -> Dict[str, Any]:
         data = {
             "watchlist_count": None,
@@ -415,19 +432,6 @@ class DashboardOverviewService:
                 "previous_trade_dates": previous_dates,
                 "items": items,
             },
-        }
-
-    @staticmethod
-    def _extract_snapshots(context_snapshot: Any) -> Dict[str, Dict[str, Any]]:
-        if not isinstance(context_snapshot, dict):
-            return {}
-        snapshots = context_snapshot.get("market_light_snapshots")
-        if not isinstance(snapshots, dict):
-            return {}
-        return {
-            str(region).strip().lower(): snapshot
-            for region, snapshot in snapshots.items()
-            if isinstance(snapshot, dict)
         }
 
     @staticmethod
