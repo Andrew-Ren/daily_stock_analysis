@@ -187,9 +187,14 @@ def build_entity_link(
 ) -> Dict[str, Any]:
     """Build an EntityLink-compatible dict with default or explicit actions."""
     normalized_type = str(entity_type).strip()
+    if normalized_type not in _DEFAULT_ACTIONS:
+        raise ValueError("unsupported entity_type")
     normalized_id = _normalize_entity_id(normalized_type, entity_id)
     requested_actions = actions if actions is not None else _DEFAULT_ACTIONS.get(normalized_type, ("view",))
     selected_actions = tuple(dict.fromkeys(str(action) for action in requested_actions))
+    unsupported_actions = [action for action in selected_actions if action not in _ACTION_LABELS]
+    if unsupported_actions:
+        raise ValueError(f"unsupported entity action: {unsupported_actions[0]}")
     action_items = [
         build_entity_action(normalized_type, normalized_id, action)
         for action in selected_actions
@@ -212,6 +217,10 @@ def build_entity_link(
 
 def build_entity_action(entity_type: str, entity_id: str, action: str) -> Dict[str, Any]:
     """Build one action descriptor for an entity."""
+    if entity_type not in _DEFAULT_ACTIONS:
+        raise ValueError("unsupported entity_type")
+    if action not in _ACTION_LABELS:
+        raise ValueError(f"unsupported entity action: {action}")
     entity_id = _normalize_entity_id(entity_type, entity_id)
     route = _ACTION_ROUTES.get(
         (entity_type, action),

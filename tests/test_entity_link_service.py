@@ -89,6 +89,13 @@ def test_entity_link_builder_deduplicates_actions_in_first_seen_order() -> None:
     assert [action.action for action in link.actions] == ["view", "track_outcome"]
 
 
+def test_entity_link_builder_rejects_values_outside_the_shared_schema() -> None:
+    with pytest.raises(ValueError, match="unsupported entity_type"):
+        build_entity_link("unknown", "1")
+    with pytest.raises(ValueError, match="unsupported entity action"):
+        build_entity_link("report", "1", actions=["view", "launch"])
+
+
 def test_stock_entity_link_metadata_uses_canonical_entity_id_code() -> None:
     hk_link = EntityLink.model_validate(build_stock_entity_link("00700", market="hk"))
     us_link = EntityLink.model_validate(build_stock_entity_link("aapl", market="us"))
