@@ -26,6 +26,17 @@ describe('normalizeStockCode', () => {
     expect(normalizeStockCode('920748.BJ')).toBe('920748');
   });
 
+  it('preserves conflicting explicit CN exchanges instead of matching another stock', () => {
+    expect(normalizeStockCode('SS000001')).toBe('SS000001');
+    expect(normalizeStockCode('SH.000001')).toBe('SH.000001');
+    expect(normalizeStockCode('SZ600519')).toBe('SZ600519');
+    expect(normalizeStockCode('BJ.600519')).toBe('BJ.600519');
+    expect(normalizeStockCode('000001.SH')).toBe('000001.SH');
+    expect(normalizeStockCode('600519.SZ')).toBe('600519.SZ');
+    expect(normalizeStockCode('600519.BJ')).toBe('600519.BJ');
+    expect(areStockCodesEquivalent('SS000001', 'SZ000001')).toBe(false);
+  });
+
   it('normalizes HK prefix to 5-digit form', () => {
     expect(normalizeStockCode('HK00700')).toBe('HK00700');
     expect(normalizeStockCode('HK1810')).toBe('HK01810');

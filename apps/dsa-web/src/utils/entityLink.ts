@@ -1,5 +1,5 @@
 import type { EntityAction, EntityActionType, EntityLink, EntityType } from '../types/entityLink';
-import { normalizeStockCode } from './stockCode';
+import { inferCnExchange, normalizeStockCode } from './stockCode';
 
 type RouteTemplate = {
   href: string | null;
@@ -255,11 +255,6 @@ const extractExplicitCnExchange = (code: string): 'SH' | 'SZ' | 'BJ' | '' => {
   return exchange === 'SS' ? 'SH' : exchange as 'SH' | 'SZ' | 'BJ' | '';
 };
 
-const inferCnExchange = (code: string): 'SH' | 'SZ' | 'BJ' | '' => {
-  if (!/^\d{6}$/.test(code)) return '';
-  if (!code.startsWith('900') && /^(?:92|43|81|82|83|87|88)/.test(code)) return 'BJ';
-  return /^[569]/.test(code) ? 'SH' : 'SZ';
-};
 
 const hasConsumableContext = (entityType: EntityType, entityId: string, action: EntityActionType): boolean => {
   if (entityType === 'report' && action === 'track_outcome') {

@@ -45,7 +45,8 @@ export function normalizeStockCode(stockCode: string): string {
     && !upper.startsWith('SZ.')
   ) {
     const candidate = code.slice(2);
-    if (/^\d{5,6}$/.test(candidate)) {
+    const prefix = upper.slice(0, 2) === 'SS' ? 'SH' : upper.slice(0, 2);
+    if (/^\d{6}$/.test(candidate) && inferCnExchange(candidate) === prefix) {
       return candidate;
     }
   }
@@ -53,7 +54,9 @@ export function normalizeStockCode(stockCode: string): string {
   // Strip dotted SH/SS/SZ prefix (e.g. SH.600519 or legacy SS.600519 → 600519)
   if (upper.startsWith('SH.') || upper.startsWith('SS.') || upper.startsWith('SZ.')) {
     const candidate = code.slice(3);
-    if (/^\d{5,6}$/.test(candidate)) {
+    const rawPrefix = upper.slice(0, 2);
+    const prefix = rawPrefix === 'SS' ? 'SH' : rawPrefix;
+    if (/^\d{6}$/.test(candidate) && inferCnExchange(candidate) === prefix) {
       return candidate;
     }
   }
@@ -61,7 +64,7 @@ export function normalizeStockCode(stockCode: string): string {
   // Strip BJ prefix (e.g. BJ920748 → 920748)
   if (upper.startsWith('BJ') && !upper.startsWith('BJ.')) {
     const candidate = code.slice(2);
-    if (/^\d{6}$/.test(candidate)) {
+    if (/^\d{6}$/.test(candidate) && inferCnExchange(candidate) === 'BJ') {
       return candidate;
     }
   }
@@ -69,7 +72,7 @@ export function normalizeStockCode(stockCode: string): string {
   // Strip dotted BJ prefix (e.g. BJ.920748 → 920748)
   if (upper.startsWith('BJ.')) {
     const candidate = code.slice(3);
-    if (/^\d{6}$/.test(candidate)) {
+    if (/^\d{6}$/.test(candidate) && inferCnExchange(candidate) === 'BJ') {
       return candidate;
     }
   }
@@ -98,12 +101,23 @@ export function normalizeStockCode(stockCode: string): string {
     }
 
     // 600519.SH → 600519
-    if ((suffix === 'SH' || suffix === 'SS' || suffix === 'SZ' || suffix === 'BJ') && /^\d+$/.test(base)) {
+    const exchange = suffix === 'SS' ? 'SH' : suffix;
+    if (
+      (exchange === 'SH' || exchange === 'SZ' || exchange === 'BJ')
+      && /^\d{6}$/.test(base)
+      && inferCnExchange(base) === exchange
+    ) {
       return base;
     }
   }
 
   return code;
+}
+
+export function inferCnExchange(code: string): 'SH' | 'SZ' | 'BJ' | '' {
+  if (!/^\d{6}$/.test(code)) return '';
+  if (!code.startsWith('900') && /^(?:92|43|81|82|83|87|88)/.test(code)) return 'BJ';
+  return /^[569]/.test(code) ? 'SH' : 'SZ';
 }
 
 function stockCodeMatchKey(stockCode: string): string {
