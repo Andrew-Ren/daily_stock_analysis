@@ -8,6 +8,14 @@ describe('normalizeStockCode', () => {
     expect(normalizeStockCode('920748')).toBe('920748');
   });
 
+  it('normalizes Unicode width variants before shared matching', () => {
+    expect(normalizeStockCode('６００５１９')).toBe('600519');
+    expect(normalizeStockCode('ＨＫ．００７００')).toBe('HK00700');
+    expect(normalizeStockCode('ＡＡＰＬ')).toBe('AAPL');
+    expect(areStockCodesEquivalent('６００５１９', '600519.SH')).toBe(true);
+    expect(areStockCodesEquivalent('ＨＫ．００７００', 'HK00700')).toBe(true);
+  });
+
   it('strips SH/SZ prefix', () => {
     expect(normalizeStockCode('SH600519')).toBe('600519');
     expect(normalizeStockCode('SZ000001')).toBe('000001');

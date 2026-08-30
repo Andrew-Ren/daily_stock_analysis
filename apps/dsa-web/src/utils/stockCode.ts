@@ -15,7 +15,7 @@
  *   AAPL        → AAPL       TSLA        → TSLA
  */
 export function normalizeStockCode(stockCode: string): string {
-  const code = stockCode.trim();
+  const code = stockCode.trim().normalize('NFKC');
   const upper = code.toUpperCase();
 
   // Futu provider prefix form (e.g. HK.00700 → HK00700).
