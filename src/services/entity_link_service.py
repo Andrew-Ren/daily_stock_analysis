@@ -105,7 +105,13 @@ def stock_entity_id(stock_code: str, *, market: Optional[str] = None) -> str:
         raise ValueError("stock_code is required")
     if not raw_code.isascii():
         raise ValueError("stock_code must use ASCII characters after normalization")
-    explicit_market = str(market).strip().upper() if market is not None else None
+    explicit_market = (
+        unicodedata.normalize("NFKC", str(market)).strip().upper()
+        if market is not None
+        else None
+    )
+    if explicit_market and not explicit_market.isascii():
+        raise ValueError("market must use ASCII characters after normalization")
     if explicit_market == "BSE":
         explicit_market = "CN"
     identity = resolve_daily_stock_identity(
@@ -145,6 +151,7 @@ def _normalize_entity_id(entity_type: str, entity_id: str) -> str:
     normalized_id = str(entity_id or "").strip()
     if entity_type != "stock":
         return normalized_id
+    normalized_id = unicodedata.normalize("NFKC", normalized_id)
     if ":" not in normalized_id:
         return stock_entity_id(normalized_id)
     market, stock_code = normalized_id.split(":", 1)

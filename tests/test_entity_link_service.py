@@ -141,6 +141,8 @@ def test_unicode_width_variants_converge_to_ascii_stock_identities() -> None:
     assert stock_entity_id("７００", market="hk") == "HK:HK00700"
     assert stock_entity_id("ＡＡＰＬ．ＵＳ") == "US:AAPL"
     assert make_entity_ref("stock", "CN:６００５１９") == "stock:CN:600519"
+    assert make_entity_ref("stock", "ＣＮ：６００５１９") == "stock:CN:600519"
+    assert build_stock_entity_link("６００５１９", market="ＣＮ")["entity_id"] == "CN:600519"
 
 
 def test_non_ascii_decimal_scripts_are_rejected_after_width_normalization() -> None:
