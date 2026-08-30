@@ -9,7 +9,7 @@
  *   SZ000001    → 000001     000001.SZ   → 000001
  *   BJ920748    → 920748     920748.BJ   → 920748
  *   HK00700     → HK00700    00700       → HK00700
- *   00700.HK    → HK00700
+ *   00700.HK    → HK00700    HK.00700    → HK00700
  *   hk1810      → HK01810    1810.HK     → HK01810
  *   7203.T      → 7203.T     005930.KS   → 005930.KS
  *   AAPL        → AAPL       TSLA        → TSLA
@@ -17,6 +17,12 @@
 export function normalizeStockCode(stockCode: string): string {
   const code = stockCode.trim();
   const upper = code.toUpperCase();
+
+  // Futu provider prefix form (e.g. HK.00700 → HK00700).
+  const dottedHkCandidate = upper.match(/^HK\.(\d{1,5})$/)?.[1];
+  if (dottedHkCandidate) {
+    return `HK${dottedHkCandidate.padStart(5, '0')}`;
+  }
 
   // Normalize HK prefix to a canonical 5-digit form (e.g. hk1810 → HK01810)
   if (upper.startsWith('HK') && !upper.startsWith('HK.')) {

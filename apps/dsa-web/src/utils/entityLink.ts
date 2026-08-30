@@ -196,7 +196,7 @@ const normalizeStockEntityId = (entityId: string): string => {
     throw new Error('ambiguous numeric stock entityId requires an explicit market');
   }
 
-  const inferredMarket = inferStockMarket(upperCode);
+  const inferredMarket = inferStockMarket(normalizeStockCode(rawCode).toUpperCase());
   const market = explicitMarket || inferredMarket;
   if (!market || !['CN', 'HK', 'US', 'JP', 'KR', 'TW'].includes(market)) {
     throw new Error('unsupported stock entityId');
@@ -220,9 +220,7 @@ const normalizeStockEntityId = (entityId: string): string => {
 
   let code = normalizeStockCode(rawCode).toUpperCase();
   if (market === 'HK') {
-    const dottedProviderCode = code.match(/^HK\.(\d{1,5})$/)?.[1];
-    if (dottedProviderCode) code = `HK${dottedProviderCode.padStart(5, '0')}`;
-    else if (/^\d{1,5}$/.test(code)) code = `HK${code.padStart(5, '0')}`;
+    if (/^\d{1,5}$/.test(code)) code = `HK${code.padStart(5, '0')}`;
   }
   if (market === 'US' && code.endsWith('.US')) code = code.slice(0, -3);
   if (market === 'JP' && /^\d{4,5}$/.test(code)) code = `${code}.T`;
@@ -241,7 +239,7 @@ const normalizeStockEntityId = (entityId: string): string => {
 
 const inferStockMarket = (code: string): string => {
   if (/^(?:(?:SH|SS|SZ|BJ)\.?\d{6}|\d{6}\.(?:SH|SZ|SS|BJ)|\d{6})$/.test(code)) return 'CN';
-  if (/^(?:HK\.?\d{1,5}|\d{1,5}\.HK|\d{5})$/.test(code)) return 'HK';
+  if (/^(?:HK\d{1,5}|\d{1,5}\.HK|\d{5})$/.test(code)) return 'HK';
   if (/^\d{4,5}\.T$/.test(code)) return 'JP';
   if (/^\d{6}\.(?:KS|KQ)$/.test(code)) return 'KR';
   if (/^\d{4,6}\.TW(?:O)?$/.test(code)) return 'TW';

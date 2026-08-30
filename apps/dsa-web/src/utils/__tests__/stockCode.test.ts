@@ -32,6 +32,8 @@ describe('normalizeStockCode', () => {
     expect(normalizeStockCode('HK700')).toBe('HK00700');
     expect(normalizeStockCode('hk00700')).toBe('HK00700');
     expect(normalizeStockCode('hk1810')).toBe('HK01810');
+    expect(normalizeStockCode('HK.00700')).toBe('HK00700');
+    expect(normalizeStockCode('hk.1810')).toBe('HK01810');
   });
 
   it('normalizes pure 5-digit HK codes to canonical prefix form', () => {
@@ -81,7 +83,7 @@ describe('normalizeStockCode', () => {
   });
 
   it('handles HK variants as equivalent', () => {
-    const codes = ['00700', 'HK00700', '00700.HK', 'hk00700'];
+    const codes = ['00700', 'HK00700', '00700.HK', 'hk00700', 'HK.00700'];
     const normalized = codes.map(normalizeStockCode);
     expect(new Set(normalized).size).toBe(1);
     expect(normalized[0]).toBe('HK00700');
@@ -90,6 +92,7 @@ describe('normalizeStockCode', () => {
   it('compares stock-code variants with both sides normalized', () => {
     expect(areStockCodesEquivalent('00700', 'HK00700')).toBe(true);
     expect(areStockCodesEquivalent('01810', '1810.HK')).toBe(true);
+    expect(areStockCodesEquivalent('HK.00700', 'HK00700')).toBe(true);
     expect(areStockCodesEquivalent('aapl', 'AAPL')).toBe(true);
     expect(areStockCodesEquivalent('7203.t', '7203.T')).toBe(true);
     expect(areStockCodesEquivalent('005930.ks', '005930.KS')).toBe(true);
@@ -104,6 +107,7 @@ describe('normalizeStockCode', () => {
     expect(includesStockCode(codes, '600519.SH')).toBe(true);
     expect(includesStockCode(codes, 'HK00700')).toBe(true);
     expect(includesStockCode(codes, '00700.HK')).toBe(true);
+    expect(includesStockCode(codes, 'HK.00700')).toBe(true);
     expect(includesStockCode(codes, 'AAPL')).toBe(true);
     expect(includesStockCode(codes, 'HK01810')).toBe(false);
     expect(findMatchingStockCode(codes, 'HK00700')).toBe('00700');
