@@ -149,6 +149,8 @@ def test_entity_link_builder_rejects_values_outside_the_shared_schema() -> None:
         make_entity_ref("unknown", "1")
     with pytest.raises(ValueError, match="unsupported entity action"):
         build_entity_link("report", "1", actions=["view", "launch"])
+    with pytest.raises(ValueError, match="entity_id is required"):
+        build_entity_link("report", "   ")
 
 
 def test_stock_entity_link_metadata_uses_canonical_entity_id_code() -> None:

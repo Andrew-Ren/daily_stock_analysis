@@ -190,6 +190,8 @@ def build_entity_link(
     if normalized_type not in _DEFAULT_ACTIONS:
         raise ValueError("unsupported entity_type")
     normalized_id = _normalize_entity_id(normalized_type, entity_id)
+    if not normalized_id:
+        raise ValueError("entity_id is required")
     requested_actions = actions if actions is not None else _DEFAULT_ACTIONS.get(normalized_type, ("view",))
     selected_actions = tuple(dict.fromkeys(str(action) for action in requested_actions))
     unsupported_actions = [action for action in selected_actions if action not in _ACTION_LABELS]
