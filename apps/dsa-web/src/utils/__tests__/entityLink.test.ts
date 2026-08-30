@@ -41,6 +41,7 @@ describe('entityLink helpers', () => {
     ['SS600519', 'stock:CN:600519'],
     ['SS.600519', 'stock:CN:600519'],
     ['hk:700', 'stock:HK:HK00700'],
+    ['HK.00700', 'stock:HK:HK00700'],
     ['aapl', 'stock:US:AAPL'],
     ['8035.T', 'stock:JP:8035.T'],
     ['005930.KS', 'stock:KR:005930.KS'],
@@ -68,6 +69,14 @@ describe('entityLink helpers', () => {
 
     expect(link.entityId).toBe('CN:600519');
     expect(link.ref).toBe('stock:CN:600519');
+  });
+
+  it('canonicalizes dotted HK provider symbols with explicit market context', () => {
+    const link = buildStockEntityLink('HK.00700', 'hk');
+
+    expect(link.entityId).toBe('HK:HK00700');
+    expect(link.ref).toBe('stock:HK:HK00700');
+    expect(makeEntityRef('stock', 'HK.00700')).toBe('stock:HK:HK00700');
   });
 
   it.each([
