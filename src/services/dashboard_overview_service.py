@@ -71,6 +71,25 @@ class DashboardOverviewService:
         review_count = 0
         scanned_count = 0
         page = 1
+
+        def register_unknown_date_failure(region: str, review_rank: int) -> None:
+            snapshot_candidates_by_region.setdefault(region, {})
+            snapshot_candidate_ranks_by_region.setdefault(region, {})
+            unknown_trade_date_failure_ranks_by_region.setdefault(region, []).append(
+                review_rank
+            )
+
+        def register_detail_failure(
+            review: Dict[str, Any],
+            context_snapshot: Any,
+            review_rank: int,
+        ) -> None:
+            region = self._review_region(review, context_snapshot)
+            if region:
+                register_unknown_date_failure(region, review_rank)
+            else:
+                global_detail_failure_ranks.append(review_rank)
+
         try:
             while True:
                 result = self._history().get_history_list(
@@ -90,22 +109,18 @@ class DashboardOverviewService:
                     context_snapshot = review.get("context_snapshot")
                     if not isinstance(context_snapshot, dict):
                         detail_failure_count += 1
-                        global_detail_failure_ranks.append(review_rank)
+                        register_detail_failure(review, context_snapshot, review_rank)
                         continue
                     snapshot_container = context_snapshot.get("market_light_snapshots")
                     if snapshot_container is not None and not isinstance(snapshot_container, dict):
                         detail_failure_count += 1
-                        global_detail_failure_ranks.append(review_rank)
+                        register_detail_failure(review, context_snapshot, review_rank)
                         continue
                     for raw_region, raw_snapshot in (snapshot_container or {}).items():
                         region = str(raw_region).strip().lower()
                         if region and not isinstance(raw_snapshot, dict):
                             invalid_snapshot_count += 1
-                            snapshot_candidates_by_region.setdefault(region, {})
-                            snapshot_candidate_ranks_by_region.setdefault(region, {})
-                            unknown_trade_date_failure_ranks_by_region.setdefault(region, []).append(
-                                review_rank
-                            )
+                            register_unknown_date_failure(region, review_rank)
                     raw_snapshots = self._extract_snapshots(context_snapshot)
                     for region, raw_snapshot in raw_snapshots.items():
                         raw_trade_date = str(raw_snapshot.get("trade_date") or "").strip()
@@ -113,11 +128,7 @@ class DashboardOverviewService:
                             canonical_trade_date = self._canonical_trade_date(raw_trade_date)
                         except Exception:
                             invalid_snapshot_count += 1
-                            snapshot_candidates_by_region.setdefault(region, {})
-                            snapshot_candidate_ranks_by_region.setdefault(region, {})
-                            unknown_trade_date_failure_ranks_by_region.setdefault(region, []).append(
-                                review_rank
-                            )
+                            register_unknown_date_failure(region, review_rank)
                             continue
                         region_ranks = snapshot_candidate_ranks_by_region.setdefault(region, {})
                         try:
@@ -235,6 +246,25 @@ class DashboardOverviewService:
         compact = len(raw) == 8 and raw.isascii() and raw.isdigit()
         date_format = "%Y%m%d" if compact else "%Y-%m-%d"
         return datetime.strptime(raw, date_format).date().isoformat()
+
+    @staticmethod
+    def _review_region(review: Dict[str, Any], context_snapshot: Any) -> str:
+        candidates: List[Any] = [review.get("region")]
+        if isinstance(context_snapshot, dict):
+            candidates.extend(
+                [
+                    context_snapshot.get("market_review_region"),
+                    context_snapshot.get("region"),
+                ]
+            )
+            payload = context_snapshot.get("market_review_payload")
+            if isinstance(payload, dict):
+                candidates.append(payload.get("region"))
+        for candidate in candidates:
+            region = str(candidate or "").strip().lower()
+            if region:
+                return region
+        return ""
 
     def _personal_block(self) -> Dict[str, Any]:
         data = {
