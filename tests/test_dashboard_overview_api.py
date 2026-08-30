@@ -896,6 +896,11 @@ def test_partial_multi_region_review_does_not_promote_older_missing_region() -> 
         if kwargs.get("report_type") == "market_review"
         else {"items": [], "total": 0}
     )
+    dependencies["history_service"].get_history_detail_by_id.side_effect = lambda record_id: {
+        "context_snapshot": next(
+            review["context_snapshot"] for review in reviews if review["id"] == record_id
+        )
+    }
 
     payload = DashboardOverviewService(**dependencies).get_overview()
 
@@ -903,6 +908,49 @@ def test_partial_multi_region_review_does_not_promote_older_missing_region() -> 
     assert "us" not in payload["market"]["data"]["latest_snapshots"]
     assert "latest_completed_snapshot_unavailable:us" in payload["market"]["meta"]["limitations"]
     assert "us" not in payload["what_changed"]["data"]["current_trade_dates"]
+
+
+@pytest.mark.parametrize("include_declared_snapshot", [False, True])
+def test_scoped_review_rejects_undeclared_snapshot_regions(
+    include_declared_snapshot: bool,
+) -> None:
+    dependencies = _dependencies()
+    snapshots = {
+        "us": _snapshot("us", "2026-08-29", 55, "yellow"),
+    }
+    if include_declared_snapshot:
+        snapshots["cn"] = _snapshot("cn", "2026-08-29", 60, "yellow")
+    reviews = [
+        {
+            **_review(1, "2026-08-29T09:00:00+08:00"),
+            "region": "cn",
+            "context_snapshot": {
+                "market_review_region": "cn",
+                "market_light_snapshots": snapshots,
+            },
+        },
+    ]
+    dependencies["history_service"].get_history_list.side_effect = lambda **kwargs: (
+        _history_page(dependencies["history_service"], reviews, kwargs)
+        if kwargs.get("report_type") == "market_review"
+        else {"items": [], "total": 0}
+    )
+    dependencies["history_service"].get_history_detail_by_id.side_effect = lambda record_id: {
+        "context_snapshot": next(
+            review["context_snapshot"] for review in reviews if review["id"] == record_id
+        )
+    }
+
+    payload = DashboardOverviewService(**dependencies).get_overview()
+
+    assert "us" not in payload["market"]["data"]["latest_snapshots"]
+    assert "us" not in payload["what_changed"]["data"]["current_trade_dates"]
+    assert "invalid_market_light_snapshot_skipped" in payload["market"]["meta"]["limitations"]
+    if include_declared_snapshot:
+        assert payload["market"]["data"]["latest_snapshots"]["cn"]["trade_date"] == "2026-08-29"
+    else:
+        assert "cn" not in payload["market"]["data"]["latest_snapshots"]
+        assert "latest_completed_snapshot_unavailable:cn" in payload["market"]["meta"]["limitations"]
 
 
 def test_recent_reports_use_one_stable_bounded_history_window() -> None:

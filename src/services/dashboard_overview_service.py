@@ -150,6 +150,19 @@ class DashboardOverviewService:
                         detail_failure_count += 1
                         for region in missing_declared_regions:
                             register_unknown_date_failure(region, review_rank)
+                    undeclared_regions = set(raw_snapshots).difference(declared_regions)
+                    if declared_regions and undeclared_regions:
+                        # The persisted review scope is authoritative.  A
+                        # self-consistent snapshot for another region must not
+                        # escape that scope and become a Dashboard "current"
+                        # value.  Keep valid in-scope entries, but reject every
+                        # extra outer key as malformed persisted context.
+                        invalid_snapshot_count += len(undeclared_regions)
+                        raw_snapshots = {
+                            region: raw_snapshot
+                            for region, raw_snapshot in raw_snapshots.items()
+                            if region in declared_regions
+                        }
                     for region, raw_snapshot in raw_snapshots.items():
                         if not isinstance(raw_snapshot, dict):
                             invalid_snapshot_count += 1

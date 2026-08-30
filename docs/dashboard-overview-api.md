@@ -30,6 +30,7 @@
 - change item 的 quality 取 current/previous 两份快照中较差的一侧；任一侧 partial 会降低整个 what_changed 块，任一侧 unavailable 不生成可靠变化项。
 - 没有第二份有效快照时，返回 `previous_completed_snapshot_unavailable`；部分 region 缺基线时整个块标记为 `partial`，并追加 `previous_completed_snapshot_unavailable:<region>`，避免把“缺少基线”误解为“没有变化”。不会临时拉行情或生成一份“当前”快照冒充基线。
 - 历史详情读取失败、投影出的 `context_snapshot` 不是 JSON object、其中已存在的 `market_light_snapshots` 不是 object（例如损坏的 JSON 字符串/数组），或已声明 review scope 的记录完全缺少/只保存空的 snapshot container 时，不再把其余更旧记录提升为 current/latest；对应快照和变化对比保持不可用并返回 limitation。没有可识别 scope 的旧记录仍按 legacy 无快照记录处理，避免它们无差别阻断所有市场。
+- 已声明的 review scope 是 region 边界：声明 `cn,us` 却只保存 `cn` 时，US 明确不可用，不能回退到旧 US；声明 `cn` 却混入 `us` 时，US 条目按无效上下文丢弃，不能进入 current/latest。容器中仍然有效的已声明 region 可以继续使用。
 - 快照校验失败时仍保留其 `trade_date` 的目标位置：最新日期无有效快照时不回退到更旧 current，最近更早日期无有效快照时不越过它继续寻找更旧 previous。同一目标日期存在其他有效重跑快照时，仍可使用该日期的有效版本。
 - 外层市场键必须与快照内部 `region` 一致；例如 `cn` 键下的 `region=us` 快照会按无效快照处理，不能进入 A 股的 current/previous 或变化项。
 - `market_light_snapshots` object 中任何已出现的 region 条目都必须仍是 object；例如最新记录里的 `cn: []` 会把 CN current 标为不可用，不能被过滤后再让旧 CN 快照冒充最新。
