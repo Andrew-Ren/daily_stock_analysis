@@ -561,7 +561,7 @@ def test_changes_are_partial_when_only_some_regions_have_a_baseline() -> None:
     assert "us" not in payload["what_changed"]["data"]["previous_trade_dates"]
 
 
-def test_recent_reports_paginates_past_market_review_only_page() -> None:
+def test_recent_reports_use_one_stable_bounded_history_window() -> None:
     dependencies = _dependencies()
     first_page = [_review(index, "2026-08-29T09:00:00+08:00") for index in range(1, 51)]
     second_page = [_stock_report(100 + index) for index in range(5)]
@@ -584,7 +584,8 @@ def test_recent_reports_paginates_past_market_review_only_page() -> None:
         call for call in dependencies["history_service"].get_history_list.call_args_list
         if "report_type" not in call.kwargs
     ]
-    assert [call.kwargs["page"] for call in activity_calls] == [1, 2]
+    assert [call.kwargs["page"] for call in activity_calls] == [1]
+    assert [call.kwargs["limit"] for call in activity_calls] == [100]
 
 
 def test_recent_report_scan_is_bounded_when_history_contains_only_market_reviews() -> None:
@@ -607,7 +608,8 @@ def test_recent_report_scan_is_bounded_when_history_contains_only_market_reviews
         call for call in dependencies["history_service"].get_history_list.call_args_list
         if "report_type" not in call.kwargs
     ]
-    assert [call.kwargs["page"] for call in activity_calls] == [1, 2]
+    assert [call.kwargs["page"] for call in activity_calls] == [1]
+    assert [call.kwargs["limit"] for call in activity_calls] == [100]
     assert payload["activity"]["data"]["recent_reports"] == []
     assert "recent_reports_history_scan_incomplete" in payload["activity"]["meta"]["limitations"]
 

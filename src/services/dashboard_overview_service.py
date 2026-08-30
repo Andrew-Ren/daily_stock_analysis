@@ -14,7 +14,6 @@ from src.services.history_service import HistoryService
 from src.services.task_queue import AnalysisTaskQueue, get_task_queue
 
 _MARKET_REVIEW_TYPE = "market_review"
-_DASHBOARD_HISTORY_PAGE_SIZE = 50
 _DASHBOARD_MARKET_REVIEW_SCAN_LIMIT = 100
 _DASHBOARD_RECENT_REPORT_SCAN_LIMIT = 100
 
@@ -249,31 +248,18 @@ class DashboardOverviewService:
         sources: List[str] = []
         success_count = 0
         try:
-            page = 1
-            scanned_count = 0
-            total = 0
-            while len(recent_reports) < 5:
-                result = self._history().get_history_list(
-                    page=page,
-                    limit=_DASHBOARD_HISTORY_PAGE_SIZE,
-                )
-                history_items = list(result.get("items") or [])
-                if page == 1:
-                    total = int(result.get("total") or 0)
-                recent_reports.extend(
-                    item for item in history_items
-                    if item.get("report_type") != _MARKET_REVIEW_TYPE
-                )
-                scanned_count += len(history_items)
-                if len(recent_reports) >= 5 or scanned_count >= total:
-                    break
-                if scanned_count >= _DASHBOARD_RECENT_REPORT_SCAN_LIMIT:
-                    limitations.append("recent_reports_history_scan_incomplete")
-                    break
-                if not history_items:
-                    limitations.append("recent_reports_history_scan_incomplete")
-                    break
-                page += 1
+            result = self._history().get_history_list(
+                page=1,
+                limit=_DASHBOARD_RECENT_REPORT_SCAN_LIMIT,
+            )
+            history_items = list(result.get("items") or [])
+            total = int(result.get("total") or 0)
+            recent_reports.extend(
+                item for item in history_items
+                if item.get("report_type") != _MARKET_REVIEW_TYPE
+            )
+            if len(recent_reports) < 5 and len(history_items) < total:
+                limitations.append("recent_reports_history_scan_incomplete")
             recent_reports = recent_reports[:5]
             sources.append("analysis_history")
             success_count += 1
