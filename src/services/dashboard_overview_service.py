@@ -12,6 +12,7 @@ from src.schemas.market_light import MarketLightSnapshot
 from src.services.alert_service import AlertService
 from src.services.history_service import HistoryService
 from src.services.task_queue import AnalysisTaskQueue, get_task_queue
+from src.utils.market_review_region import normalize_market_review_region_strict
 
 _MARKET_REVIEW_TYPE = "market_review"
 _DASHBOARD_MARKET_REVIEW_SCAN_LIMIT = 100
@@ -84,9 +85,10 @@ class DashboardOverviewService:
             context_snapshot: Any,
             review_rank: int,
         ) -> None:
-            region = self._review_region(review, context_snapshot)
-            if region:
-                register_unknown_date_failure(region, review_rank)
+            regions = self._review_regions(review, context_snapshot)
+            if regions:
+                for region in regions:
+                    register_unknown_date_failure(region, review_rank)
             else:
                 global_detail_failure_ranks.append(review_rank)
 
@@ -248,7 +250,7 @@ class DashboardOverviewService:
         return datetime.strptime(raw, date_format).date().isoformat()
 
     @staticmethod
-    def _review_region(review: Dict[str, Any], context_snapshot: Any) -> str:
+    def _review_regions(review: Dict[str, Any], context_snapshot: Any) -> List[str]:
         candidates: List[Any] = [review.get("region")]
         if isinstance(context_snapshot, dict):
             candidates.extend(
@@ -261,10 +263,15 @@ class DashboardOverviewService:
             if isinstance(payload, dict):
                 candidates.append(payload.get("region"))
         for candidate in candidates:
-            region = str(candidate or "").strip().lower()
-            if region:
-                return region
-        return ""
+            raw_region = str(candidate or "").strip()
+            if not raw_region:
+                continue
+            try:
+                normalized = normalize_market_review_region_strict(raw_region)
+            except ValueError:
+                continue
+            return normalized.split(",")
+        return []
 
     def _personal_block(self) -> Dict[str, Any]:
         data = {
