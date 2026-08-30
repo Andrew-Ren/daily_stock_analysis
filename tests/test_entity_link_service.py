@@ -78,6 +78,17 @@ def test_entity_links_must_match_available_actions() -> None:
         )
 
 
+def test_entity_link_builder_deduplicates_actions_in_first_seen_order() -> None:
+    payload = build_entity_link(
+        "report",
+        "1",
+        actions=["view", "view", "track_outcome", "view"],
+    )
+    link = EntityLink.model_validate(payload)
+
+    assert [action.action for action in link.actions] == ["view", "track_outcome"]
+
+
 def test_stock_entity_link_metadata_uses_canonical_entity_id_code() -> None:
     hk_link = EntityLink.model_validate(build_stock_entity_link("00700", market="hk"))
     us_link = EntityLink.model_validate(build_stock_entity_link("aapl", market="us"))

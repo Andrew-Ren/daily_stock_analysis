@@ -188,9 +188,10 @@ def build_entity_link(
     """Build an EntityLink-compatible dict with default or explicit actions."""
     normalized_type = str(entity_type).strip()
     normalized_id = _normalize_entity_id(normalized_type, entity_id)
-    selected_actions = tuple(actions) if actions is not None else _DEFAULT_ACTIONS.get(normalized_type, ("view",))
+    requested_actions = actions if actions is not None else _DEFAULT_ACTIONS.get(normalized_type, ("view",))
+    selected_actions = tuple(dict.fromkeys(str(action) for action in requested_actions))
     action_items = [
-        build_entity_action(normalized_type, normalized_id, str(action))
+        build_entity_action(normalized_type, normalized_id, action)
         for action in selected_actions
     ]
     links = {

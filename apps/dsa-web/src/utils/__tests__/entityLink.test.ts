@@ -111,6 +111,14 @@ describe('entityLink helpers', () => {
     expect(actions.view.available).toBe(false);
   });
 
+  it('deduplicates requested actions in first-seen order', () => {
+    const link = buildEntityLink('report', '123', {
+      actions: ['view', 'view', 'track_outcome', 'view'],
+    });
+
+    expect(link.actions.map((item) => item.action)).toEqual(['view', 'track_outcome']);
+  });
+
   it.each([
     ['strategy', 'value:quality'],
     ['signal', '42'],

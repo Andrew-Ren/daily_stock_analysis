@@ -88,7 +88,7 @@ export const buildEntityLink = (
   } = {},
 ): EntityLink => {
   const normalizedId = normalizeEntityId(entityType, entityId);
-  const actions = options.actions ?? DEFAULT_ACTIONS[entityType] ?? ['view'];
+  const actions = [...new Set(options.actions ?? DEFAULT_ACTIONS[entityType] ?? ['view'])];
   const actionItems = actions.map((action) => buildEntityAction(entityType, normalizedId, action));
   const links = actionItems.reduce<Partial<Record<EntityActionType, string>>>((result, item) => {
     if (item.href && item.available) result[item.action] = item.href;
