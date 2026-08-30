@@ -103,6 +103,8 @@ def stock_entity_id(stock_code: str, *, market: Optional[str] = None) -> str:
     raw_code = unicodedata.normalize("NFKC", str(stock_code or "")).strip()
     if not raw_code:
         raise ValueError("stock_code is required")
+    if not raw_code.isascii():
+        raise ValueError("stock_code must use ASCII characters after normalization")
     explicit_market = str(market).strip().upper() if market is not None else None
     if explicit_market == "BSE":
         explicit_market = "CN"

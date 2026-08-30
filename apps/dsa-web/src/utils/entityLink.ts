@@ -63,7 +63,7 @@ export const makeEntityRef = (entityType: EntityType | string, entityId: string)
   if (!normalizedType) throw new Error('entityType is required');
   if (!rawId) throw new Error('entityId is required');
   const normalizedId = normalizedType === 'stock'
-    ? normalizeStockEntityId(rawId)
+    ? normalizeEntityId('stock', rawId)
     : rawId;
   return `${normalizedType}:${normalizedId}`;
 };

@@ -140,6 +140,8 @@ describe('entityLink helpers', () => {
   it('validates refs and builds unavailable unsupported actions', () => {
     expect(makeEntityRef('signal', '42')).toBe('signal:42');
     expect(makeEntityRef('stock', 'cn:600519')).toBe('stock:CN:600519');
+    expect(makeEntityRef('stock', 'ＣＮ:６００５１９')).toBe('stock:CN:600519');
+    expect(() => makeEntityRef('stock', 'CN:٦٠٠٥١٩')).toThrow('unsupported stock entityId');
     expect(() => makeEntityRef('stock', '600519')).toThrow('explicit market');
     expect(parseEntityRef('alert:900')).toEqual(['alert', '900']);
     expect(() => makeEntityRef('stock', '')).toThrow('entityId is required');

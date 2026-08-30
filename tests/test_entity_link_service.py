@@ -143,6 +143,11 @@ def test_unicode_width_variants_converge_to_ascii_stock_identities() -> None:
     assert make_entity_ref("stock", "CN:６００５１９") == "stock:CN:600519"
 
 
+def test_non_ascii_decimal_scripts_are_rejected_after_width_normalization() -> None:
+    with pytest.raises(ValueError, match="ASCII characters"):
+        stock_entity_id("٦٠٠٥١٩", market="cn")
+
+
 def test_invalid_unhinted_stock_identity_fails_closed() -> None:
     with pytest.raises(ValueError, match="unsupported stock_code identity"):
         stock_entity_id("not a stock!")
