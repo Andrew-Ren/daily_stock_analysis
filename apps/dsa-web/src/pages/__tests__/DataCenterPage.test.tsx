@@ -1,6 +1,7 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { UiLanguageProvider, useUiLanguage } from '../../contexts/UiLanguageContext';
 import DataCenterPage from '../DataCenterPage';
 
 const { getOverview } = vi.hoisted(() => ({ getOverview: vi.fn() }));
@@ -93,6 +94,21 @@ const overview = {
   warnings: ['screening_health_unknown'],
 };
 
+function LanguageSwitch() {
+  const { language, setLanguage } = useUiLanguage();
+  return <button onClick={() => setLanguage(language === 'zh' ? 'en' : 'zh')}>switch language</button>;
+}
+
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  let reject!: (reason?: unknown) => void;
+  const promise = new Promise<T>((resolvePromise, rejectPromise) => {
+    resolve = resolvePromise;
+    reject = rejectPromise;
+  });
+  return { promise, resolve, reject };
+}
+
 beforeEach(() => {
   vi.clearAllMocks();
   getOverview.mockResolvedValue(overview);
@@ -136,5 +152,29 @@ describe('DataCenterPage', () => {
     fireEvent.click(screen.getByRole('button', { name: '重试' }));
     expect(await screen.findByText('暂无能力数据')).toBeInTheDocument();
     await waitFor(() => expect(getOverview).toHaveBeenCalledTimes(2));
+  });
+
+  it('ignores an older request that finishes after a language-triggered reload', async () => {
+    const first = deferred<typeof overview>();
+    const second = deferred<typeof overview>();
+    getOverview.mockReset().mockReturnValueOnce(first.promise).mockReturnValueOnce(second.promise);
+
+    render(
+      <UiLanguageProvider>
+        <LanguageSwitch />
+        <MemoryRouter><DataCenterPage /></MemoryRouter>
+      </UiLanguageProvider>,
+    );
+
+    await waitFor(() => expect(getOverview).toHaveBeenCalledTimes(1));
+    fireEvent.click(screen.getByRole('button', { name: 'switch language' }));
+    await waitFor(() => expect(getOverview).toHaveBeenCalledTimes(2));
+
+    second.resolve(overview);
+    expect(await screen.findByText('AkShare')).toBeInTheDocument();
+    first.reject(new Error('stale failure'));
+
+    await waitFor(() => expect(screen.queryByText('Failed to load data overview')).not.toBeInTheDocument());
+    expect(screen.getByText('AkShare')).toBeInTheDocument();
   });
 });

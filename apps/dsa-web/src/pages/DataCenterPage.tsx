@@ -1,5 +1,5 @@
 import type React from 'react';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Database, RefreshCw, Settings2, TriangleAlert } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { dataCapabilityApi } from '../api/dataCapability';
@@ -54,26 +54,34 @@ const DataCenterPage: React.FC = () => {
   const [overview, setOverview] = useState<DataCapabilityOverview | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const requestGeneration = useRef(0);
 
   useEffect(() => {
     document.title = `${t('dataCenter.title')} - DSA`;
   }, [t]);
 
   const load = useCallback(async () => {
+    const generation = ++requestGeneration.current;
     setLoading(true);
     setError('');
     try {
-      setOverview(await dataCapabilityApi.getOverview());
+      const nextOverview = await dataCapabilityApi.getOverview();
+      if (generation !== requestGeneration.current) return;
+      setOverview(nextOverview);
     } catch {
+      if (generation !== requestGeneration.current) return;
       setOverview(null);
       setError(t('dataCenter.loadError'));
     } finally {
-      setLoading(false);
+      if (generation === requestGeneration.current) setLoading(false);
     }
   }, [t]);
 
   useEffect(() => {
     void load();
+    return () => {
+      requestGeneration.current += 1;
+    };
   }, [load]);
 
   const summary = useMemo(() => {
