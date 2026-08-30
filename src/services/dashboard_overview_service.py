@@ -286,7 +286,7 @@ class DashboardOverviewService:
     @staticmethod
     def _snapshot_region(raw_region: Any) -> str:
         raw = str(raw_region or "").strip()
-        if not raw:
+        if not raw or len(raw.split(",")) != 1:
             return ""
         try:
             normalized = normalize_market_review_region_strict(raw)

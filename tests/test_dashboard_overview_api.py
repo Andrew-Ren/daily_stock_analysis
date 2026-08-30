@@ -10,6 +10,7 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
+import pytest
 from fastapi.testclient import TestClient
 
 import src.auth as auth
@@ -463,7 +464,8 @@ def test_malformed_multi_region_container_blocks_each_scoped_region() -> None:
     assert "latest_completed_snapshot_unavailable:us" in limitations
 
 
-def test_invalid_outer_snapshot_key_falls_back_to_review_scope() -> None:
+@pytest.mark.parametrize("invalid_key", ["cn,us", "cn,cn", "CN, cn"])
+def test_invalid_outer_snapshot_key_falls_back_to_review_scope(invalid_key: str) -> None:
     dependencies = _dependencies()
     combined_review = _review(1, "2026-08-29T09:00:00+08:00")
     combined_review["region"] = "cn,us"
@@ -483,7 +485,7 @@ def test_invalid_outer_snapshot_key_falls_back_to_review_scope() -> None:
             return {
                 "context_snapshot": {
                     "market_review_region": "cn,us",
-                    "market_light_snapshots": {"cn,us": []},
+                    "market_light_snapshots": {invalid_key: []},
                 }
             }
         region = "cn" if record_id == 2 else "us"
