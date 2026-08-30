@@ -506,6 +506,51 @@ def test_invalid_outer_snapshot_key_falls_back_to_review_scope() -> None:
     assert all("cn,us" not in limitation for limitation in limitations)
 
 
+def test_invalid_outer_snapshot_key_rejects_entire_mixed_container() -> None:
+    dependencies = _dependencies()
+    combined_review = _review(1, "2026-08-29T09:00:00+08:00")
+    combined_review["region"] = "cn,us"
+    reviews = [
+        combined_review,
+        _review(2, "2026-08-28T09:00:00+08:00"),
+        _review(3, "2026-08-27T09:00:00+08:00"),
+    ]
+    dependencies["history_service"].get_history_list.side_effect = lambda **kwargs: (
+        _history_page(dependencies["history_service"], reviews, kwargs)
+        if kwargs.get("report_type") == "market_review"
+        else {"items": [], "total": 0}
+    )
+
+    def detail(record_id: int) -> dict:
+        if record_id == 1:
+            return {
+                "context_snapshot": {
+                    "market_review_region": "cn,us",
+                    "market_light_snapshots": {
+                        "cn": _snapshot("cn", "2026-08-29", 60, "yellow"),
+                        "cn,us": [],
+                    },
+                }
+            }
+        region = "cn" if record_id == 2 else "us"
+        return {
+            "context_snapshot": {
+                "market_light_snapshots": {
+                    region: _snapshot(region, "2026-08-28", 55, "yellow")
+                }
+            }
+        }
+
+    dependencies["history_service"].get_history_detail_by_id.side_effect = detail
+
+    payload = DashboardOverviewService(**dependencies).get_overview()
+
+    assert payload["market"]["data"]["latest_snapshots"] == {}
+    limitations = payload["market"]["meta"]["limitations"]
+    assert "latest_completed_snapshot_unavailable:cn" in limitations
+    assert "latest_completed_snapshot_unavailable:us" in limitations
+
+
 def test_older_malformed_detail_does_not_hide_valid_current_and_baseline() -> None:
     dependencies = _dependencies()
     reviews = [

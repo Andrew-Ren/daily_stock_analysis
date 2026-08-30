@@ -118,19 +118,23 @@ class DashboardOverviewService:
                         detail_failure_count += 1
                         register_detail_failure(review, context_snapshot, review_rank)
                         continue
-                    raw_snapshots: Dict[str, Dict[str, Any]] = {}
+                    raw_snapshots: Dict[str, Any] = {}
+                    invalid_outer_key = False
                     for raw_region, raw_snapshot in (snapshot_container or {}).items():
                         region = self._snapshot_region(raw_region)
-                        if not region:
+                        if not region or region in raw_snapshots:
                             invalid_snapshot_count += 1
-                            register_detail_failure(review, context_snapshot, review_rank)
+                            invalid_outer_key = True
                             continue
+                        raw_snapshots[region] = raw_snapshot
+                    if invalid_outer_key:
+                        register_detail_failure(review, context_snapshot, review_rank)
+                        continue
+                    for region, raw_snapshot in raw_snapshots.items():
                         if not isinstance(raw_snapshot, dict):
                             invalid_snapshot_count += 1
                             register_unknown_date_failure(region, review_rank)
                             continue
-                        raw_snapshots[region] = raw_snapshot
-                    for region, raw_snapshot in raw_snapshots.items():
                         raw_trade_date = str(raw_snapshot.get("trade_date") or "").strip()
                         try:
                             canonical_trade_date = self._canonical_trade_date(raw_trade_date)
