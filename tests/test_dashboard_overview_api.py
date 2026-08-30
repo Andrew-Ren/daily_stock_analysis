@@ -422,6 +422,50 @@ def test_malformed_scoped_container_does_not_hide_other_regions() -> None:
     assert "latest_completed_snapshot_unavailable:us" not in limitations
 
 
+@pytest.mark.parametrize("include_empty_container", [False, True])
+def test_scoped_review_without_snapshots_does_not_promote_older_current(
+    include_empty_container: bool,
+) -> None:
+    dependencies = _dependencies()
+    reviews = [
+        _review(1, "2026-08-30T09:00:00+08:00"),
+        _review(2, "2026-08-29T09:00:00+08:00"),
+        _review(3, "2026-08-28T09:00:00+08:00"),
+    ]
+    dependencies["history_service"].get_history_list.side_effect = lambda **kwargs: (
+        _history_page(dependencies["history_service"], reviews, kwargs)
+        if kwargs.get("report_type") == "market_review"
+        else {"items": [], "total": 0}
+    )
+
+    def detail(record_id: int) -> dict:
+        if record_id == 1:
+            context_snapshot = {"market_review_region": "cn"}
+            if include_empty_container:
+                context_snapshot["market_light_snapshots"] = {}
+            return {"context_snapshot": context_snapshot}
+        trade_date = "2026-08-29" if record_id == 2 else "2026-08-28"
+        return {
+            "context_snapshot": {
+                "market_light_snapshots": {
+                    "cn": _snapshot("cn", trade_date, 60, "yellow")
+                }
+            }
+        }
+
+    dependencies["history_service"].get_history_detail_by_id.side_effect = detail
+
+    payload = DashboardOverviewService(**dependencies).get_overview()
+
+    assert payload["market"]["data"]["latest_snapshots"] == {}
+    assert payload["what_changed"]["data"]["current_trade_dates"] == {}
+    assert payload["what_changed"]["data"]["previous_trade_dates"] == {}
+    assert payload["what_changed"]["data"]["items"] == []
+    limitations = payload["market"]["meta"]["limitations"]
+    assert "market_review_detail_partial" in limitations
+    assert "latest_completed_snapshot_unavailable:cn" in limitations
+
+
 def test_malformed_multi_region_container_blocks_each_scoped_region() -> None:
     dependencies = _dependencies()
     combined_review = _review(1, "2026-08-29T09:00:00+08:00")

@@ -114,6 +114,16 @@ class DashboardOverviewService:
                         register_detail_failure(review, context_snapshot, review_rank)
                         continue
                     snapshot_container = context_snapshot.get("market_light_snapshots")
+                    if snapshot_container is None or snapshot_container == {}:
+                        # Legacy reviews without an identifiable market scope may
+                        # legitimately predate Market Light persistence. Once a
+                        # review declares its scope, however, an omitted/empty
+                        # container is a failed snapshot source for that scope and
+                        # must not allow an older trade date to become "current".
+                        if self._review_regions(review, context_snapshot):
+                            detail_failure_count += 1
+                            register_detail_failure(review, context_snapshot, review_rank)
+                        continue
                     if snapshot_container is not None and not isinstance(snapshot_container, dict):
                         detail_failure_count += 1
                         register_detail_failure(review, context_snapshot, review_rank)
