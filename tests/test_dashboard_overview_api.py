@@ -867,6 +867,44 @@ def test_changes_are_partial_when_only_some_regions_have_a_baseline() -> None:
     assert "us" not in payload["what_changed"]["data"]["previous_trade_dates"]
 
 
+def test_partial_multi_region_review_does_not_promote_older_missing_region() -> None:
+    dependencies = _dependencies()
+    reviews = [
+        {
+            **_review(1, "2026-08-29T09:00:00+08:00"),
+            "region": "cn,us",
+            "context_snapshot": {
+                "market_review_region": "cn,us",
+                "market_light_snapshots": {
+                    "cn": _snapshot("cn", "2026-08-29", 60, "yellow"),
+                },
+            },
+        },
+        {
+            **_review(2, "2026-08-28T09:00:00+08:00"),
+            "region": "us",
+            "context_snapshot": {
+                "market_review_region": "us",
+                "market_light_snapshots": {
+                    "us": _snapshot("us", "2026-08-28", 55, "yellow"),
+                },
+            },
+        },
+    ]
+    dependencies["history_service"].get_history_list.side_effect = lambda **kwargs: (
+        _history_page(dependencies["history_service"], reviews, kwargs)
+        if kwargs.get("report_type") == "market_review"
+        else {"items": [], "total": 0}
+    )
+
+    payload = DashboardOverviewService(**dependencies).get_overview()
+
+    assert payload["market"]["data"]["latest_snapshots"]["cn"]["trade_date"] == "2026-08-29"
+    assert "us" not in payload["market"]["data"]["latest_snapshots"]
+    assert "latest_completed_snapshot_unavailable:us" in payload["market"]["meta"]["limitations"]
+    assert "us" not in payload["what_changed"]["data"]["current_trade_dates"]
+
+
 def test_recent_reports_use_one_stable_bounded_history_window() -> None:
     dependencies = _dependencies()
     first_page = [_review(index, "2026-08-29T09:00:00+08:00") for index in range(1, 51)]

@@ -140,6 +140,16 @@ class DashboardOverviewService:
                     if invalid_outer_key:
                         register_detail_failure(review, context_snapshot, review_rank)
                         continue
+                    declared_regions = set(self._review_regions(review, context_snapshot))
+                    missing_declared_regions = declared_regions.difference(raw_snapshots)
+                    if missing_declared_regions:
+                        # A multi-market run can persist only the regions that
+                        # produced a snapshot.  Treat every omitted declared
+                        # region as a failed newest source; otherwise an older
+                        # snapshot would be promoted and mislabeled as current.
+                        detail_failure_count += 1
+                        for region in missing_declared_regions:
+                            register_unknown_date_failure(region, review_rank)
                     for region, raw_snapshot in raw_snapshots.items():
                         if not isinstance(raw_snapshot, dict):
                             invalid_snapshot_count += 1
