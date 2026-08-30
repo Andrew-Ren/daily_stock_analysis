@@ -19,6 +19,8 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
+from sqlalchemy import event
+
 # Keep this test runnable when optional LLM runtime deps are not installed.
 try:
     import litellm  # noqa: F401
@@ -356,6 +358,26 @@ class AnalysisHistoryTestCase(unittest.TestCase):
 
         self.assertEqual(total, 2)
         self.assertEqual([record.id for record in records], [newer_id, older_id])
+
+    def test_first_history_page_reads_rows_and_total_in_one_statement(self) -> None:
+        self._save_history("stable_window_1")
+        self._save_history("stable_window_2")
+        select_statements = []
+
+        def capture_select(_conn, _cursor, statement, _parameters, _context, _executemany):
+            if statement.lstrip().upper().startswith("SELECT"):
+                select_statements.append(statement)
+
+        event.listen(self.db._engine, "before_cursor_execute", capture_select)
+        try:
+            records, total = self.db.get_analysis_history_paginated(limit=1)
+        finally:
+            event.remove(self.db._engine, "before_cursor_execute", capture_select)
+
+        self.assertEqual(len(records), 1)
+        self.assertEqual(total, 2)
+        self.assertEqual(len(select_statements), 1)
+        self.assertIn("OVER", select_statements[0].upper())
 
     def test_history_display_resolves_bare_jp_kr_code_from_stock_pool(self) -> None:
         result = self._build_result()

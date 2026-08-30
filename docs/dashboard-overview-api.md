@@ -18,7 +18,7 @@
 - `market.review_count` 使用 History API repository 返回的 `total`，不使用当前已加载页的数组长度。
 - `personal.watchlist_count` 每次请求读取当前 runtime config；`active_monitor_count` 使用 Alert repository 的 `total`，不受 `page_size=100` 限制。
 - `personal.cached_position_count` 只读取非零缓存仓位 identity，不触发实时估值或写 snapshot，因此块包含 `cached_positions_only`。
-- `activity.recent_reports` 排除 market review，并按 history 分页继续读取直到获得最近 5 条非 market 报告、确认历史已耗尽或扫描达到 100 条；命中上限时返回 `recent_reports_history_scan_incomplete`。`task_stats` 只读当前 task queue 统计。
+- `activity.recent_reports` 排除 market review，并在一次数据库语句中读取最近 100 条历史及同一快照下的总数，再从该固定窗口选择最近 5 条非 market 报告；窗口外仍有历史且窗口内不足 5 条时返回 `recent_reports_history_scan_incomplete`。`task_stats` 只读当前 task queue 统计。
 - `system.refresh_starts_analysis` 固定为 `false`。该 service 不依赖 analyzer、LLM client、market-review generation 或 task submission 方法。
 
 ## What Changed

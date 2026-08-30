@@ -3042,21 +3042,29 @@ class DatabaseManager(metaclass=_DatabaseManagerMeta):
             # 构建 where 子句
             where_clause = and_(*conditions) if conditions else True
             
-            # 查询总数
-            total_query = select(func.count(AnalysisHistory.id)).where(where_clause)
-            total = session.execute(total_query).scalar() or 0
-            
-            # 查询分页数据
+            # Keep the page and its total in one database statement.  Dashboard
+            # callers use the total as the bounded-window completeness marker;
+            # a separate COUNT could observe a different snapshot from the rows.
+            total_count = func.count(AnalysisHistory.id).over().label("history_total")
             data_query = (
-                select(AnalysisHistory)
+                select(AnalysisHistory, total_count)
                 .where(where_clause)
                 .order_by(desc(AnalysisHistory.created_at), desc(AnalysisHistory.id))
                 .offset(offset)
                 .limit(limit)
             )
-            results = session.execute(data_query).scalars().all()
-            
-            return list(results), total
+            rows = session.execute(data_query).all()
+            if rows:
+                return [row[0] for row in rows], int(rows[0][1] or 0)
+
+            # An empty page after a non-zero offset still needs the full count
+            # for the existing paginated API contract.  Page one (including an
+            # empty table) is already complete from the single statement above.
+            if offset > 0 or limit <= 0:
+                total_query = select(func.count(AnalysisHistory.id)).where(where_clause)
+                total = session.execute(total_query).scalar() or 0
+                return [], int(total)
+            return [], 0
     
     def get_analysis_history_by_id(self, record_id: int) -> Optional[AnalysisHistory]:
         """
