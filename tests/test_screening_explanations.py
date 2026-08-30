@@ -177,7 +177,8 @@ def test_llm_reason_does_not_replace_the_observed_local_selection_fallback() -> 
     result = _attach_candidate_explanations(candidate)
 
     assert [item["quality"] for item in result["why_selected"]] == ["inferred", "observed"]
-    assert result["why_selected"][1]["code"] == "selection_rank"
+    assert result["why_selected"][1]["code"] == "selection_outcome"
+    assert result["why_selected"][1]["text"] == "已进入当前选股候选结果"
     assert result["explanation_quality"]["why_selected"] == "partial"
 
 
@@ -196,7 +197,7 @@ def test_distinct_llm_ranking_reason_stays_inferred_and_keeps_rank_fallback() ->
     result = _attach_candidate_explanations(candidate)
 
     assert [item["quality"] for item in result["why_selected"]] == ["inferred", "observed"]
-    assert result["why_selected"][1]["code"] == "selection_rank"
+    assert result["why_selected"][1]["code"] == "selection_outcome"
 
 
 def test_news_and_events_without_provenance_are_not_observed() -> None:
@@ -229,7 +230,7 @@ def test_llm_risk_summary_stays_inferred_and_keeps_rank_fallback() -> None:
     result = _attach_candidate_explanations(candidate)
 
     assert [item["quality"] for item in result["why_selected"]] == ["inferred", "observed"]
-    assert result["why_selected"][1]["code"] == "selection_rank"
+    assert result["why_selected"][1]["code"] == "selection_outcome"
 
 
 def test_risk_summary_is_not_promoted_to_selection_reason_when_reason_is_missing() -> None:
@@ -243,7 +244,7 @@ def test_risk_summary_is_not_promoted_to_selection_reason_when_reason_is_missing
 
     assert candidate["risk_summary"] == "估值过高"
     assert candidate["reason"] == ""
-    assert [item["code"] for item in result["why_selected"]] == ["selection_rank"]
+    assert [item["code"] for item in result["why_selected"]] == ["selection_outcome"]
     assert all("估值过高" not in item["text"] for item in result["why_selected"])
 
 
@@ -260,7 +261,7 @@ def test_post_analyzer_summary_keeps_inferred_provenance() -> None:
     assert reason["code"] == "selection_reason"
     assert reason["source"] == "post_analyzer:dsa"
     assert reason["quality"] == "inferred"
-    assert result["why_selected"][1]["code"] == "selection_rank"
+    assert result["why_selected"][1]["code"] == "selection_outcome"
 
 
 def test_local_scorecard_summary_keeps_observed_provenance() -> None:
@@ -306,7 +307,7 @@ def test_risk_level_is_not_promoted_to_selection_reason() -> None:
     result = _attach_candidate_explanations(candidate)
 
     assert candidate["reason"] == ""
-    assert [item["code"] for item in result["why_selected"]] == ["selection_rank"]
+    assert [item["code"] for item in result["why_selected"]] == ["selection_outcome"]
     assert "风险" not in result["why_selected"][0]["text"]
 
 

@@ -3918,11 +3918,10 @@ def _attach_candidate_explanations(
             )
 
     if not any(item.get("quality") == "observed" for item in why_selected):
-        rank = candidate.get("rank")
         why_selected.append(
             _explanation_item(
-                "selection_rank",
-                f"通过确定性筛选并排在第 {rank} 位" if rank is not None else "通过确定性筛选",
+                "selection_outcome",
+                "已进入当前选股候选结果",
                 source="screening",
                 quality="observed",
             )
