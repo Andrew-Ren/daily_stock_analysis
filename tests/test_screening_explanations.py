@@ -296,6 +296,57 @@ def test_scorecard_using_llm_fields_keeps_inferred_provenance() -> None:
     assert result["explanation_quality"]["why_selected"] == "partial"
 
 
+def test_explicit_reason_keeps_distinct_post_analysis_summaries() -> None:
+    candidate = _normalize_candidate({
+        "code": "600519",
+        "ranking_reason": "量价和质量因子排名靠前",
+        "post_analysis_summaries": {
+            "scorecard": "本地因子计分摘要",
+            "dsa": "模型补充的新闻风险摘要",
+        },
+        "factor_scores": {},
+    }, 1)
+
+    result = _attach_candidate_explanations(candidate)
+
+    assert [item["code"] for item in result["why_selected"]] == [
+        "selection_reason",
+        "post_analysis_summary",
+        "post_analysis_summary",
+    ]
+    assert result["why_selected"][0]["text"] == "量价和质量因子排名靠前"
+    assert result["why_selected"][1] == {
+        "code": "post_analysis_summary",
+        "text": "本地因子计分摘要",
+        "source": "post_analyzer:scorecard",
+        "quality": "observed",
+    }
+    assert result["why_selected"][2] == {
+        "code": "post_analysis_summary",
+        "text": "模型补充的新闻风险摘要",
+        "source": "post_analyzer:dsa",
+        "quality": "inferred",
+    }
+    assert result["explanation_quality"]["why_selected"] == "partial"
+
+
+def test_post_analysis_summary_matching_explicit_reason_is_not_duplicated() -> None:
+    candidate = _normalize_candidate({
+        "code": "600519",
+        "reason": "同一条后分析摘要",
+        "post_analysis_summaries": {
+            "scorecard": "同一条后分析摘要",
+        },
+        "factor_scores": {},
+    }, 1)
+
+    result = _attach_candidate_explanations(candidate)
+
+    assert [item["text"] for item in result["why_selected"]] == [
+        "同一条后分析摘要",
+    ]
+
+
 def test_risk_level_is_not_promoted_to_selection_reason() -> None:
     candidate = _normalize_candidate({
         "code": "600519",

@@ -3917,6 +3917,28 @@ def _attach_candidate_explanations(
                 _explanation_item("top_factors", f"核心因子：{text}", source="screening", quality="observed")
             )
 
+    summaries = candidate.get("post_analysis_summaries")
+    if isinstance(summaries, dict):
+        existing_texts = {
+            str(item.get("text") or "").strip()
+            for item in why_selected
+            if str(item.get("text") or "").strip()
+        }
+        for analyzer, value in summaries.items():
+            summary = str(value or "").strip()
+            if not summary or summary in existing_texts:
+                continue
+            analyzer_name = str(analyzer).strip() or "unknown"
+            why_selected.append(
+                _explanation_item(
+                    "post_analysis_summary",
+                    summary,
+                    source=f"post_analyzer:{analyzer_name}",
+                    quality=_post_analysis_summary_quality(candidate, analyzer_name),
+                )
+            )
+            existing_texts.add(summary)
+
     if not any(item.get("quality") == "observed" for item in why_selected):
         why_selected.append(
             _explanation_item(
@@ -4156,18 +4178,12 @@ def _build_candidate_reason(
     if isinstance(summaries, dict):
         for analyzer, value in summaries.items():
             if value:
-                analyzer_name = str(analyzer).strip().lower()
-                scorecard_uses_llm = analyzer_name == "scorecard" and (
-                    item.get("llm_confidence") is not None
-                    or bool(item.get("llm_catalysts"))
-                    or bool(item.get("llm_risks"))
+                analyzer_name = str(analyzer).strip() or "unknown"
+                return (
+                    str(value),
+                    f"post_analyzer:{analyzer_name}",
+                    _post_analysis_summary_quality(item, analyzer_name),
                 )
-                quality = (
-                    "observed"
-                    if analyzer_name == "scorecard" and not scorecard_uses_llm
-                    else "inferred"
-                )
-                return str(value), f"post_analyzer:{analyzer}", quality
 
     factors = item.get("factor_scores")
     parts: List[str] = []
@@ -4192,6 +4208,18 @@ def _build_candidate_reason(
             parts.append(f"主要因子：{factor_text}")
     reason = "；".join(parts)
     return (reason, "screening", "observed") if reason else ("", "", "")
+
+
+def _post_analysis_summary_quality(item: Dict[str, Any], analyzer: str) -> str:
+    analyzer_name = analyzer.strip().lower()
+    scorecard_uses_llm = analyzer_name == "scorecard" and (
+        item.get("llm_confidence") is not None
+        or bool(item.get("llm_catalysts"))
+        or bool(item.get("llm_risks"))
+    )
+    if analyzer_name == "scorecard" and not scorecard_uses_llm:
+        return "observed"
+    return "inferred"
 
 
 def _to_plain(value: Any) -> Any:
