@@ -115,6 +115,21 @@ def test_entity_link_schema_rejects_builder_availability_bypasses() -> None:
             },
         )
 
+    forced_disabled_action = EntityAction(
+        action="track_outcome",
+        available=False,
+        href="/decision-signals?sourceReportId=123",
+        disabled_reason="manual_disable",
+    )
+    with pytest.raises(ValueError, match="availability must match"):
+        EntityLink(
+            entity_type="report",
+            entity_id="123",
+            ref="report:123",
+            actions=[forced_disabled_action],
+            links={},
+        )
+
 
 def test_entity_link_builder_deduplicates_actions_in_first_seen_order() -> None:
     payload = build_entity_link(

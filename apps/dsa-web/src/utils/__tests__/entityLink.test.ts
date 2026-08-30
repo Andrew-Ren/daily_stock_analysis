@@ -114,7 +114,7 @@ describe('entityLink helpers', () => {
 
   it('deduplicates requested actions in first-seen order', () => {
     const link = buildEntityLink('report', '123', {
-      actions: ['view', 'view', 'track_outcome', 'view'],
+      actions: ['view', ' view ' as EntityActionType, 'track_outcome', 'view'],
     });
 
     expect(link.actions.map((item) => item.action)).toEqual(['view', 'track_outcome']);
@@ -187,5 +187,8 @@ describe('entityLink helpers', () => {
       '1',
       'launch' as EntityActionType,
     )).toThrow('unsupported entity action');
+    expect(() => buildEntityLink('report', null as unknown as string)).toThrow('entityId must be a string');
+    expect(() => buildEntityLink('report', undefined as unknown as string)).toThrow('entityId must be a string');
+    expect(() => makeEntityRef('report', null as unknown as string)).toThrow('entityId must be a string');
   });
 });

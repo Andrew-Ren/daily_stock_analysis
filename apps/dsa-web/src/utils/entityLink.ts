@@ -75,11 +75,7 @@ const normalizeActionType = (value: unknown): EntityActionType => {
 
 export const makeEntityRef = (entityType: EntityType | string, entityId: string): string => {
   const normalizedType = normalizeEntityType(entityType);
-  const rawId = String(entityId).trim();
-  if (!rawId) throw new Error('entityId is required');
-  const normalizedId = normalizedType === 'stock'
-    ? normalizeEntityId('stock', rawId)
-    : rawId;
+  const normalizedId = normalizeEntityId(normalizedType, entityId);
   return `${normalizedType}:${normalizedId}`;
 };
 
@@ -104,8 +100,9 @@ export const buildEntityLink = (
 ): EntityLink => {
   const normalizedType = normalizeEntityType(entityType);
   const normalizedId = normalizeEntityId(normalizedType, entityId);
-  const actions = [...new Set(options.actions ?? DEFAULT_ACTIONS[normalizedType])]
-    .map(normalizeActionType);
+  const actions = [...new Set(
+    (options.actions ?? DEFAULT_ACTIONS[normalizedType]).map(normalizeActionType),
+  )];
   const actionItems = actions.map((action) => buildEntityAction(normalizedType, normalizedId, action));
   const links = actionItems.reduce<Partial<Record<EntityActionType, string>>>((result, item) => {
     if (item.href && item.available) result[item.action] = item.href;
@@ -195,7 +192,9 @@ const splitMarketEntityId = (entityId: string): [string, string] => {
 };
 
 const normalizeEntityId = (entityType: EntityType, entityId: string): string => {
-  const normalizedId = String(entityId).trim();
+  if (typeof entityId !== 'string') throw new Error('entityId must be a string');
+  const normalizedId = entityId.trim();
+  if (!normalizedId) throw new Error('entityId is required');
   if (entityType !== 'stock') return normalizedId;
   return normalizeStockEntityId(normalizedId.normalize('NFKC'));
 };
