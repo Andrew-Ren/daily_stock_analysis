@@ -101,6 +101,8 @@ class DashboardOverviewService:
                         region = str(raw_region).strip().lower()
                         if region and not isinstance(raw_snapshot, dict):
                             invalid_snapshot_count += 1
+                            snapshot_candidates_by_region.setdefault(region, {})
+                            snapshot_candidate_ranks_by_region.setdefault(region, {})
                             unknown_trade_date_failure_ranks_by_region.setdefault(region, []).append(
                                 review_rank
                             )
@@ -111,6 +113,8 @@ class DashboardOverviewService:
                             canonical_trade_date = self._canonical_trade_date(raw_trade_date)
                         except Exception:
                             invalid_snapshot_count += 1
+                            snapshot_candidates_by_region.setdefault(region, {})
+                            snapshot_candidate_ranks_by_region.setdefault(region, {})
                             unknown_trade_date_failure_ranks_by_region.setdefault(region, []).append(
                                 review_rank
                             )
